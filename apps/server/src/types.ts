@@ -4,6 +4,7 @@ export type MessageRole = "user" | "assistant";
 
 export interface Agent {
   id: string;
+  ownerId: string;
   name: string;
   description: string;
   instructions: string;
@@ -51,6 +52,7 @@ export interface Database {
 }
 
 export interface CreateAgentInput {
+  ownerId: string;
   name: string;
   description?: string | undefined;
   instructions?: string | undefined;
@@ -79,4 +81,54 @@ export interface AgentRunner {
   run(request: RunnerRequest): Promise<RunnerResult>;
   cancel(agentId: string): Promise<boolean>;
   isAvailable(): Promise<boolean>;
+}
+
+export interface HumanPrincipal {
+  kind: "human";
+  id: string;
+  displayName: string;
+}
+
+export interface AgentPrincipal {
+  kind: "agent";
+  id: string;
+  agentId: string;
+  ownerId: string;
+}
+
+export type Principal = HumanPrincipal | AgentPrincipal;
+
+export interface Capability {
+  id: string;
+  scope: string;
+  expiresAt: string;
+  revokedAt: string | null;
+}
+
+export interface AuthContext {
+  humanPrincipal: HumanPrincipal;
+  agentPrincipal: AgentPrincipal;
+  capability: Capability
+  requestId: string;
+}
+
+export type PolicyEffect = "permit" | "deny";
+
+export interface PolicyRequest {
+  principal: Principal;
+  action: string; // "read" | "write"
+  resource: string;
+  capability?: Capability | undefined;
+  requestId: string;
+}
+
+export interface PolicyDecision {
+  effect: PolicyEffect;
+  reason: string;
+  requestId: string;
+  decidedAt: string;
+}
+
+export interface PolicyDecisionPoint {
+  decide(request: PolicyRequest): Promise<PolicyDecision>;
 }

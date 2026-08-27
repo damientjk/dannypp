@@ -65,6 +65,7 @@ export class AgentService {
     const id = randomUUID();
     const agent: Agent = {
       id,
+      ownerId: input.ownerId,
       name: input.name.trim(),
       description: input.description?.trim() ?? "",
       instructions: input.instructions?.trim() ?? "",

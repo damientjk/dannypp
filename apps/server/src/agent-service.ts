@@ -12,12 +12,22 @@ import type {
   UpdateAgentInput,
 } from "./types.js";
 import { WorkspaceManager } from "./workspace.js";
+import { processSecrets, redact } from "./secrets/redact.js";
 
 const now = () => new Date().toISOString();
 
 export class AgentService {
   private readonly activeExecutions = new Map<string, Promise<void>>();
   private readonly cancellationRequests = new Set<string>();
+
+  /**
+   * Credentials that must never reach persisted output (Person 3).
+   * AGENTS.md asks the model not to print them; this makes sure it cannot.
+   * Computed per call because `config` is a constructor parameter property.
+   */
+  private secrets(): string[] {
+    return processSecrets(this.config);
+  }
 
   constructor(
     private readonly config: AppConfig,
@@ -252,12 +262,13 @@ export class AgentService {
         threadId: agentAtStart.codexThreadId,
       });
       const completedAt = now();
+      const safeOutput = redact(result.output, this.secrets());
       await this.store.mutate((database) => {
         const storedRun = database.runs.find((item) => item.id === run.id);
         const agent = database.agents.find((item) => item.id === agentAtStart.id);
         if (!storedRun || !agent) return;
         storedRun.status = "completed";
-        storedRun.output = result.output;
+        storedRun.output = safeOutput;
         storedRun.usage = result.usage;
         storedRun.completedAt = completedAt;
         database.messages.push({
@@ -265,7 +276,7 @@ export class AgentService {
           agentId: agent.id,
           runId: run.id,
           role: "assistant",
-          content: result.output,
+          content: safeOutput,
           createdAt: completedAt,
         });
         agent.status = "ready";
@@ -276,7 +287,9 @@ export class AgentService {
     } catch (error) {
       const completedAt = now();
       const cancelled = error instanceof RunCancelledError;
-      const message = error instanceof Error ? error.message : String(error);
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      // A failing runner often echoes its environment back in the error.
+      const message = redact(rawMessage, this.secrets());
       await this.store.mutate((database) => {
         const storedRun = database.runs.find((item) => item.id === run.id);
         const agent = database.agents.find((item) => item.id === agentAtStart.id);

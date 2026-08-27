@@ -1,0 +1,218 @@
+/**
+ * Capability issuance, validation and revocation -- the "keycard" half of the
+ * Identity & Authorization middleware.
+ *
+ * A capability is the thing an Agent acts under during a Run. It is NOT the
+ * human's session: it carries its own scope, its own expiry, and it can be
+ * shredded by its owner at any moment. The PDP consults it on every protected
+ * access, which is what makes revocation take effect on the very next access
+ * rather than "eventually".
+ *
+ * STORAGE: in-memory, deliberately. `Database` is frozen at version 1 with
+ * agents/messages/runs, so persisting capabilities would mean a shared-type
+ * change, a version bump and a migration. Sessions (auth/session.ts) are
+ * already in-memory, so a capability that outlived a restart would belong to a
+ * human who is no longer signed in. Documented as a limitation in the README
+ * rather than half-solved.
+ */
+
+import { randomUUID } from "node:crypto";
+import type { AgentPrincipal, Capability } from "../types.js";
+import { DENY_REASONS, type DenyReason } from "./reasons.js";
+import { defaultRunScope, parseScope } from "./scope.js";
+
+/** The stored record. Extends Person 1's frozen `Capability` with provenance. */
+export interface CapabilityRecord extends Capability {
+  agentId: string;
+  ownerId: string;
+  runId: string | null;
+  issuedAt: string;
+  revokedBy: string | null;
+}
+
+export type CapabilityValidation<T extends Capability = CapabilityRecord> =
+  | { valid: true; capability: T }
+  | {
+      valid: false;
+      reason: Extract<
+        DenyReason,
+        "capability-unknown" | "capability-revoked" | "capability-expired"
+      >;
+    };
+
+/**
+ * Pure validity check over a capability object.
+ *
+ * Exported separately from the store so the PDP can validate the `Capability`
+ * it already received in its `PolicyRequest` without reaching into any store --
+ * that keeps Person 2's decision logic free of Person 3's storage.
+ *
+ * Order matters for the audit trail: a capability that is both expired and
+ * revoked reports `capability-revoked`, because the human action is the more
+ * informative thing to show on stage.
+ */
+export function validateCapability<T extends Capability>(
+  capability: T | null | undefined,
+  at: Date = now(),
+): CapabilityValidation<T> {
+  if (!capability) {
+    return { valid: false, reason: DENY_REASONS.capabilityUnknown };
+  }
+  if (capability.revokedAt !== null) {
+    return { valid: false, reason: DENY_REASONS.capabilityRevoked };
+  }
+  const expiresAt = Date.parse(capability.expiresAt);
+  if (Number.isNaN(expiresAt) || expiresAt <= at.getTime()) {
+    return { valid: false, reason: DENY_REASONS.capabilityExpired };
+  }
+  return { valid: true, capability };
+}
+
+export interface IssueInput {
+  agentPrincipal: AgentPrincipal;
+  scope: string;
+  runId?: string | null;
+  /** Lifetime in ms. Negative or zero yields an already-expired capability,
+   *  which is how the expiry test avoids clock mocking. */
+  ttlMs?: number;
+}
+
+export const DEFAULT_CAPABILITY_TTL_MS = 5 * 60 * 1000;
+
+const now = () => new Date();
+
+export class CapabilityStore {
+  private readonly records = new Map<string, CapabilityRecord>();
+
+  constructor(
+    private readonly defaultTtlMs: number = DEFAULT_CAPABILITY_TTL_MS,
+  ) {}
+
+  /**
+   * Mints a capability. Throws on a malformed scope or on a scope that does not
+   * belong to the agent's owner -- an agent must never hold a keycard cut for
+   * somebody else's house, and that is an invariant, not a policy decision.
+   */
+  issue(input: IssueInput): CapabilityRecord {
+    const parsed = parseScope(input.scope);
+    if (!parsed) {
+      throw new Error("Malformed capability scope: " + String(input.scope));
+    }
+    if (parsed.ownerId !== input.agentPrincipal.ownerId) {
+      throw new Error(
+        "Refusing to issue a capability scoped to " +
+          parsed.ownerId +
+          " for an agent owned by " +
+          input.agentPrincipal.ownerId,
+      );
+    }
+
+    const issuedAt = now();
+    const ttlMs = input.ttlMs ?? this.defaultTtlMs;
+    const record: CapabilityRecord = {
+      id: randomUUID(),
+      scope: input.scope,
+      expiresAt: new Date(issuedAt.getTime() + ttlMs).toISOString(),
+      revokedAt: null,
+      agentId: input.agentPrincipal.agentId,
+      ownerId: input.agentPrincipal.ownerId,
+      runId: input.runId ?? null,
+      issuedAt: issuedAt.toISOString(),
+      revokedBy: null,
+    };
+    this.records.set(record.id, record);
+    return structuredClone(record);
+  }
+
+  /**
+   * The default capability for a Run: read-only over the owner's namespace.
+   * Person 2's PEP calls this at run start.
+   */
+  issueForRun(
+    agentPrincipal: AgentPrincipal,
+    runId: string,
+    ttlMs?: number,
+  ): CapabilityRecord {
+    return this.issue({
+      agentPrincipal,
+      scope: defaultRunScope(agentPrincipal.ownerId),
+      runId,
+      ...(ttlMs === undefined ? {} : { ttlMs }),
+    });
+  }
+
+  get(id: unknown): CapabilityRecord | null {
+    if (typeof id !== "string") return null;
+    const record = this.records.get(id);
+    return record ? structuredClone(record) : null;
+  }
+
+  list(filter: { ownerId?: string; agentId?: string } = {}): CapabilityRecord[] {
+    return [...this.records.values()]
+      .filter((record) => {
+        if (filter.ownerId !== undefined && record.ownerId !== filter.ownerId) {
+          return false;
+        }
+        if (filter.agentId !== undefined && record.agentId !== filter.agentId) {
+          return false;
+        }
+        return true;
+      })
+      .sort((left, right) => right.issuedAt.localeCompare(left.issuedAt))
+      .map((record) => structuredClone(record));
+  }
+
+  /**
+   * Shreds the keycard. Idempotent: re-revoking keeps the original timestamp so
+   * the audit trail records when it actually happened.
+   */
+  revoke(id: unknown, revokedBy: string): CapabilityRecord | null {
+    if (typeof id !== "string") return null;
+    const record = this.records.get(id);
+    if (!record) return null;
+    if (record.revokedAt === null) {
+      record.revokedAt = now().toISOString();
+      record.revokedBy = revokedBy;
+    }
+    return structuredClone(record);
+  }
+
+  /** Revokes every live capability held by one agent. Used when an Agent is stopped or deleted. */
+  revokeAllForAgent(agentId: string, revokedBy: string): CapabilityRecord[] {
+    const revoked: CapabilityRecord[] = [];
+    for (const record of this.records.values()) {
+      if (record.agentId === agentId && record.revokedAt === null) {
+        const result = this.revoke(record.id, revokedBy);
+        if (result) revoked.push(result);
+      }
+    }
+    return revoked;
+  }
+
+  /** Is the keycard with this id still good? */
+  validate(id: unknown, at: Date = now()): CapabilityValidation {
+    const record = typeof id === "string" ? this.records.get(id) : undefined;
+    return validateCapability(record ? structuredClone(record) : null, at);
+  }
+
+  /** Test/demo helper. Never called by request handlers. */
+  clear(): void {
+    this.records.clear();
+  }
+}
+
+/**
+ * The agent principal a capability was minted for. Derived from the record so
+ * there is no second place where an agent's identity is assembled.
+ */
+export function agentPrincipalFor(record: CapabilityRecord): AgentPrincipal {
+  return {
+    kind: "agent",
+    id: "agent:" + record.agentId,
+    agentId: record.agentId,
+    ownerId: record.ownerId,
+  };
+}
+
+/** Process-wide store, matching how auth/session.ts exposes sessions. */
+export const capabilityStore = new CapabilityStore();

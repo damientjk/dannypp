@@ -63,7 +63,7 @@
 - Create: `apps/web/src/test/environment.test.ts`
 
 **Interfaces:**
-- Produces: a working `npm run test -w @launchpad/web` (Vitest, jsdom environment, `./src/test/setup.ts` loaded first). `HTMLCanvasElement.prototype.getContext("2d")` returns a stub object with `clearRect`/`fillRect`/`beginPath`/`arc`/`fill` no-ops. `window.requestAnimationFrame`/`cancelAnimationFrame` are a working, cancel-safe polyfill.
+- Produces: a working `npm run test -w @launchpad/web` (Vitest, jsdom environment, `./src/test/setup.ts` loaded first). `HTMLCanvasElement.prototype.getContext("2d")` returns a stub object with `clearRect`/`fillRect`/`beginPath`/`arc`/`fill`/`drawImage` no-ops. `window.requestAnimationFrame`/`cancelAnimationFrame` are a working, cancel-safe polyfill.
 
 - [ ] **Step 1: Add the test script and devDependencies**
 
@@ -140,6 +140,7 @@ class FakeCanvasRenderingContext2D {
   beginPath(): void {}
   arc(): void {}
   fill(): void {}
+  drawImage(): void {}
 }
 
 Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
@@ -1149,8 +1150,8 @@ git commit -m "feat: add pure agent movement simulation"
 - Test: `apps/web/src/world/WorldCanvas.test.tsx`
 
 **Interfaces:**
-- Consumes: `WorldAgent` from `./types`; `ROOMS`, `TILE_SIZE`, `WORLD_WIDTH_TILES`, `WORLD_HEIGHT_TILES` from `./map`; `tickAgent`, `settleAgent` from `./agentSim`.
-- Produces: `WorldCanvas({ agents, onFrame }: { agents: WorldAgent[]; onFrame: (agents: WorldAgent[]) => void })` — a React component rendering one `<canvas data-testid="world-canvas">`, running its own `requestAnimationFrame` loop, calling `onFrame` with the ticked/settled agent list every frame, cancelling the loop on unmount.
+- Consumes: `WorldAgent` from `./types`; `ROOMS`, `RoomBounds`, `TILE_SIZE`, `WORLD_WIDTH_TILES`, `WORLD_HEIGHT_TILES` from `./map`; `tickAgent`, `settleAgent` from `./agentSim`; `loadAsset`, `AssetKey` from `./assets`.
+- Produces: `WorldCanvas({ agents, onFrame }: { agents: WorldAgent[]; onFrame: (agents: WorldAgent[]) => void })` — a React component rendering one `<canvas data-testid="world-canvas">`, running its own `requestAnimationFrame` loop, calling `onFrame` with the ticked/settled agent list every frame, cancelling the loop on unmount. Every frame, room floors and agents are drawn from `loadAsset()` when it returns an image, falling back to the placeholder rect/circle only when it returns `null` — this is the seam that makes dropping in real art later a no-code-change swap (spec §5, §8).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1208,7 +1209,10 @@ Create `apps/web/src/world/WorldCanvas.tsx`:
 ```tsx
 import { useEffect, useRef } from "react";
 import { ROOMS, TILE_SIZE, WORLD_HEIGHT_TILES, WORLD_WIDTH_TILES } from "./map";
+import type { RoomBounds } from "./map";
 import { settleAgent, tickAgent } from "./agentSim";
+import { loadAsset } from "./assets";
+import type { AssetKey } from "./assets";
 import type { WorldAgent } from "./types";
 
 export interface WorldCanvasProps {
@@ -1220,6 +1224,12 @@ const ROOM_COLORS: Record<string, string> = {
   common: "#d8d3c4",
   "house-a": "#c9e4de",
   "house-b": "#f6dfeb",
+};
+
+const ROOM_ASSET_KEYS: Record<RoomBounds["id"], AssetKey> = {
+  common: "room.common.floor",
+  "house-a": "room.house-a.floor",
+  "house-b": "room.house-b.floor",
 };
 
 const AGENT_COLORS: Record<WorldAgent["status"], string> = {
@@ -1242,6 +1252,8 @@ export function WorldCanvas({ agents, onFrame }: WorldCanvasProps) {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
+    // keep scaled pixel art crisp instead of browser-smoothed
+    ctx.imageSmoothingEnabled = false;
 
     const step = (time: number) => {
       const last = lastTimeRef.current ?? time;
@@ -1253,14 +1265,28 @@ export function WorldCanvas({ agents, onFrame }: WorldCanvasProps) {
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       for (const room of ROOMS) {
-        ctx.fillStyle = ROOM_COLORS[room.id] ?? "#cccccc";
-        ctx.fillRect(room.x * TILE_SIZE, room.y * TILE_SIZE, room.width * TILE_SIZE, room.height * TILE_SIZE);
+        const px = room.x * TILE_SIZE;
+        const py = room.y * TILE_SIZE;
+        const pw = room.width * TILE_SIZE;
+        const ph = room.height * TILE_SIZE;
+        const floorImage = loadAsset(ROOM_ASSET_KEYS[room.id]);
+        if (floorImage) {
+          ctx.drawImage(floorImage, px, py, pw, ph);
+        } else {
+          ctx.fillStyle = ROOM_COLORS[room.id] ?? "#cccccc";
+          ctx.fillRect(px, py, pw, ph);
+        }
       }
+      const characterImage = loadAsset("character.default");
       for (const agent of next) {
-        ctx.fillStyle = AGENT_COLORS[agent.status];
-        ctx.beginPath();
-        ctx.arc(agent.x + TILE_SIZE / 2, agent.y + TILE_SIZE / 2, TILE_SIZE / 3, 0, Math.PI * 2);
-        ctx.fill();
+        if (characterImage) {
+          ctx.drawImage(characterImage, agent.x, agent.y, TILE_SIZE, TILE_SIZE);
+        } else {
+          ctx.fillStyle = AGENT_COLORS[agent.status];
+          ctx.beginPath();
+          ctx.arc(agent.x + TILE_SIZE / 2, agent.y + TILE_SIZE / 2, TILE_SIZE / 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       frameIdRef.current = requestAnimationFrame(step);
@@ -1593,7 +1619,7 @@ git commit -m "feat: add world view with login, room entry, and security log"
 
 **Interfaces:**
 - Consumes: `WorldView` from `./world/WorldView`.
-- Produces: a "World" button in the dashboard sidebar and a "← Dashboard" button in the world header, toggling which view `App` renders.
+- Produces: a "World" button in the dashboard sidebar and a "← Dashboard" button in the world header, toggling which view `App` renders. The world view's root carries a `pixel-theme` class (user requirement: the World view's whole look, including text, reads as pixel art — scoped to the World view only, not the existing dashboard).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1695,7 +1721,7 @@ Insert a world early-return immediately before the dashboard's final `return (` 
 ```tsx
   if (view === "world") {
     return (
-      <div className="app-shell">
+      <div className="app-shell pixel-theme">
         <header className="world-header">
           <div className="brand">
             <div className="brand-mark">A</div>
@@ -1720,9 +1746,17 @@ Add the toggle button in the sidebar, right after the closing `</div>` of the `b
         </button>
 ```
 
-- [ ] **Step 4: Add world styles**
+- [ ] **Step 4: Add world styles, including the pixel theme**
 
-Append to `apps/web/src/styles.css`:
+The World view should read as pixel art throughout, including its text (user requirement) — scoped to the World view only, not the existing dashboard.
+
+First, insert this line as the very first line of `apps/web/src/styles.css` (a CSS `@import` must precede every other rule, so it cannot go in the appended block below):
+
+```css
+@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap");
+```
+
+Then append the rest to the end of `apps/web/src/styles.css`:
 
 ```css
 .world-header {
@@ -1757,6 +1791,8 @@ Append to `apps/web/src/styles.css`:
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--paper);
+  /* keep the drawn pixel art crisp at its scaled-up display size */
+  image-rendering: pixelated;
 }
 
 .world-panel {
@@ -1789,6 +1825,32 @@ Append to `apps/web/src/styles.css`:
 
 .world-error {
   color: var(--red);
+}
+
+.pixel-theme,
+.pixel-theme button,
+.pixel-theme input {
+  font-family: "Press Start 2P", ui-monospace, monospace;
+  letter-spacing: 0.02em;
+}
+
+.pixel-theme h2,
+.pixel-theme h3,
+.pixel-theme h4 {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.pixel-theme button {
+  font-size: 10px;
+  line-height: 1.6;
+  padding: 10px 12px;
+}
+
+.pixel-theme li,
+.pixel-theme p {
+  font-size: 10px;
+  line-height: 1.8;
 }
 ```
 

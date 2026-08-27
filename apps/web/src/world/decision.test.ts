@@ -55,4 +55,13 @@ describe("decideRoomEntry", () => {
     expect(decision.effect).toBe("deny");
     expect(decision.reason).toContain("revoked");
   });
+
+  it("denies when the capability has expired", async () => {
+    issueCapability("agent-1", "user-a");
+    const capability = getCapability("agent-1");
+    capability!.expiresAt = new Date(Date.now() - 1000).toISOString();
+    const decision = await decideRoomEntry(requestFor("agent-1", "user-a", "house-a"));
+    expect(decision.effect).toBe("deny");
+    expect(decision.reason).toContain("expired");
+  });
 });

@@ -105,18 +105,31 @@ export function WorldView() {
   if (!principal) {
     return (
       <div className="world-login">
-        <h2>World view</h2>
-        <p>Log in to see your agents in the pixel world.</p>
-        {TEST_USERS.map((user) => (
-          <button
-            key={user.userId}
-            className="button button-primary"
-            onClick={() => login(user.userId, user.password)}
-          >
-            {user.label}
-          </button>
-        ))}
-        {error && <p className="world-error">{error}</p>}
+        <div className="world-title-box">
+          <p className="world-eyebrow">SAVE FILE SELECT</p>
+          <h2 className="world-title">Agent Pixel World</h2>
+          <p className="world-subtitle">choose a trainer to enter the world</p>
+        </div>
+        <div className="world-select-grid">
+          {TEST_USERS.map((user, index) => (
+            <button
+              key={user.userId}
+              className={"world-select-card " + (index === 0 ? "world-select-card-a" : "world-select-card-b")}
+              onClick={() => login(user.userId, user.password)}
+            >
+              <span className="world-select-portrait" aria-hidden="true">
+                <span className="world-select-eye" />
+                <span className="world-select-eye" />
+                <span className="world-select-mouth" />
+              </span>
+              <span className="world-select-label">{user.label}</span>
+              <span className="world-select-cursor" aria-hidden="true">
+                ►
+              </span>
+            </button>
+          ))}
+        </div>
+        {error && <p className="world-title-error">▋ {error}</p>}
       </div>
     );
   }

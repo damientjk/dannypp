@@ -310,7 +310,7 @@ export default function App() {
 
   if (view === "world") {
     return (
-      <div className="app-shell pixel-theme">
+      <div className="world-shell pixel-theme">
         <header className="world-header">
           <div className="brand">
             <div className="brand-mark">A</div>

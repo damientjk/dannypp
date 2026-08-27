@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap");
 
 :root {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -1099,12 +1099,51 @@ textarea:focus {
   }
 }
 
+.world-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
 .world-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 16px 24px;
   border-bottom: 1px solid var(--line);
+}
+
+.pixel-theme .world-header {
+  background: var(--pw-bg-alt);
+  border-bottom: 3px solid var(--pw-border);
+  color: var(--pw-ink);
+}
+
+.pixel-theme .world-header .brand {
+  padding: 0;
+}
+
+.pixel-theme .world-header .brand strong {
+  font-family: "Press Start 2P", ui-monospace, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--pw-ink);
+}
+
+.pixel-theme .world-header .button {
+  font-family: "VT323", ui-monospace, monospace;
+  font-size: 16px;
+  background: transparent;
+  border: 2px solid var(--pw-border);
+  border-radius: 0;
+  color: var(--pw-border);
+}
+
+.pixel-theme .world-header .button:hover {
+  background: var(--pw-border);
+  color: var(--pw-shadow);
 }
 
 .view-toggle-button {
@@ -1113,14 +1152,187 @@ textarea:focus {
 }
 
 .world-login {
+  flex: 1;
   display: grid;
-  gap: 12px;
-  max-width: 360px;
-  margin: 80px auto;
+  place-items: center;
+  gap: 40px;
+  padding: 48px 24px;
+  background:
+    radial-gradient(circle at 18% 24%, rgba(246, 196, 83, 0.1), transparent 42%),
+    radial-gradient(circle at 82% 70%, rgba(79, 214, 196, 0.08), transparent 45%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0px, rgba(255, 255, 255, 0.025) 1px, transparent 1px, transparent 4px),
+    var(--pw-bg);
+  color: var(--pw-ink);
   text-align: center;
 }
 
+.world-title-box {
+  display: grid;
+  gap: 10px;
+  padding: 28px 34px;
+  background: var(--pw-bg-alt);
+  border: 3px solid var(--pw-border);
+  box-shadow: 6px 6px 0 var(--pw-shadow);
+}
+
+.pixel-theme .world-eyebrow {
+  font-family: "VT323", ui-monospace, monospace;
+  font-size: 16px;
+  letter-spacing: 0.16em;
+  color: var(--pw-muted);
+  margin: 0;
+}
+
+.pixel-theme .world-title {
+  font-family: "Press Start 2P", ui-monospace, monospace;
+  font-size: 20px;
+  line-height: 1.7;
+  color: var(--pw-border);
+  margin: 0;
+  text-shadow: 3px 3px 0 var(--pw-shadow);
+}
+
+.pixel-theme .world-subtitle {
+  font-family: "VT323", ui-monospace, monospace;
+  font-size: 19px;
+  color: var(--pw-muted);
+  margin: 0;
+}
+
+.world-select-grid {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pixel-theme .world-select-card {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  width: 190px;
+  padding: 22px 16px;
+  background: var(--pw-bg-alt);
+  border: 3px solid var(--pw-muted);
+  box-shadow: 5px 5px 0 var(--pw-shadow);
+  font-family: "VT323", ui-monospace, monospace;
+  font-size: 20px;
+  color: var(--pw-ink);
+  cursor: pointer;
+  transition:
+    transform 80ms steps(2),
+    border-color 80ms steps(2),
+    box-shadow 80ms steps(2);
+}
+
+.world-select-card-a {
+  --pw-accent: var(--pw-a);
+}
+
+.world-select-card-b {
+  --pw-accent: var(--pw-b);
+}
+
+.pixel-theme .world-select-card:hover,
+.pixel-theme .world-select-card:focus-visible {
+  border-color: var(--pw-accent);
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0 var(--pw-shadow);
+  outline: none;
+}
+
+.pixel-theme .world-select-card:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--pw-shadow);
+}
+
+.world-select-portrait {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  background: var(--pw-accent);
+  border: 3px solid var(--pw-shadow);
+}
+
+.world-select-eye {
+  position: absolute;
+  top: 18px;
+  width: 8px;
+  height: 8px;
+  background: var(--pw-shadow);
+}
+
+.world-select-eye:first-of-type {
+  left: 12px;
+}
+
+.world-select-eye:last-of-type {
+  right: 12px;
+}
+
+.world-select-mouth {
+  position: absolute;
+  bottom: 12px;
+  left: 14px;
+  right: 14px;
+  height: 6px;
+  background: var(--pw-shadow);
+}
+
+.pixel-theme .world-select-label {
+  font-size: 18px;
+  letter-spacing: 0.03em;
+}
+
+.pixel-theme .world-select-cursor {
+  font-size: 16px;
+  color: var(--pw-accent);
+  opacity: 0;
+}
+
+.pixel-theme .world-select-card:hover .world-select-cursor,
+.pixel-theme .world-select-card:focus-visible .world-select-cursor {
+  opacity: 1;
+  animation: pw-blink 900ms steps(1) infinite;
+}
+
+@keyframes pw-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pixel-theme .world-select-card:hover .world-select-cursor,
+  .pixel-theme .world-select-card:focus-visible .world-select-cursor {
+    animation: none;
+  }
+
+  .pixel-theme .world-select-card,
+  .pixel-theme .world-select-card:hover,
+  .pixel-theme .world-select-card:focus-visible,
+  .pixel-theme .world-select-card:active {
+    transition: none;
+  }
+}
+
+.pixel-theme .world-title-error {
+  font-family: "VT323", ui-monospace, monospace;
+  font-size: 18px;
+  color: var(--pw-a);
+  background: var(--pw-bg-alt);
+  border: 3px solid var(--pw-a);
+  padding: 10px 16px;
+  margin: 0;
+}
+
 .world-layout {
+  flex: 1;
   display: grid;
   grid-template-columns: auto 320px;
   gap: 16px;
@@ -1165,6 +1377,17 @@ textarea:focus {
 
 .world-error {
   color: var(--red);
+}
+
+.pixel-theme {
+  --pw-bg: #10182b;
+  --pw-bg-alt: #1c2744;
+  --pw-border: #f6c453;
+  --pw-ink: #f4efe2;
+  --pw-muted: #8b93b8;
+  --pw-a: #ff6b5e;
+  --pw-b: #4fd6c4;
+  --pw-shadow: #060910;
 }
 
 .pixel-theme,

@@ -9,10 +9,18 @@ import { HttpError } from "./errors.js";
 import type { AgentService } from "./agent-service.js";
 import { authenticate, findUser } from "./auth/users.js";
 import { issueSession, resolveSession } from "./auth/session.js";
+import type { CallerContext } from "./policy/pep.js";
 import type { HumanPrincipal } from "./types.js";
 
 declare module "fastify" {
   interface FastifyRequest { principal?: HumanPrincipal | undefined; }
+}
+
+function requireCaller(request: { principal?: HumanPrincipal | undefined; id: string }): CallerContext {
+  if (!request.principal) {
+    throw new HttpError(401, "Sign in required");
+  }
+  return { principal: request.principal, requestId: request.id };
 }
 
 const agentIdParams = z.object({ id: z.string().uuid() });
@@ -106,63 +114,78 @@ export async function createApp(
 
   app.get("/api/system", async () => service.systemInfo());
 
-  app.get("/api/agents", async () => ({ agents: service.listAgents() }));
+  app.get("/api/audit", async (request) => {
+    const caller = requireCaller(request);
+    return { entries: await service.listAudit(caller) };
+  });
+
+  app.get("/api/agents", async (request) => {
+    const caller = requireCaller(request);
+    return { agents: service.listAgents(caller) };
+  });
 
   app.post("/api/agents", async (request, reply) => {
-    if (!request.principal) {
-      throw new HttpError(401, "Sign in to create an Agent");
-    }
+    const caller = requireCaller(request);
     const body = createAgentBody.parse(request.body);
-    const agent = await service.createAgent({ ...body, ownerId: request.principal.id });
+    const agent = await service.createAgent({ ...body, ownerId: caller.principal.id });
     return reply.code(201).send({ agent });
   });
 
   app.get("/api/agents/:id", async (request) => {
+    const caller = requireCaller(request);
     const { id } = agentIdParams.parse(request.params);
-    return { agent: service.getAgent(id) };
+    return { agent: await service.getAgent(caller, id) };
   });
 
   app.patch("/api/agents/:id", async (request) => {
+    const caller = requireCaller(request);
     const { id } = agentIdParams.parse(request.params);
     const body = updateAgentBody.parse(request.body);
-    return { agent: await service.updateAgent(id, body) };
+    return { agent: await service.updateAgent(caller, id, body) };
   });
 
   app.delete("/api/agents/:id", async (request) => {
+    const caller = requireCaller(request);
     const { id } = agentIdParams.parse(request.params);
-    return service.deleteAgent(id);
+    return service.deleteAgent(caller, id);
   });
 
   app.post("/api/agents/:id/start", async (request) => {
+    const caller = requireCaller(request);
     const { id } = agentIdParams.parse(request.params);
-    return { agent: await service.startAgent(id) };
+    return { agent: await service.startAgent(caller, id) };
   });
 
   app.post("/api/agents/:id/stop", async (request) => {
+    const caller = requireCaller(request);
     const { id } = agentIdParams.parse(request.params);
-    return { agent: await service.stopAgent(id) };
+    return { agent: await service.stopAgent(caller, id) };
   });
 
   app.get("/api/agents/:id/messages", async (request) => {
+    const caller = requireCaller(request);
     const { id } = agentIdParams.parse(request.params);
-    return { messages: service.getMessages(id) };
+    return { messages: await service.getMessages(caller, id) };
   });
 
   app.get("/api/agents/:id/runs", async (request) => {
+    const caller = requireCaller(request);
     const { id } = agentIdParams.parse(request.params);
-    return { runs: service.getRuns(id) };
+    return { runs: await service.getRuns(caller, id) };
   });
 
   app.post("/api/agents/:id/messages", async (request, reply) => {
+    const caller = requireCaller(request);
     const { id } = agentIdParams.parse(request.params);
     const body = messageBody.parse(request.body);
-    const result = await service.sendMessage(id, body.content);
+    const result = await service.sendMessage(caller, id, body.content);
     return reply.code(202).send(result);
   });
 
   app.get("/api/runs/:id", async (request) => {
+    const caller = requireCaller(request);
     const { id } = runIdParams.parse(request.params);
-    return { run: service.getRun(id) };
+    return { run: await service.getRun(caller, id) };
   });
 
   if (config.nodeEnv === "production") {

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { AgentService } from "./agent-service.js";
 import { createApp } from "./app.js";
+import { AuditLog } from "./audit/log.js";
 import { loadConfig, writeCodexConfig } from "./config.js";
 import { createRunner } from "./runner-factory.js";
 import { JsonStore } from "./store.js";
@@ -12,7 +13,9 @@ await writeCodexConfig(config);
 const store = new JsonStore(path.join(config.dataDirectory, "launchpad.json"));
 const workspaces = new WorkspaceManager(config.workspaceRoot);
 const runner = createRunner(config);
-const service = new AgentService(config, store, workspaces, runner);
+const audit = new AuditLog(path.join(config.dataDirectory, "audit.jsonl"));
+await audit.initialize();
+const service = new AgentService(config, store, workspaces, runner, audit);
 await service.initialize();
 
 const app = await createApp(config, service);

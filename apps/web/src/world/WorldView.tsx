@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { api } from "../api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, setSessionToken } from "../api";
 import type { Agent, AgentRun, HumanPrincipal, Message, PolicyRequestLike } from "../types";
 import { decideRoomEntry, getCapability, issueCapability, revokeCapability } from "./decision";
 import { beginMoveToRoom, spawnWorldAgents } from "./agentSim";
@@ -20,10 +20,13 @@ export function WorldView() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [events, setEvents] = useState<DecisionEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
 
   const login = useCallback(async (userId: string, password: string) => {
     try {
       const result = await api.login(userId, password);
+      setSessionToken(result.sessionToken);
       setPrincipal(result.principal);
       const { agents: nextAgents } = await api.listAgents();
       setAgents(nextAgents);
@@ -43,8 +46,12 @@ export function WorldView() {
       setMessages([]);
       return;
     }
-    api.runs(selectedId).then((result) => setRuns(result.runs));
-    api.messages(selectedId).then((result) => setMessages(result.messages));
+    api.runs(selectedId).then((result) => {
+      if (selectedIdRef.current === selectedId) setRuns(result.runs);
+    });
+    api.messages(selectedId).then((result) => {
+      if (selectedIdRef.current === selectedId) setMessages(result.messages);
+    });
   }, [selectedId]);
 
   const sendToRoom = useCallback(

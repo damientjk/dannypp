@@ -12,6 +12,7 @@ vi.mock("../api", () => ({
     runs: vi.fn(),
     messages: vi.fn(),
   },
+  setSessionToken: vi.fn(),
 }));
 
 const AGENT_A: Agent = {

@@ -23,6 +23,9 @@ Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
   },
 });
 
+// jsdom does not implement scrollIntoView.
+Element.prototype.scrollIntoView = function scrollIntoView(): void {};
+
 const pendingTimers = new Map<number, ReturnType<typeof setTimeout>>();
 let nextFrameId = 0;
 

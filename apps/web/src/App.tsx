@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, setAuthToken } from "./api";
 import type { Agent, AgentRun, Message, SystemInfo } from "./types";
+import { WorldView } from "./world/WorldView";
 
 const starterPrompts = [
   "Create a small TypeScript CLI that prints a weather summary from sample JSON.",
@@ -49,6 +50,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [authRequired, setAuthRequired] = useState<boolean | null>(null);
   const [authInput, setAuthInput] = useState("");
+  const [view, setView] = useState<"dashboard" | "world">("dashboard");
   const messageEnd = useRef<HTMLDivElement>(null);
   const selectedIdRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
@@ -306,6 +308,23 @@ export default function App() {
     );
   }
 
+  if (view === "world") {
+    return (
+      <div className="app-shell pixel-theme">
+        <header className="world-header">
+          <div className="brand">
+            <div className="brand-mark">A</div>
+            <strong>Agent Launchpad — World</strong>
+          </div>
+          <button className="button" onClick={() => setView("dashboard")}>
+            ← Dashboard
+          </button>
+        </header>
+        <WorldView />
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -320,6 +339,10 @@ export default function App() {
             </span>
           </div>
         </div>
+
+        <button className="button view-toggle-button" onClick={() => setView("world")}>
+          World
+        </button>
 
         <button
           className="button button-primary create-button"

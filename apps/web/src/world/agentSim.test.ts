@@ -64,6 +64,12 @@ describe("spawnWorldAgents", () => {
     expect(agent.path).toEqual([]);
     expect(agent.pathIndex).toBe(0);
   });
+
+  it("spawns multiple agents at visibly different positions", () => {
+    const renderer = testRenderer();
+    const [first, second] = spawnWorldAgents([AGENT, { ...AGENT, id: "agent-2" }], renderer);
+    expect(first.x).not.toBe(second.x);
+  });
 });
 
 describe("facingFromDelta", () => {
@@ -116,5 +122,41 @@ describe("beginMoveToRoom + tickAgent + settleAgent", () => {
     }
     expect(agent.status).toBe("idle");
     expect(agent.currentRoom).toBe("common"); // never entered the room
+  });
+
+  it("bounces visibly when denied while already standing on the door tile (revoked-after-permit)", () => {
+    const renderer = testRenderer();
+    let [agent] = spawnWorldAgents([AGENT], renderer);
+
+    // First: permit into house-a, walk all the way to the door tile.
+    agent = beginMoveToRoom(agent, "house-a", "permit", renderer);
+    let guard = 0;
+    while (agent.status === "walking" && guard < 1000) {
+      agent = settleAgent(tickAgent(agent, 50));
+      guard += 1;
+    }
+    expect(agent.status).toBe("idle");
+    const settledX = agent.x;
+    const settledY = agent.y;
+
+    // Then: capability revoked, agent sent to the same house again while
+    // already standing exactly on the door tile (start === goal).
+    agent = beginMoveToRoom(agent, "house-a", "deny", renderer);
+    guard = 0;
+    while (agent.status === "walking" && guard < 1000) {
+      agent = settleAgent(tickAgent(agent, 50));
+      guard += 1;
+    }
+    expect(agent.status).toBe("denied-bounce");
+
+    guard = 0;
+    while (agent.status === "denied-bounce" && guard < 1000) {
+      agent = settleAgent(tickAgent(agent, 50));
+      guard += 1;
+    }
+    expect(agent.status).toBe("idle");
+
+    const distanceMoved = Math.hypot(agent.x - settledX, agent.y - settledY);
+    expect(distanceMoved).toBeGreaterThan(5);
   });
 });

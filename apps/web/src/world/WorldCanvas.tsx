@@ -68,30 +68,34 @@ export function WorldCanvas({ agents, onFrame }: WorldCanvasProps) {
     };
 
     (async () => {
-      const [loadedRenderer, loadedCharacterTexture] = await Promise.all([
-        loadWorldMap(),
-        Assets.load("/world-assets/characters/default.png"),
-      ]);
-      if (disposed) return;
+      try {
+        const [loadedRenderer, loadedCharacterTexture] = await Promise.all([
+          loadWorldMap(),
+          Assets.load("/world-assets/characters/default.png"),
+        ]);
+        if (disposed) return;
 
-      renderer = loadedRenderer;
-      characterTexture = loadedCharacterTexture;
+        renderer = loadedRenderer;
+        characterTexture = loadedCharacterTexture;
 
-      app = new Application();
-      await app.init({
-        canvas,
-        width: renderer.width * renderer.tileSize,
-        height: renderer.height * renderer.tileSize,
-        backgroundAlpha: 0,
-        antialias: false,
-      });
-      if (disposed) {
-        app.destroy();
-        return;
+        app = new Application();
+        await app.init({
+          canvas,
+          width: renderer.width * renderer.tileSize,
+          height: renderer.height * renderer.tileSize,
+          backgroundAlpha: 0,
+          antialias: false,
+        });
+        if (disposed) {
+          app.destroy();
+          return;
+        }
+        app.stage.addChild(renderer.getContainer());
+
+        requestAnimationFrame(tick);
+      } catch (err) {
+        console.error("WorldCanvas failed to initialize:", err);
       }
-      app.stage.addChild(renderer.getContainer());
-
-      requestAnimationFrame(tick);
     })();
 
     return () => {

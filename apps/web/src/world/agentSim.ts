@@ -12,8 +12,8 @@ const DOOR_SPAWN_NAME: Record<RoomId, string> = {
 
 export function spawnWorldAgents(agents: Agent[], renderer: TiledMapRenderer): WorldAgent[] {
   const spawnTile = renderer.getSpawnPoint("common") ?? { x: 0, y: 0 };
-  return agents.map((agent) => {
-    const { x, y } = renderer.tileToPixel(spawnTile.x, spawnTile.y);
+  return agents.map((agent, index) => {
+    const { x, y } = renderer.tileToPixel(spawnTile.x + index, spawnTile.y);
     return {
       agentId: agent.id,
       ownerId: agent.ownerId,
@@ -82,10 +82,15 @@ export function beginMoveToRoom(
 }
 
 function beginDeniedBounce(agent: WorldAgent): WorldAgent {
-  const dx = agent.targetX - agent.originX;
-  const dy = agent.targetY - agent.originY;
+  const rawDx = agent.targetX - agent.originX;
+  const rawDy = agent.targetY - agent.originY;
+  const isDegenerate = rawDx === 0 && rawDy === 0;
+  const dx = isDegenerate ? 0 : rawDx;
+  const dy = isDegenerate ? -1 : rawDy; // fallback: bounce south, toward the corridor
   const length = Math.hypot(dx, dy) || 1;
-  const bounceDistance = Math.min(length, 24);
+  // isDegenerate uses a synthetic unit-length direction vector, so cap-by-length
+  // would clamp the bounce to 1px (still invisible) — use the fixed cap directly.
+  const bounceDistance = isDegenerate ? 24 : Math.min(length, 24);
   return {
     ...agent,
     originX: agent.x,

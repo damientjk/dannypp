@@ -8,7 +8,7 @@ Usage: python3 generate-world-tileset.py
 from pathlib import Path
 from PIL import Image
 
-REPO_ROOT = Path(__file__).resolve().parents[6]
+REPO_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "moderninteriors-win").is_dir())
 MODERNINTERIORS = REPO_ROOT / "moderninteriors-win"
 WORLD_ASSETS = Path(__file__).resolve().parents[1] / "public" / "world-assets"
 

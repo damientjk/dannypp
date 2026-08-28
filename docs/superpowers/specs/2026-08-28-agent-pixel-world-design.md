@@ -121,3 +121,43 @@ Person 5's backend-facing tests, not this view.
   placeholder-asset "rectangle + label" renders as a bare rectangle with no
   label text, and §6's permit door/tile flash-green visual was never
   implemented (only the deny/denied-bounce color change exists).
+
+## 9. Amendment 2026-08-28: PixiJS rendering engine (surgical reuse)
+
+Supersedes §5. The user asked to fork the room-rendering visuals from
+`github.com/chaitanyagiri/munder-difflin` (MIT), an unrelated Electron app,
+after sharing a screenshot of its office-floor UI as the target look. That
+repo's own office/task logic is out of scope — only four generic,
+office-agnostic rendering modules are reused, verbatim aside from one
+additive method:
+
+- `TiledMapRenderer.ts` — parses a Tiled JSON map, builds floor/wall tile
+  layers as sprites, derives a walkability grid + named spawn points/zones.
+- `Camera.ts` — vendored for parity but **not wired up**: our map is small
+  enough (22×13 tiles, 704×416px) to render at 1:1 with no panning needed.
+  `ponytail:` this is a deliberate scope cut, not an oversight — add
+  Camera.fitToScreen/focusOn if the map grows past one screen.
+- `pathfinding.ts` — plain BFS `findPath`, zero modifications.
+- `CharacterSprite.ts` — verbatim except one additive `setTint(color)`
+  method (not in the original) so the existing deny-bounce red-flash
+  affordance survives the switch from placeholder circles to real sprites.
+
+This **revises the §5 "no new dependency" constraint**: `pixi.js@^8.5.1` is
+added as a real runtime dependency of `apps/web`. Canvas 2D drawing
+(`WorldCanvas.tsx`'s manual `drawImage`/pattern-fill code) is replaced
+entirely; `apps/web/src/world/map.ts` and `assets.ts` (and their tests) are
+deleted, replaced by a Tiled JSON map + composited tileset PNG (hand-built
+from `moderninteriors-win` tiles) parsed at runtime by `TiledMapRenderer`.
+
+Everything in §2, §3, §4, and §6 is unchanged: same view toggle, same
+session wiring, same `decideRoomEntry` seam, same permit/deny/revoke demo
+flow. `WorldView.tsx`'s orchestration and `decision.ts` are untouched — only
+the rendering layer and `agentSim.ts`'s movement tween (straight-line →
+multi-waypoint path-following, using `findPath`) change.
+
+Character animation: only one real character frame exists
+(`character.default`, an idle-down crop). `CharacterSprite` expects a
+`Texture[][]` frame grid (3 direction rows × up to 3 columns); every cell is
+filled with that same single texture, so direction-flip (`left`/`right`
+mirroring) is real but frame-cycling is a visual no-op — real walk-cycle art
+stays deferred per §8, unchanged.

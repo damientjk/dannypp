@@ -121,7 +121,13 @@ describe("advanceBehavior", () => {
   it("picks a new roam waypoint and starts walking when idle and roaming", () => {
     const renderer = testRenderer();
     let [agent] = spawnWorldAgents([AGENT], renderer);
-    agent = advanceBehavior(agent, renderer);
+    // advanceBehavior randomly samples candidate tiles and can legitimately
+    // miss on any single call (it just returns the agent unchanged, ready to
+    // retry next frame — see its docstring). Retrying a few times mirrors
+    // that real per-frame retry loop and avoids a flaky single-shot assertion.
+    for (let attempt = 0; attempt < 5 && agent.path.length === 0; attempt++) {
+      agent = advanceBehavior(agent, renderer);
+    }
     expect(agent.path.length).toBeGreaterThan(0);
   });
 

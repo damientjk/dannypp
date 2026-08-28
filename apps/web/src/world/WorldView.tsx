@@ -28,15 +28,27 @@ export function WorldView() {
 
   useEffect(() => {
     let cancelled = false;
-    loadWorldMap().then((renderer) => {
-      if (!cancelled) setMapRenderer(renderer);
-    });
+    loadWorldMap()
+      .then((renderer) => {
+        if (!cancelled) setMapRenderer(renderer);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(
+            "Failed to load the world map" + (err instanceof Error ? `: ${err.message}` : ""),
+          );
+        }
+      });
     return () => {
       cancelled = true;
     };
   }, []);
 
   const login = useCallback(async (userId: string, password: string) => {
+    if (!mapRenderer) {
+      setError("World map is still loading — try again in a moment.");
+      return;
+    }
     try {
       const result = await api.login(userId, password);
       setSessionToken(result.sessionToken);
@@ -44,11 +56,7 @@ export function WorldView() {
       const { agents: nextAgents } = await api.listAgents();
       const ownedAgents = nextAgents.filter((agent) => agent.ownerId === result.principal.id);
       setAgents(ownedAgents);
-      if (!mapRenderer) {
-        setError("World map is still loading — try again in a moment.");
-        return;
-      }
-      setWorldAgents(spawnWorldAgents(ownedAgents, mapRenderer!));
+      setWorldAgents(spawnWorldAgents(ownedAgents, mapRenderer));
       for (const agent of ownedAgents) {
         issueCapability(agent.id, agent.ownerId);
       }

@@ -11,7 +11,14 @@ Grid (35 wide x 20 tall, TILE=32px):
   Row 2 (y 13-19): Billing (x 0-8, door north at 4,13) | Living Room
     (x 13-21, door north at 17,13) | Deploy Config (x 26-34, door north
     at 30,13)
-  Gaps between rooms in both rows (x 9-12, x 22-25): unfloored, blocked.
+  Gaps between rooms in both rows (x 9-12, x 22-25): floored (hallway
+    texture) but still blocked — structural exterior gaps, not walkable.
+
+Task 10 additions: gap cells get a floor texture instead of staying blank
+(goal 2); each room's exterior wall opposite its door gets a 2-tile window
+pair (goal 3, purely visual — the cells stay in the collision fill exactly
+like normal wall cells); each room gets 1 potted plant in an interior
+corner (goal 4).
 
 Usage: python3 generate-world-map.py
 """
@@ -34,6 +41,9 @@ GID_DEPLOY_CONFIG = 7
 GID_WALL = 8
 GID_DESK = 9
 GID_RUG = 10
+GID_WINDOW_LEFT = 11
+GID_WINDOW_RIGHT = 12
+GID_PLANT = 13
 
 ROOMS = [
     dict(id="auth-module", floor=GID_AUTH_MODULE, owner="user-a", row="top", x0=0),
@@ -95,11 +105,26 @@ def main() -> None:
             else:
                 floor_fill[(x, y)] = room["floor"]
 
-    # Gaps between rooms, full height of each room row: unfloored, blocked.
+        # Windows: a 2-tile pair on the exterior wall row opposite the door
+        # (a pure exterior wall — the door's row already has the door cut
+        # into it). Centered, clear of the corners. Purely a visual re-skin
+        # of two wall cells: they were already added to collision_fill above
+        # like every other ring cell, so they still block movement exactly
+        # like a normal wall.
+        window_y = y1 if room["row"] == "bottom" else y0
+        window_x0 = x0 + ROOM_WIDTH // 2 - 1
+        walls_fill[(window_x0, window_y)] = GID_WINDOW_LEFT
+        walls_fill[(window_x0 + 1, window_y)] = GID_WINDOW_RIGHT
+
+    # Gaps between rooms, full height of each room row: floored (hallway
+    # texture, so the map reads as one continuous house) but still blocked —
+    # they're wall-adjacent structural gaps between room exteriors, not open
+    # floor.
     for row_y0, row_y1 in ((0, ROOM_HEIGHT - 1), (HEIGHT - ROOM_HEIGHT, HEIGHT - 1)):
         for gap_x0, gap_x1 in ((9, 12), (22, 25)):
             for x in range(gap_x0, gap_x1 + 1):
                 for y in range(row_y0, row_y1 + 1):
+                    floor_fill[(x, y)] = GID_HALLWAY
                     collision_fill[(x, y)] = GID_WALL
 
     # Hallway: fully open floor, full width, no walls.
@@ -126,6 +151,14 @@ def main() -> None:
             continue
         x0, y0, x1, y1 = exterior_rect(room)
         furniture_fill[((x0 + x1) // 2, (y0 + y1) // 2)] = GID_RUG
+
+    # Plants: one potted plant per room (all 6), in the interior's top-left
+    # corner — wall-adjacent, clear of the door, desks, and rug at every
+    # room regardless of row/owner (desk row is the interior's vertical
+    # middle; rug and door are both at the room's horizontal center).
+    for room in ROOMS:
+        x0, y0, x1, y1 = exterior_rect(room)
+        furniture_fill[(x0 + 1, y0 + 1)] = GID_PLANT
 
     def tile_obj(name, x, y):
         return {"name": name, "x": x * TILE, "y": y * TILE}
@@ -154,12 +187,12 @@ def main() -> None:
         "tileheight": TILE,
         "tilesets": [
             {
-                "firstgid": 1,
+                "firstgid": 0,
                 "image": "tileset.png",
-                "columns": 11,
+                "columns": 14,
                 "tilewidth": TILE,
                 "tileheight": TILE,
-                "tilecount": 11,
+                "tilecount": 14,
             }
         ],
         "layers": [

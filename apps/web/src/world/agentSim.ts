@@ -1,13 +1,19 @@
 import type { Agent, PolicyEffect } from "../types";
+import type { TiledMapRenderer } from "./engine/TiledMapRenderer";
+import { findPath } from "./engine/pathfinding";
 import type { Facing, RoomId, WorldAgent } from "./types";
-import { TILE_SIZE, doorPixelPosition, spawnPixelPosition } from "./map";
 
 const MOVE_SPEED_PX_PER_MS = 0.12;
-const BOUNCE_DISTANCE_PX = TILE_SIZE * 0.75;
 
-export function spawnWorldAgents(agents: Agent[]): WorldAgent[] {
-  return agents.map((agent, index) => {
-    const { x, y } = spawnPixelPosition(index);
+const DOOR_SPAWN_NAME: Record<RoomId, string> = {
+  "house-a": "house-a-door",
+  "house-b": "house-b-door",
+};
+
+export function spawnWorldAgents(agents: Agent[], renderer: TiledMapRenderer): WorldAgent[] {
+  const spawnTile = renderer.getSpawnPoint("common") ?? { x: 0, y: 0 };
+  return agents.map((agent) => {
+    const { x, y } = renderer.tileToPixel(spawnTile.x, spawnTile.y);
     return {
       agentId: agent.id,
       ownerId: agent.ownerId,
@@ -24,6 +30,8 @@ export function spawnWorldAgents(agents: Agent[]): WorldAgent[] {
       progress: 1,
       pendingEffect: null,
       pendingRoom: null,
+      path: [],
+      pathIndex: 0,
     };
   });
 }
@@ -33,19 +41,43 @@ export function facingFromDelta(dx: number, dy: number): Facing {
   return dy > 0 ? "down" : "up";
 }
 
-export function beginMoveToRoom(agent: WorldAgent, room: RoomId, effect: PolicyEffect): WorldAgent {
-  const { x, y } = doorPixelPosition(room);
+function walkableAdapter(renderer: TiledMapRenderer) {
+  return {
+    width: renderer.width,
+    height: renderer.height,
+    isWalkable: (x: number, y: number) => renderer.isWalkable(x, y),
+  };
+}
+
+export function beginMoveToRoom(
+  agent: WorldAgent,
+  room: RoomId,
+  effect: PolicyEffect,
+  renderer: TiledMapRenderer,
+): WorldAgent {
+  const doorTile = renderer.getSpawnPoint(DOOR_SPAWN_NAME[room]) ?? { x: 0, y: 0 };
+  const startTile = renderer.pixelToTile(agent.x, agent.y);
+  const tileHops = findPath(walkableAdapter(renderer), startTile, doorTile) ?? [];
+  const pixelWaypoints = [
+    { x: agent.x, y: agent.y },
+    ...tileHops.map((tile) => renderer.tileToPixel(tile.x, tile.y)),
+  ];
+  const first = pixelWaypoints[0];
+  const next = pixelWaypoints[1] ?? first;
+
   return {
     ...agent,
-    originX: agent.x,
-    originY: agent.y,
-    targetX: x,
-    targetY: y,
-    facing: facingFromDelta(x - agent.x, y - agent.y),
+    originX: first.x,
+    originY: first.y,
+    targetX: next.x,
+    targetY: next.y,
+    facing: facingFromDelta(next.x - first.x, next.y - first.y),
     status: "walking",
     progress: 0,
     pendingEffect: effect,
     pendingRoom: room,
+    path: pixelWaypoints,
+    pathIndex: 0,
   };
 }
 
@@ -53,17 +85,20 @@ function beginDeniedBounce(agent: WorldAgent): WorldAgent {
   const dx = agent.targetX - agent.originX;
   const dy = agent.targetY - agent.originY;
   const length = Math.hypot(dx, dy) || 1;
+  const bounceDistance = Math.min(length, 24);
   return {
     ...agent,
     originX: agent.x,
     originY: agent.y,
-    targetX: agent.x - (dx / length) * BOUNCE_DISTANCE_PX,
-    targetY: agent.y - (dy / length) * BOUNCE_DISTANCE_PX,
+    targetX: agent.x - (dx / length) * bounceDistance,
+    targetY: agent.y - (dy / length) * bounceDistance,
     facing: facingFromDelta(-dx, -dy),
     status: "denied-bounce",
     progress: 0,
     pendingEffect: null,
     pendingRoom: null,
+    path: [],
+    pathIndex: 0,
   };
 }
 
@@ -82,7 +117,23 @@ export function tickAgent(agent: WorldAgent, deltaMs: number): WorldAgent {
 
 export function settleAgent(agent: WorldAgent): WorldAgent {
   if (agent.progress < 1) return agent;
+
   if (agent.status === "walking") {
+    const nextIndex = agent.pathIndex + 1;
+    if (nextIndex < agent.path.length - 1) {
+      const from = agent.path[nextIndex];
+      const to = agent.path[nextIndex + 1];
+      return {
+        ...agent,
+        pathIndex: nextIndex,
+        originX: from.x,
+        originY: from.y,
+        targetX: to.x,
+        targetY: to.y,
+        facing: facingFromDelta(to.x - from.x, to.y - from.y),
+        progress: 0,
+      };
+    }
     if (agent.pendingEffect === "deny") return beginDeniedBounce(agent);
     return {
       ...agent,
@@ -90,6 +141,8 @@ export function settleAgent(agent: WorldAgent): WorldAgent {
       currentRoom: agent.pendingRoom ?? agent.currentRoom,
       pendingEffect: null,
       pendingRoom: null,
+      path: [],
+      pathIndex: 0,
     };
   }
   if (agent.status === "denied-bounce") {

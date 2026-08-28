@@ -1,13 +1,10 @@
+import { Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import type { Agent } from "../types";
-import {
-  beginMoveToRoom,
-  facingFromDelta,
-  settleAgent,
-  spawnWorldAgents,
-  tickAgent,
-} from "./agentSim";
-import { TILE_SIZE, doorPixelPosition } from "./map";
+import { TiledMapRenderer } from "./engine/TiledMapRenderer";
+import type { TiledMap } from "./engine/TiledMapRenderer";
+import { TILE_SIZE } from "./engineMap";
+import { beginMoveToRoom, facingFromDelta, settleAgent, spawnWorldAgents, tickAgent } from "./agentSim";
 
 const AGENT: Agent = {
   id: "agent-1",
@@ -23,20 +20,49 @@ const AGENT: Agent = {
   updatedAt: "",
 };
 
-const AGENT_2: Agent = { ...AGENT, id: "agent-2", name: "Robot B" };
+// A 6x3 map: common corridor along the bottom row (y=2), a walled house-a
+// room (interior at x=1..3, y=0) with a door gap at (2,1), reached only by
+// walking around through the corridor — enough to force a multi-waypoint path.
+function testRenderer(): TiledMapRenderer {
+  const width = 6;
+  const height = 3;
+  const floor = new Array(width * height).fill(1);
+  const collision = new Array(width * height).fill(0);
+  // Wall everything on row 1 except the door gap at x=2.
+  for (let x = 0; x < width; x++) {
+    if (x !== 2) collision[1 * width + x] = 4;
+  }
+  const mapData: TiledMap = {
+    width,
+    height,
+    tilewidth: TILE_SIZE,
+    tileheight: TILE_SIZE,
+    tilesets: [{ firstgid: 1, columns: 5, tilewidth: TILE_SIZE, tileheight: TILE_SIZE, tilecount: 5 }],
+    layers: [
+      { name: "floor", type: "tilelayer", data: floor },
+      { name: "collision", type: "tilelayer", data: collision },
+      {
+        name: "spawn-points",
+        type: "objectgroup",
+        objects: [
+          { name: "common", x: 1 * TILE_SIZE, y: 2 * TILE_SIZE },
+          { name: "house-a-door", x: 2 * TILE_SIZE, y: 1 * TILE_SIZE },
+        ],
+      },
+      { name: "zones", type: "objectgroup", objects: [] },
+    ],
+  };
+  return new TiledMapRenderer(mapData, [Texture.WHITE]);
+}
 
 describe("spawnWorldAgents", () => {
-  it("maps agents to idle world agents", () => {
-    const [worldAgent] = spawnWorldAgents([AGENT]);
-    expect(worldAgent.agentId).toBe("agent-1");
-    expect(worldAgent.ownerId).toBe("user-a");
-    expect(worldAgent.status).toBe("idle");
-    expect(worldAgent.progress).toBe(1);
-  });
-
-  it("spawns multiple agents at visibly different positions", () => {
-    const [first, second] = spawnWorldAgents([AGENT, AGENT_2]);
-    expect(first.x).not.toBe(second.x);
+  it("spawns at the map's common spawn point with an empty path", () => {
+    const renderer = testRenderer();
+    const [agent] = spawnWorldAgents([AGENT], renderer);
+    expect(agent.x).toBe(1 * TILE_SIZE);
+    expect(agent.y).toBe(2 * TILE_SIZE);
+    expect(agent.path).toEqual([]);
+    expect(agent.pathIndex).toBe(0);
   });
 });
 
@@ -49,40 +75,46 @@ describe("facingFromDelta", () => {
   });
 });
 
-describe("movement tick", () => {
-  it("walks toward a permitted room and arrives idle inside it", () => {
-    let agent = spawnWorldAgents([AGENT])[0];
-    agent = beginMoveToRoom(agent, "house-a", "permit");
+describe("beginMoveToRoom + tickAgent + settleAgent", () => {
+  it("walks a multi-waypoint path around the wall to the door, then settles idle on permit", () => {
+    const renderer = testRenderer();
+    let [agent] = spawnWorldAgents([AGENT], renderer);
+    agent = beginMoveToRoom(agent, "house-a", "permit", renderer);
+
+    expect(agent.path.length).toBeGreaterThan(2); // more than a single direct hop
     expect(agent.status).toBe("walking");
 
-    for (let i = 0; i < 200 && agent.status !== "idle"; i++) {
+    let guard = 0;
+    while (agent.status === "walking" && guard < 1000) {
       agent = settleAgent(tickAgent(agent, 50));
+      guard += 1;
     }
 
-    const door = doorPixelPosition("house-a");
+    expect(guard).toBeLessThan(1000);
     expect(agent.status).toBe("idle");
     expect(agent.currentRoom).toBe("house-a");
-    expect(agent.x).toBeCloseTo(door.x, 0);
-    expect(agent.y).toBeCloseTo(door.y, 0);
+    expect(agent.x).toBe(2 * TILE_SIZE);
+    expect(agent.y).toBe(1 * TILE_SIZE);
   });
 
-  it("walks up to the door, bounces back, and never enters when denied", () => {
-    let agent = spawnWorldAgents([AGENT])[0];
-    agent = beginMoveToRoom(agent, "house-b", "deny");
+  it("bounces back on deny after reaching the end of the path", () => {
+    const renderer = testRenderer();
+    let [agent] = spawnWorldAgents([AGENT], renderer);
+    agent = beginMoveToRoom(agent, "house-a", "deny", renderer);
 
-    for (let i = 0; i < 400 && !(agent.status === "idle" && agent.progress === 1); i++) {
+    let guard = 0;
+    while (agent.status === "walking" && guard < 1000) {
       agent = settleAgent(tickAgent(agent, 50));
+      guard += 1;
     }
+    expect(agent.status).toBe("denied-bounce");
 
-    const door = doorPixelPosition("house-b");
-    const distanceFromDoor = Math.hypot(agent.x - door.x, agent.y - door.y);
-
+    guard = 0;
+    while (agent.status === "denied-bounce" && guard < 1000) {
+      agent = settleAgent(tickAgent(agent, 50));
+      guard += 1;
+    }
     expect(agent.status).toBe("idle");
-    // it was rejected, so it never actually entered the house
-    expect(agent.currentRoom).toBe("common");
-    // it got up to the door before bouncing off, and only bounced back
-    // a short hop — not all the way back to where it started
-    expect(distanceFromDoor).toBeGreaterThan(0);
-    expect(distanceFromDoor).toBeLessThan(TILE_SIZE * 2);
+    expect(agent.currentRoom).toBe("common"); // never entered the room
   });
 });

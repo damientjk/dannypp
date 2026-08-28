@@ -1,10 +1,7 @@
 import type { PolicyEffect } from "../types";
 
-export type RoomId = "house-a" | "house-b";
-
 export type Facing = "up" | "down" | "left" | "right";
-
-export type AgentMoveStatus = "idle" | "walking" | "denied-bounce";
+export type BehaviorMode = "roaming" | "heading-to-desk" | "working";
 
 export interface WorldAgent {
   agentId: string;
@@ -17,20 +14,19 @@ export interface WorldAgent {
   targetX: number;
   targetY: number;
   facing: Facing;
-  status: AgentMoveStatus;
-  currentRoom: RoomId | "common";
   progress: number;
-  pendingEffect: PolicyEffect | null;
-  pendingRoom: RoomId | null;
   path: Array<{ x: number; y: number }>;
   pathIndex: number;
+  behaviorMode: BehaviorMode;
+  assignedRoomId: string | null;
+  occupiedDeskId: string | null;
 }
 
 export interface DecisionEvent {
   requestId: string;
   agentId: string;
   agentName: string;
-  room: RoomId;
+  room: string;
   effect: PolicyEffect;
   reason: string;
   decidedAt: string;

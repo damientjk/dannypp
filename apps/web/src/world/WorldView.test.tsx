@@ -30,32 +30,12 @@ vi.mock("pixi.js", async () => {
 });
 
 vi.mock("./engineMap", async () => {
+  // Imported inside the factory: vi.mock is hoisted above module imports.
   const { TiledMapRenderer } = await import("./engine/TiledMapRenderer");
   const { Texture } = await import("pixi.js");
-  const width = 6;
-  const height = 3;
-  const mapData = {
-    width,
-    height,
-    tilewidth: 32,
-    tileheight: 32,
-    tilesets: [{ firstgid: 1, columns: 5, tilewidth: 32, tileheight: 32, tilecount: 5 }],
-    layers: [
-      { name: "floor", type: "tilelayer" as const, data: new Array(width * height).fill(1) },
-      { name: "collision", type: "tilelayer" as const, data: new Array(width * height).fill(0) },
-      {
-        name: "spawn-points",
-        type: "objectgroup" as const,
-        objects: [
-          { name: "common", x: 32, y: 32 },
-          { name: "house-a-door", x: 0, y: 0 },
-          { name: "house-b-door", x: 5 * 32, y: 0 },
-        ],
-      },
-      { name: "zones", type: "objectgroup" as const, objects: [] },
-    ],
-  };
-  const renderer = new TiledMapRenderer(mapData, [Texture.WHITE]);
+  const { buildWorldMap } = await import("./mapBuilder");
+  const { listFolderRooms } = await import("./folders");
+  const renderer = new TiledMapRenderer(buildWorldMap(listFolderRooms()), [Texture.WHITE]);
   return {
     TILE_SIZE: 32,
     loadWorldMap: vi.fn().mockResolvedValue(renderer),
@@ -76,6 +56,9 @@ const AGENT_A: Agent = {
   updatedAt: "",
 };
 
+/** Fast enough that a test does not sit through the real roam cadence. */
+const FAST_ROAM_MS = 10;
+
 describe("WorldView", () => {
   beforeEach(() => {
     resetCapabilities();
@@ -88,39 +71,82 @@ describe("WorldView", () => {
     vi.mocked(api.messages).mockResolvedValue({ messages: [] });
   });
 
-  async function loginAndSelect() {
-    render(<WorldView />);
+  async function login(roamIntervalMs = FAST_ROAM_MS) {
+    render(<WorldView roamIntervalMs={roamIntervalMs} />);
     await waitFor(() => {
       const button = screen.getByText("Log in as User A").closest("button");
       expect(button?.disabled).toBe(false);
     });
     fireEvent.click(screen.getByText("Log in as User A"));
     await screen.findByText("Robot A");
-    fireEvent.click(screen.getByText("Robot A"));
   }
 
-  it("permits an agent entering its own owner's house", async () => {
-    await loginAndSelect();
-    fireEvent.click(screen.getByText("Send to House A"));
-    await waitFor(() => expect(screen.getByText(/permit/)).toBeTruthy());
-  });
-
-  it("denies an agent entering a different owner's house", async () => {
-    await loginAndSelect();
-    fireEvent.click(screen.getByText("Send to House B"));
-    await waitFor(() => expect(screen.getByText(/deny/)).toBeTruthy());
-  });
-
-  it("denies a subsequent attempt after the keycard is revoked", async () => {
-    await loginAndSelect();
-    fireEvent.click(screen.getByText("Send to House A"));
-    await waitFor(() => expect(screen.getByText(/permit/)).toBeTruthy());
-
-    fireEvent.click(screen.getByText("Revoke keycard"));
-    fireEvent.click(screen.getByText("Send to House A"));
-    await waitFor(() => {
-      const denyEntries = screen.getAllByText(/deny/);
-      expect(denyEntries.length).toBeGreaterThan(0);
+  it("shows only the agents owned by the signed-in human", async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({
+      agents: [AGENT_A, { ...AGENT_A, id: "agent-2", ownerId: "user-b", name: "Robot B" }],
     });
+
+    await login();
+
+    expect(screen.queryByText("Robot B")).toBeNull();
+  });
+
+  it("roams on its own and permits a folder its owner owns", async () => {
+    await login();
+
+    await waitFor(() => expect(screen.getAllByText("ALLOWED").length).toBeGreaterThan(0), {
+      timeout: 4000,
+    });
+  });
+
+  it("blocks a folder belonging to a different owner", async () => {
+    await login();
+
+    await waitFor(() => expect(screen.getAllByText("BLOCKED").length).toBeGreaterThan(0), {
+      timeout: 4000,
+    });
+  });
+
+  it("names the folder and the file each decision was about", async () => {
+    await login();
+
+    // The mock tree gives user-a a notes/ folder holding today.md.
+    await waitFor(() => expect(screen.getAllByText("notes/").length).toBeGreaterThan(0), {
+      timeout: 4000,
+    });
+  });
+
+  it("blocks every further attempt once the keycard is shredded", async () => {
+    await login();
+    await waitFor(() => expect(screen.getAllByText("ALLOWED").length).toBeGreaterThan(0), {
+      timeout: 4000,
+    });
+
+    // The first agent is selected on login, and the name now also appears in
+    // the log, so re-selecting by text would be ambiguous.
+    fireEvent.click(screen.getByText(/Shred this agent/));
+
+    await waitFor(
+      () => {
+        const reasons = screen.getAllByText("capability revoked");
+        expect(reasons.length).toBeGreaterThan(0);
+      },
+      { timeout: 4000 },
+    );
+  });
+
+  it("stops issuing new attempts while roaming is paused", async () => {
+    await login();
+    await waitFor(() => expect(screen.getAllByText(/ALLOWED|BLOCKED/).length).toBeGreaterThan(0), {
+      timeout: 4000,
+    });
+
+    fireEvent.click(screen.getByText("Pause roaming"));
+    const settled = screen.getAllByText(/ALLOWED|BLOCKED/).length;
+
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    expect(screen.getAllByText(/ALLOWED|BLOCKED/).length).toBe(settled);
+    expect(screen.getByText("Resume roaming")).toBeTruthy();
   });
 });

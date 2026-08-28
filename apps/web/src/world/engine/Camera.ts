@@ -1,6 +1,11 @@
-// Vendored from github.com/chaitanyagiri/munder-difflin (MIT). NOT wired
-// into this project's renderer — our map is small enough to render at 1:1
-// with no panning. Kept for future use if the map grows past one screen.
+// Vendored from github.com/chaitanyagiri/munder-difflin (MIT).
+//
+// Wired into WorldCanvas to get the handheld-era framing: the world is drawn
+// at 2x and the view follows the agent instead of showing the whole map at
+// once. `setZoom` and the edge clamping in `applyFollow` are OUR additions —
+// without the clamp the camera happily pans past the map and renders void
+// along the edges, which the original never had to handle because it always
+// fit its world to the screen.
 
 import { Container } from "pixi.js";
 
@@ -32,21 +37,52 @@ export class Camera {
     this.target.y = (this.viewport.height - this.worldBounds.height * scale) / 2;
   }
 
+  /** Draw the world at a fixed magnification (2 = handheld-era framing). */
+  setZoom(scale: number): void {
+    this.target.scale.set(scale);
+  }
+
   focusOn(x: number, y: number): void {
     this.followX = x;
     this.followY = y;
-    this.target.x = this.viewport.width / 2 - x * this.target.scale.x;
-    this.target.y = this.viewport.height / 2 - y * this.target.scale.y;
+    this.applyFollow();
   }
 
   nudgeToward(x: number, y: number, dt: number): void {
-    this.followX += (x - this.followX) * Math.min(1, this.lerpSpeed * dt);
-    this.followY += (y - this.followY) * Math.min(1, this.lerpSpeed * dt);
-    this.target.x = this.viewport.width / 2 - this.followX * this.target.scale.x;
-    this.target.y = this.viewport.height / 2 - this.followY * this.target.scale.y;
+    const t = Math.min(1, this.lerpSpeed * dt);
+    this.followX += (x - this.followX) * t;
+    this.followY += (y - this.followY) * t;
+    this.applyFollow();
   }
 
   update(dt: number): void {
     this.nudgeToward(this.followX, this.followY, dt);
+  }
+
+  /**
+   * Centre on the follow point, then clamp so the viewport never leaves the
+   * map. An axis whose scaled world is smaller than the viewport is centred
+   * instead of clamped — clamping it would pin the map to one edge.
+   */
+  private applyFollow(): void {
+    this.target.x = this.axis(
+      this.followX,
+      this.viewport.width,
+      this.worldBounds.width,
+      this.target.scale.x,
+    );
+    this.target.y = this.axis(
+      this.followY,
+      this.viewport.height,
+      this.worldBounds.height,
+      this.target.scale.y,
+    );
+  }
+
+  private axis(follow: number, viewport: number, world: number, scale: number): number {
+    const scaledWorld = world * scale;
+    if (scaledWorld <= viewport) return (viewport - scaledWorld) / 2;
+    const centred = viewport / 2 - follow * scale;
+    return Math.min(0, Math.max(viewport - scaledWorld, centred));
   }
 }

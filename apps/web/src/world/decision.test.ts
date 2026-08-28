@@ -31,19 +31,19 @@ describe("decideRoomEntry", () => {
 
   it("permits an agent entering its own owner's house", async () => {
     issueCapability("agent-1", "user-a");
-    const decision = await decideRoomEntry(requestFor("agent-1", "user-a", "house-a"));
+    const decision = await decideRoomEntry(requestFor("agent-1", "user-a", "res://user-a/notes"));
     expect(decision.effect).toBe("permit");
   });
 
   it("denies an agent entering a different owner's house", async () => {
     issueCapability("agent-1", "user-a");
-    const decision = await decideRoomEntry(requestFor("agent-1", "user-a", "house-b"));
+    const decision = await decideRoomEntry(requestFor("agent-1", "user-a", "res://user-b/tax"));
     expect(decision.effect).toBe("deny");
     expect(decision.reason).toContain("user-a");
   });
 
   it("denies when there is no capability at all", async () => {
-    const decision = await decideRoomEntry(requestFor("agent-1", "user-a", "house-a"));
+    const decision = await decideRoomEntry(requestFor("agent-1", "user-a", "res://user-a/notes"));
     expect(decision.effect).toBe("deny");
     expect(decision.reason).toContain("no capability");
   });
@@ -51,7 +51,7 @@ describe("decideRoomEntry", () => {
   it("denies after the capability is revoked", async () => {
     issueCapability("agent-1", "user-a");
     revokeCapability("agent-1");
-    const decision = await decideRoomEntry(requestFor("agent-1", "user-a", "house-a"));
+    const decision = await decideRoomEntry(requestFor("agent-1", "user-a", "res://user-a/notes"));
     expect(decision.effect).toBe("deny");
     expect(decision.reason).toContain("revoked");
   });
@@ -60,7 +60,7 @@ describe("decideRoomEntry", () => {
     issueCapability("agent-1", "user-a");
     const capability = getCapability("agent-1");
     capability!.expiresAt = new Date(Date.now() - 1000).toISOString();
-    const decision = await decideRoomEntry(requestFor("agent-1", "user-a", "house-a"));
+    const decision = await decideRoomEntry(requestFor("agent-1", "user-a", "res://user-a/notes"));
     expect(decision.effect).toBe("deny");
     expect(decision.reason).toContain("expired");
   });

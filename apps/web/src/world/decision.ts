@@ -13,10 +13,15 @@ export const newId = () =>
 // (apps/server/src/policy/pdp.ts). Day 2 swap replaces only this
 // function's body with a fetch call — callers only ever depend on
 // the PolicyDecision shape, so nothing else changes.
-const ROOM_OWNER: Record<RoomId, string> = {
-  "house-a": "user-a",
-  "house-b": "user-b",
-};
+/**
+ * A room is a folder URI ("res://user-a/notes"), so its owner is simply the
+ * authority segment. Derived rather than tabulated so adding a folder needs no
+ * change here.
+ */
+function roomOwner(room: RoomId): string | undefined {
+  const match = /^res:\/\/([^/]+)\//.exec(room);
+  return match?.[1];
+}
 
 export function issueCapability(agentId: string, ownerId: string): Capability {
   const capability: Capability = {
@@ -45,7 +50,7 @@ export function resetCapabilities(): void {
 export async function decideRoomEntry(request: PolicyRequestLike): Promise<PolicyDecision> {
   const decidedAt = new Date().toISOString();
   const { capability, resource, requestId } = request;
-  const roomOwner = ROOM_OWNER[resource as RoomId];
+  const owner = roomOwner(resource as RoomId);
 
   if (!capability) {
     return { effect: "deny", reason: "no capability issued", requestId, decidedAt };
@@ -56,10 +61,10 @@ export async function decideRoomEntry(request: PolicyRequestLike): Promise<Polic
   if (new Date(capability.expiresAt).getTime() < Date.now()) {
     return { effect: "deny", reason: "capability expired", requestId, decidedAt };
   }
-  if (capability.scope !== roomOwner) {
+  if (capability.scope !== owner) {
     return {
       effect: "deny",
-      reason: `capability scoped to ${capability.scope}, room owned by ${roomOwner}`,
+      reason: `capability scoped to ${capability.scope}, room owned by ${owner}`,
       requestId,
       decidedAt,
     };

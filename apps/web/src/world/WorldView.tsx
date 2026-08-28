@@ -1,96 +1,122 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, setSessionToken } from "../api";
-import type { Agent, AgentRun, HumanPrincipal, Message, PolicyRequestLike } from "../types";
-import { decideRoomEntry, getCapability, issueCapability, newId, revokeCapability } from "./decision";
+import type { Agent, HumanPrincipal, PolicyRequestLike } from "../types";
+import {
+  decideRoomEntry,
+  getCapability,
+  issueCapability,
+  newId,
+  revokeCapability,
+} from "./decision";
 import { beginMoveToRoom, spawnWorldAgents } from "./agentSim";
+import { cssColorForAgent } from "./agentAppearance";
 import { WorldCanvas } from "./WorldCanvas";
 import { loadWorldMap } from "./engineMap";
+import { listFileUris, listFolderRooms, roomForFile, type FolderRoom } from "./folders";
+import { planForAgent, targetAt } from "./roam";
 import type { TiledMapRenderer } from "./engine/TiledMapRenderer";
-import type { DecisionEvent, RoomId, WorldAgent } from "./types";
+import type { DecisionEvent, WorldAgent } from "./types";
+
+/** How often an idle agent picks up the next file on its plan. */
+export const ROAM_INTERVAL_MS = 1400;
+/** Keeps the log bounded during a long unattended run. */
+const MAX_LOG_ENTRIES = 60;
 
 const TEST_USERS = [
   { userId: "user-a", password: "demo-a", label: "Log in as User A" },
   { userId: "user-b", password: "demo-b", label: "Log in as User B" },
 ];
 
-export function WorldView() {
+/** Wall-clock time of the decision, so the log reads as an audit trail. */
+function formatDecisionTime(iso: string): string {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return "--:--:--";
+  return parsed.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+const fileName = (uri: string): string => uri.slice(uri.lastIndexOf("/") + 1);
+
+export interface WorldViewProps {
+  /** Overridable so tests do not have to wait out the real cadence. */
+  roamIntervalMs?: number;
+}
+
+export function WorldView({ roamIntervalMs = ROAM_INTERVAL_MS }: WorldViewProps = {}) {
   const [principal, setPrincipal] = useState<HumanPrincipal | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [worldAgents, setWorldAgents] = useState<WorldAgent[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [runs, setRuns] = useState<AgentRun[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [events, setEvents] = useState<DecisionEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mapRenderer, setMapRenderer] = useState<TiledMapRenderer | null>(null);
-  const selectedIdRef = useRef<string | null>(null);
-  selectedIdRef.current = selectedId;
+  const [roaming, setRoaming] = useState(true);
+
+  const rooms: FolderRoom[] = useMemo(() => listFolderRooms(), []);
+  const fileUris = useMemo(() => listFileUris(rooms), [rooms]);
+
+  // Refs so the roam interval reads live values without being torn down and
+  // rebuilt on every frame of movement.
+  const worldAgentsRef = useRef<WorldAgent[]>([]);
+  const agentsRef = useRef<Agent[]>([]);
+  const cursors = useRef(new Map<string, number>());
+  worldAgentsRef.current = worldAgents;
+  agentsRef.current = agents;
 
   useEffect(() => {
     let cancelled = false;
-    loadWorldMap()
+    loadWorldMap(rooms)
       .then((renderer) => {
         if (!cancelled) setMapRenderer(renderer);
       })
       .catch((err) => {
         if (!cancelled) {
           setError(
-            "Failed to load the world map" + (err instanceof Error ? `: ${err.message}` : ""),
+            "Failed to build the world" + (err instanceof Error ? ": " + err.message : ""),
           );
         }
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [rooms]);
 
-  const login = useCallback(async (userId: string, password: string) => {
-    if (!mapRenderer) {
-      setError("World map is still loading — try again in a moment.");
-      return;
-    }
-    try {
-      const result = await api.login(userId, password);
-      setSessionToken(result.sessionToken);
-      setPrincipal(result.principal);
-      const { agents: nextAgents } = await api.listAgents();
-      const ownedAgents = nextAgents.filter((agent) => agent.ownerId === result.principal.id);
-      setAgents(ownedAgents);
-      setWorldAgents(spawnWorldAgents(ownedAgents, mapRenderer));
-      for (const agent of ownedAgents) {
-        issueCapability(agent.id, agent.ownerId);
+  const login = useCallback(
+    async (userId: string, password: string) => {
+      if (!mapRenderer) {
+        setError("World is still loading - try again in a moment.");
+        return;
       }
-      setSelectedId(ownedAgents[0]?.id ?? null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
-    }
-  }, [mapRenderer]);
+      try {
+        const result = await api.login(userId, password);
+        setSessionToken(result.sessionToken);
+        setPrincipal(result.principal);
+        const { agents: nextAgents } = await api.listAgents();
+        const owned = nextAgents.filter((agent) => agent.ownerId === result.principal.id);
+        setAgents(owned);
+        setWorldAgents(spawnWorldAgents(owned, mapRenderer));
+        for (const agent of owned) {
+          issueCapability(agent.id, agent.ownerId);
+        }
+        setSelectedId(owned[0]?.id ?? null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Login failed");
+      }
+    },
+    [mapRenderer],
+  );
 
-  useEffect(() => {
-    if (!selectedId) {
-      setRuns([]);
-      setMessages([]);
-      return;
-    }
-    api
-      .runs(selectedId)
-      .then((result) => {
-        if (selectedIdRef.current === selectedId) setRuns(result.runs);
-      })
-      .catch(() => {});
-    api
-      .messages(selectedId)
-      .then((result) => {
-        if (selectedIdRef.current === selectedId) setMessages(result.messages);
-      })
-      .catch(() => {});
-  }, [selectedId]);
-
-  const sendToRoom = useCallback(
-    async (room: RoomId) => {
-      if (!selectedId) return;
-      const agent = agents.find((candidate) => candidate.id === selectedId);
-      if (!agent) return;
+  /**
+   * One access attempt: ask for a decision, then move the agent according to
+   * what came back. The decision is never inferred from the movement.
+   */
+  const attemptFile = useCallback(
+    async (agent: Agent, uri: string) => {
+      const room = roomForFile(rooms, uri);
+      if (!room || !mapRenderer) return;
 
       const requestId = newId();
       const request: PolicyRequestLike = {
@@ -100,8 +126,8 @@ export function WorldView() {
           agentId: agent.id,
           ownerId: agent.ownerId,
         },
-        action: "enter",
-        resource: room,
+        action: "read",
+        resource: room.id,
         capability: getCapability(agent.id),
         requestId,
       };
@@ -110,25 +136,47 @@ export function WorldView() {
       setWorldAgents((current) =>
         current.map((worldAgent) =>
           worldAgent.agentId === agent.id
-            ? beginMoveToRoom(worldAgent, room, decision.effect, mapRenderer!)
+            ? beginMoveToRoom(worldAgent, room.id, decision.effect, mapRenderer, current)
             : worldAgent,
         ),
       );
-      setEvents((current) => [
-        {
-          requestId,
-          agentId: agent.id,
-          agentName: agent.name,
-          room,
-          effect: decision.effect,
-          reason: decision.reason,
-          decidedAt: decision.decidedAt,
-        },
-        ...current,
-      ]);
+      setEvents((current) =>
+        [
+          {
+            requestId,
+            agentId: agent.id,
+            agentName: agent.name,
+            room: room.id,
+            roomLabel: room.label,
+            file: fileName(uri),
+            effect: decision.effect,
+            reason: decision.reason,
+            decidedAt: decision.decidedAt,
+          },
+          ...current,
+        ].slice(0, MAX_LOG_ENTRIES),
+      );
     },
-    [agents, selectedId, mapRenderer],
+    [rooms, mapRenderer],
   );
+
+  // Auto-roam: every idle agent picks up the next file on its own work plan.
+  useEffect(() => {
+    if (!roaming || !mapRenderer || agents.length === 0) return;
+    const timer = window.setInterval(() => {
+      for (const worldAgent of worldAgentsRef.current) {
+        if (worldAgent.status !== "idle") continue;
+        const agent = agentsRef.current.find((one) => one.id === worldAgent.agentId);
+        if (!agent) continue;
+
+        const cursor = cursors.current.get(agent.id) ?? 0;
+        cursors.current.set(agent.id, cursor + 1);
+        const target = targetAt(planForAgent(agent.id, fileUris), cursor);
+        if (target) void attemptFile(agent, target);
+      }
+    }, roamIntervalMs);
+    return () => window.clearInterval(timer);
+  }, [roaming, mapRenderer, agents.length, fileUris, attemptFile, roamIntervalMs]);
 
   const revoke = useCallback(() => {
     if (selectedId) revokeCapability(selectedId);
@@ -146,7 +194,10 @@ export function WorldView() {
           {TEST_USERS.map((user, index) => (
             <button
               key={user.userId}
-              className={"world-select-card " + (index === 0 ? "world-select-card-a" : "world-select-card-b")}
+              className={
+                "world-select-card " +
+                (index === 0 ? "world-select-card-a" : "world-select-card-b")
+              }
               onClick={() => login(user.userId, user.password)}
               disabled={!mapRenderer}
             >
@@ -157,66 +208,119 @@ export function WorldView() {
               </span>
               <span className="world-select-label">{user.label}</span>
               <span className="world-select-cursor" aria-hidden="true">
-                ►
+                &#9658;
               </span>
             </button>
           ))}
         </div>
-        {error && <p className="world-title-error">▋ {error}</p>}
+        {error && <p className="world-title-error">{error}</p>}
       </div>
     );
   }
 
+  const denials = events.filter((event) => event.effect === "deny").length;
+
   return (
     <div className="world-layout">
-      <WorldCanvas agents={worldAgents} onFrame={setWorldAgents} />
-      <aside className="world-panel">
-        <h3>{principal.displayName}</h3>
-        <ul className="world-roster">
-          {agents.map((agent) => (
-            <li key={agent.id}>
-              <button
-                className={agent.id === selectedId ? "selected" : ""}
-                onClick={() => setSelectedId(agent.id)}
-              >
-                {agent.name}
-              </button>
-            </li>
-          ))}
-        </ul>
-        {selectedId && (
-          <div className="world-controls">
-            <button onClick={() => sendToRoom("house-a")}>Send to House A</button>
-            <button onClick={() => sendToRoom("house-b")}>Send to House B</button>
-            <button onClick={revoke}>Revoke keycard</button>
-          </div>
+      <div className="world-stage">
+        {mapRenderer && (
+          <WorldCanvas
+            renderer={mapRenderer}
+            rooms={rooms}
+            agents={worldAgents}
+            onFrame={setWorldAgents}
+          />
         )}
-        <section>
-          <h4>Activity</h4>
-          <ul>
-            {runs.map((run) => (
-              <li key={run.id}>
-                {run.status}: {run.prompt}
-              </li>
-            ))}
+        <p className="world-caption">
+          Rooms are folders. An agent walks to a folder because the next file on
+          its plan lives there.
+        </p>
+      </div>
+
+      <aside className="world-panel">
+        <header className="panel-block panel-identity">
+          <span className="panel-eyebrow">Signed in as</span>
+          <h3>{principal.displayName}</h3>
+          <div className="panel-stats">
+            <span>
+              <strong>{agents.length}</strong> agents
+            </span>
+            <span className={denials > 0 ? "stat-deny" : ""}>
+              <strong>{denials}</strong> blocked
+            </span>
+          </div>
+        </header>
+
+        <section className="panel-block">
+          <div className="panel-head">
+            <h4>Agents</h4>
+            <button
+              className={"roam-toggle " + (roaming ? "roam-on" : "")}
+              onClick={() => setRoaming((value) => !value)}
+            >
+              {roaming ? "Pause roaming" : "Resume roaming"}
+            </button>
+          </div>
+          <ul className="world-roster">
+            {agents.map((agent) => {
+              const state = worldAgents.find((one) => one.agentId === agent.id);
+              return (
+                <li key={agent.id}>
+                  <button
+                    className={agent.id === selectedId ? "selected" : ""}
+                    onClick={() => setSelectedId(agent.id)}
+                  >
+                    <span
+                      className="roster-swatch"
+                      style={{ background: cssColorForAgent(agent.id) }}
+                      aria-hidden="true"
+                    />
+                    <span className="roster-name">{agent.name}</span>
+                    <span className="roster-state">{state?.status ?? "idle"}</span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
-          <ul>
-            {messages.map((message) => (
-              <li key={message.id}>
-                {message.role}: {message.content}
-              </li>
-            ))}
-          </ul>
+          {selectedId && (
+            <button className="revoke-button" onClick={revoke}>
+              Shred this agent&apos;s keycard
+            </button>
+          )}
         </section>
-        <section>
-          <h4>Security log</h4>
-          <ul>
-            {events.map((event) => (
-              <li key={event.requestId} className={"effect-" + event.effect}>
-                {event.agentName} → {event.room}: {event.effect} ({event.reason})
-              </li>
-            ))}
-          </ul>
+
+        <section className="panel-block security-log">
+          <div className="panel-head">
+            <h4>Security log</h4>
+            <span className="panel-count">{events.length}</span>
+          </div>
+          {events.length === 0 ? (
+            <p className="security-log-empty">No access attempts yet.</p>
+          ) : (
+            <ul>
+              {events.map((event) => (
+                <li key={event.requestId} className={"log-row effect-" + event.effect}>
+                  <span className="log-head">
+                    <span className="log-time">{formatDecisionTime(event.decidedAt)}</span>
+                    <span
+                      className="log-who"
+                      style={{ color: cssColorForAgent(event.agentId) }}
+                    >
+                      {event.agentName}
+                    </span>
+                    <span className={"log-badge log-badge-" + event.effect}>
+                      {event.effect === "permit" ? "ALLOWED" : "BLOCKED"}
+                    </span>
+                  </span>
+                  <span className="log-path">
+                    {event.roomLabel}
+                    <strong>{event.file}</strong>
+                  </span>
+                  <span className="log-reason">{event.reason}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </aside>
     </div>

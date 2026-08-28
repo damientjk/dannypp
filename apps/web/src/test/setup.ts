@@ -7,6 +7,25 @@ afterEach(() => {
 
 class FakeCanvasRenderingContext2D {
   fillStyle = "";
+  font = "";
+  // PixiJS `Text` measures glyphs through the 2D context; jsdom implements
+  // neither, so room labels would throw during render without these.
+  measureText(text: string) {
+    return {
+      width: text.length * 8,
+      actualBoundingBoxLeft: 0,
+      actualBoundingBoxRight: text.length * 8,
+      actualBoundingBoxAscent: 8,
+      actualBoundingBoxDescent: 2,
+      fontBoundingBoxAscent: 8,
+      fontBoundingBoxDescent: 2,
+    };
+  }
+  strokeText(): void {}
+  fillText(): void {}
+  getImageData() {
+    return { data: new Uint8ClampedArray(4) };
+  }
   clearRect(): void {}
   fillRect(): void {}
   beginPath(): void {}
@@ -20,6 +39,11 @@ class FakeCanvasRenderingContext2D {
     return null;
   }
 }
+
+// PixiJS resolves `CanvasRenderingContext2D` off the global object; jsdom does
+// not define it without the native `canvas` package.
+(globalThis as unknown as Record<string, unknown>).CanvasRenderingContext2D ??=
+  FakeCanvasRenderingContext2D;
 
 Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
   configurable: true,

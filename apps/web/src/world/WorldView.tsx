@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, setSessionToken } from "../api";
 import type { Agent, AgentRun, HumanPrincipal, Message, PolicyRequestLike } from "../types";
-import { decideRoomEntry, getCapability, issueCapability, revokeCapability } from "./decision";
+import { decideRoomEntry, getCapability, issueCapability, newId, revokeCapability } from "./decision";
 import { beginMoveToRoom, spawnWorldAgents } from "./agentSim";
 import { WorldCanvas } from "./WorldCanvas";
 import type { DecisionEvent, RoomId, WorldAgent } from "./types";
@@ -29,12 +29,13 @@ export function WorldView() {
       setSessionToken(result.sessionToken);
       setPrincipal(result.principal);
       const { agents: nextAgents } = await api.listAgents();
-      setAgents(nextAgents);
-      setWorldAgents(spawnWorldAgents(nextAgents));
-      for (const agent of nextAgents) {
+      const ownedAgents = nextAgents.filter((agent) => agent.ownerId === result.principal.id);
+      setAgents(ownedAgents);
+      setWorldAgents(spawnWorldAgents(ownedAgents));
+      for (const agent of ownedAgents) {
         issueCapability(agent.id, agent.ownerId);
       }
-      setSelectedId(nextAgents[0]?.id ?? null);
+      setSelectedId(ownedAgents[0]?.id ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     }
@@ -46,12 +47,18 @@ export function WorldView() {
       setMessages([]);
       return;
     }
-    api.runs(selectedId).then((result) => {
-      if (selectedIdRef.current === selectedId) setRuns(result.runs);
-    });
-    api.messages(selectedId).then((result) => {
-      if (selectedIdRef.current === selectedId) setMessages(result.messages);
-    });
+    api
+      .runs(selectedId)
+      .then((result) => {
+        if (selectedIdRef.current === selectedId) setRuns(result.runs);
+      })
+      .catch(() => {});
+    api
+      .messages(selectedId)
+      .then((result) => {
+        if (selectedIdRef.current === selectedId) setMessages(result.messages);
+      })
+      .catch(() => {});
   }, [selectedId]);
 
   const sendToRoom = useCallback(
@@ -60,7 +67,7 @@ export function WorldView() {
       const agent = agents.find((candidate) => candidate.id === selectedId);
       if (!agent) return;
 
-      const requestId = crypto.randomUUID();
+      const requestId = newId();
       const request: PolicyRequestLike = {
         principal: {
           kind: "agent",

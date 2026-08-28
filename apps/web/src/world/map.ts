@@ -34,10 +34,11 @@ export function doorPixelPosition(id: RoomBounds["id"]): { x: number; y: number 
   return { x: tileToPixel(room.doorX), y: tileToPixel(room.doorY) };
 }
 
-export function spawnPixelPosition(): { x: number; y: number } {
+export function spawnPixelPosition(index = 0): { x: number; y: number } {
   const common = roomById("common");
+  const spread = Math.max(1, common.width - 4);
   return {
-    x: tileToPixel(common.x + Math.floor(common.width / 2)),
+    x: tileToPixel(common.x + 2 + (index % spread)),
     y: tileToPixel(common.y + Math.floor(common.height / 2)),
   };
 }

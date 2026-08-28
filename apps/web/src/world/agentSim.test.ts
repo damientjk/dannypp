@@ -23,6 +23,8 @@ const AGENT: Agent = {
   updatedAt: "",
 };
 
+const AGENT_2: Agent = { ...AGENT, id: "agent-2", name: "Robot B" };
+
 describe("spawnWorldAgents", () => {
   it("maps agents to idle world agents", () => {
     const [worldAgent] = spawnWorldAgents([AGENT]);
@@ -30,6 +32,11 @@ describe("spawnWorldAgents", () => {
     expect(worldAgent.ownerId).toBe("user-a");
     expect(worldAgent.status).toBe("idle");
     expect(worldAgent.progress).toBe(1);
+  });
+
+  it("spawns multiple agents at visibly different positions", () => {
+    const [first, second] = spawnWorldAgents([AGENT, AGENT_2]);
+    expect(first.x).not.toBe(second.x);
   });
 });
 

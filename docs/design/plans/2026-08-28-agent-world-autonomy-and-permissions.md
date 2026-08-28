@@ -2430,7 +2430,78 @@ git commit -m "style(world): bottom agent strip, detail panel, request toasts"
 
 ---
 
-### Task 9: Manual verification pass
+### Task 10: Enrich map visuals — computer sprites, uniform outdoor floor, 3D walls & windows, house furniture
+
+**Added mid-execution** (after Task 8), directly requested by the user with a reference screenshot (a similar pixel-art office-simulation UI) showing: recognizable monitor+keyboard computer sprites on desks, a uniform floor texture covering the whole walkable area (not blank/white gaps), walls with visible top-edge shading for a 3D feel, and window/plant dressing. This task continues Task 2's asset-authoring work on the same two scripts and two generated files — it is not a new subsystem, so it stays inside this plan rather than a fresh spec.
+
+**Files:**
+- Modify: `apps/web/scripts/generate-world-tileset.py` (add tiles; extend, don't rewrite from scratch — Task 2's floor/wall/desk/rug picks stay unless a specific goal below requires touching one)
+- Modify: `apps/web/scripts/generate-world-map.py` (extend the fill logic for the new tiles below)
+- Modify: `apps/web/public/world-assets/tileset.png` (regenerated output, more tiles than Task 2 left it with)
+- Modify: `apps/web/public/world-assets/map.json` (regenerated output)
+
+**Interfaces:** unchanged from Task 2 — spawn-point and zone names must stay exactly as Task 1's `FILE_ROOMS` table requires (`common`, `<room-id>-door` ×6, `desk-<room-id>-N` ×8, 6 zones). This task only adds visual richness; it must not rename, move, or remove any existing spawn point, zone, room dimension, or gid already committed by Task 2, and must not change `apps/web/src/world/resources.ts` (Task 1) or any TypeScript file — this is asset-authoring only, same as Task 2.
+
+**Four concrete goals** (source art is `moderninteriors-win`, already in the repo — use the same labeled-contact-sheet visual-inspection technique Task 2 used, including its fix round: crop a candidate, Read it at scale, confirm it's a genuinely complete/self-contained object before committing to a coordinate, the same rigor that caught Task 2's broken desk crop):
+
+1. **Computer sprites closer to the reference.** The current desk tile (a checkout/POS terminal from `Theme_Sorter_32x32/21_Clothing_Store_32x32.png`) is functional but generic. Look for a clearer monitor+keyboard "office computer" sprite — check `Theme_Sorter_32x32/` (other numbered sheets), `Interiors_32x32.png`, and any other sheet already in `moderninteriors-win` — and swap it in if you find something that reads more clearly as "office desk with computer" at 32×32. If nothing meaningfully better than the current sprite turns up after a real search, it's fine to leave Task 2's desk tile as-is — don't force a downgrade.
+2. **Uniform floor outside the rooms.** Right now the gaps between rooms (`x9-12`, `x22-25`, both rows) are unfloored (`GID_BLANK`) and collision-blocked — they render blank/transparent (showing the page background, effectively "white") instead of a floor. Give them the same floor texture as the hallway (`GID_HALLWAY`) while keeping them collision-blocked (still not walkable — they're wall-adjacent structural gaps between room exteriors, not open floor), so the whole map reads as one continuous, floored house instead of a floating hallway strip with blank holes. This is a `generate-world-map.py` change only (fill the gap cells' floor layer with `GID_HALLWAY` in addition to the existing collision fill) — no new tile needed.
+3. **3D-feeling walls + windows.** The current wall tile is a single flat block. Look in `Room_Builder_32x32.png` (and its neighboring rows/columns around the wall tile Task 2 already uses) for a wall variant with a visible top-edge highlight/shadow band (a "3D-looking" wall the way the reference screenshot's walls read), and for a window tile (a wall segment with a visible pane). Add both as new gids. Use the shaded wall as the new default wall tile for every room's ring (replacing the flat one, same collision/wall role — this is a pure re-skin, not a new layer), and place 1-2 window tiles per room on an exterior wall segment that isn't the door (pick a wall cell that reads naturally as "a window on the outside wall," e.g. adjacent to a corner, avoiding the door cell) via a new `furniture-below`-layer-style placement or directly overwriting the relevant wall cell — your call on which layer, but windows must still block movement exactly like a normal wall cell (add them to the collision fill the same way regular wall cells already are).
+4. **House furniture — plants.** Find a clean, single-tile, self-contained plant/potted-plant sprite (search `Theme_Sorter_32x32/` the same way the rug replacement was found in Task 2's fix round). Add it as a new gid and place 1 plant per room (all 6, not just the common ones) in a corner or wall-adjacent cell that doesn't collide with an existing desk/rug placement or block the door — on the `furniture-below` layer, same mechanism Task 2 already uses for desks/rugs.
+
+**None of these four goals may change:** the 35×20 map dimensions, any room's exterior rect/door position, any existing spawn-point or zone name/position, or any of Task 2's already-fixed floor-tile coordinates (the 7 floor colors, the rug). If you find a *genuine* defect in one of those while working (the same standard Task 2's fix round used — a real visual bug, not a taste preference), fix it and flag it clearly in your report the same way Task 2's implementer did; don't silently redesign anything already locked in.
+
+- [ ] **Step 1: Extend `generate-world-tileset.py`** with the new gids (shaded wall replacing the old wall gid in-place, window, plant — plus a better desk sprite only if goal 1 finds one). Keep the existing floor/rug gids and their tile order/count semantics intact; append new tiles after the current last tile (gid 10, rug) rather than reordering existing ones, so `map.json`'s existing gid references for floors/desk/rug don't need to change unless goal 1 replaces the desk.
+
+- [ ] **Step 2: Run it, then visually verify** each new/changed tile the same way Task 2 did — Read the regenerated `tileset.png`, crop+scale individual tiles that need close inspection, confirm no white bleed / cut-off fragments / broken alpha on any new or replaced tile.
+
+- [ ] **Step 3: Extend `generate-world-map.py`** for: the gap-floor fill (goal 2), window collision+visual placement (goal 3), and plant furniture placement (goal 4) — plus the wall-tile gid swap if goal 3's shaded wall replaces the flat one everywhere. Re-run the sanity-check python one-liner from Task 2's Step 4 (same expected 15-name spawn-point list) to confirm nothing structural broke.
+
+- [ ] **Step 4: Full visual pass.** Read the regenerated `tileset.png` in full and confirm every tile (old and new) still looks correct together. If feasible in this environment, also start the dev server and use Playwright to load the World view and take a screenshot of the rendered map, confirming the new floor/walls/windows/plants read correctly at actual in-app scale (not just in the isolated tileset strip) — this is worth doing since tile-sheet correctness doesn't guarantee in-map correctness (adjacent tiles can clash, windows can end up on the wrong wall edge, etc.). If the dev server / Playwright genuinely isn't workable in this environment, note that plainly rather than skipping the check silently.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/web/scripts/generate-world-tileset.py apps/web/scripts/generate-world-map.py apps/web/public/world-assets/tileset.png apps/web/public/world-assets/map.json
+git commit -m "feat(world): richer map visuals — computer sprites, uniform floor, 3D walls, windows, plants"
+```
+
+---
+
+### Task 11: Dark theme for the app
+
+**Added mid-execution** (after Task 8), directly requested by the user: "try and make it dark themed inside the dashboard."
+
+**Interpretation call, stated explicitly:** the app has two views behind one nav toggle — "Dashboard" and "World" (see `apps/web/src/App.tsx`) — sharing one `styles.css` and one set of `:root` custom properties. Dark-theming only the World view while leaving the Dashboard stark light (or vice versa) would look like an unfinished, inconsistent app, and the user's own phrasing ("dark themed inside the dashboard") most naturally reads as "make the app dark" in context, not "add a second theme mode alongside the existing light one." This task makes dark the app's one and only theme — it does **not** add a light/dark toggle or a `prefers-color-scheme` media query (that's unrequested infrastructure YAGNI would cut; the ask was "make it dark," not "make it theme-switchable"). If this reads wrong once it's running, that's a scoping call to revisit with the user, not a silent judgment to reverse mid-task.
+
+**Files:**
+- Modify: `apps/web/src/styles.css` only. No TypeScript/JSX changes — every screen already renders through this one stylesheet's classes and custom properties.
+
+**Approach:**
+
+1. Redefine the core `:root` custom properties (`--ink`, `--muted`, `--line`, `--paper`, and the `body` element's own hardcoded `color`/`background`, plus `--shadow`) to a dark palette: a near-black/dark-charcoal background, a light near-white ink/text color, a muted mid-gray for secondary text, a dark-but-visible line/border color, and a dark "paper" (card/surface) color a shade or two lighter than the page background so cards still read as distinct surfaces (the same relationship the current light theme already has between `--paper` (`#fbfaf7`, lighter than page) and the page `background` (`#f2f1ed`, slightly darker) — invert that relationship's direction, keep the *contrast relationship* intent). Keep the accent hues (`--purple`/`--purple-dark`/`--purple-soft`, `--green`, `--red`) recognizably the same colors, adjusting lightness/saturation only as needed for adequate contrast against the new dark backgrounds (e.g. `--purple-soft` — currently a very light lavender meant to sit on a light background — likely needs to become a dark, desaturated purple to keep working as a soft/muted accent surface on dark backgrounds).
+2. This file has roughly 110 other hardcoded hex colors scattered across ~1567 lines (component-specific one-offs, not routed through the `:root` custom properties above) — grep for `#[0-9a-fA-F]{3,6}` to find them all. Don't hand-edit all 110 blindly: work through the file section by section, and for each hardcoded color, judge whether it's (a) a light-background/dark-text pairing that needs inverting for dark mode, (b) an accent/semantic color (status pills, effect-permit/effect-deny, etc.) that likely still works with only a lightness tweak, or (c) something that turns out fine unchanged once the surrounding surface is dark. Prioritize get-it-actually-right over speed on this pass — a "dark theme" with light-on-light or dark-on-dark unreadable patches is worse than not doing it.
+3. Pay specific attention to the newest UI from this same plan (Tasks 7-8): the world login screen (`world-login`/`world-select-card` family), the bottom agent strip (`world-agent-card`/`world-agent-avatar`), the detail panel, and the request toasts (`world-request-toast` — currently has an explicit light `box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15)` that may need rebalancing against a dark backdrop) — these are the sections most recently written and most likely to have gone in with light-theme assumptions baked into their inline `rgba(...)` values.
+
+- [ ] **Step 1: Redefine the core palette** in `:root` per point 1 above.
+
+- [ ] **Step 2: Work through the remaining hardcoded colors** per point 2 above, file section by section (the file is already organized by component — auth screen, dashboard, world view, etc. — go through it in that order).
+
+- [ ] **Step 3: Full visual pass across every screen.** Start the dev server, use Playwright to screenshot: the login/auth screen, the Dashboard view, and the World view (both the logged-out login-card state and the logged-in state with the canvas/panel/strip/toasts visible — inject a synthetic request toast into the DOM the same way Task 8's implementer did, if none fires organically, to check that surface too). For each screenshot, actually look at it and check: is any text illegible (too-low contrast, or literally the same color as its background)? Does any element still show a stray light-background artifact (a card, a button, a border) that reads as "forgot to convert this one")? Fix what you find and re-screenshot until clean.
+
+- [ ] **Step 4: Full suite + typecheck, then commit**
+
+Run: `npm run --workspace apps/web typecheck && npm test --workspace apps/web`
+Expected: all green (pure CSS changes shouldn't affect either — this confirms nothing else drifted).
+
+```bash
+git add apps/web/src/styles.css
+git commit -m "style: dark theme the app"
+```
+
+---
+
+### Task 12: Manual verification pass
 
 **Files:** none (verification only).
 
@@ -2456,14 +2527,19 @@ Click the agent's card in the bottom strip; confirm the detail panel shows its a
 
 Check `browser_console_messages` after each step for errors.
 
-- [ ] **Step 4: Report findings, fix any real bugs found, re-verify**
+- [ ] **Step 4: Confirm the Task 10/11 visual additions read correctly together**
 
-If the manual pass surfaces a bug, fix it directly (this task has no dedicated files of its own — any fix belongs to whichever task's files it touches) and re-run Steps 1-3 until clean.
+With the dev server still running and dark theme (Task 11) + richer map visuals (Task 10) both in place: confirm the whole app (auth screen, Dashboard, World) is consistently dark-themed with no leftover light patches; confirm the map floor is uniform with no blank/white gaps, the walls read as 3D-shaded, windows are visible on room exteriors, plants are placed in each room without blocking doors/desks/rugs, and the desk/computer sprite is recognizable. Screenshot the full World view for the record.
+
+- [ ] **Step 5: Report findings, fix any real bugs found, re-verify**
+
+If the manual pass surfaces a bug, fix it directly (this task has no dedicated files of its own — any fix belongs to whichever task's files it touches) and re-run Steps 1-4 until clean.
 
 ---
 
 ## Self-review notes (already applied above; kept here as the record this skill's Self-Review step requires)
 
-- **Spec coverage:** §3 (resource/capability model) → Tasks 1, 3. §4 (roam + task-visit behavior) → Task 5, wired into rendering by Task 6. §5 (request flow) → Task 4, orchestrated by Task 7. §6 (map/visual scope, exact room table) → Task 2. §7 (UI) → Tasks 7-8. §8 (testing approach) → each task's own test file, matching the spec's per-module breakdown exactly. §9 (explicitly deferred: real per-file data, cooldown/permanent-deny state, multi-desk visual variety, login-copy polish beyond the one line already changed) — none of these have a task, correctly, since they're out of scope by the spec's own words.
-- **Placeholder scan:** no TBD/TODO; every step carries real code, a real command, or (Task 8 Step 3, Task 9) an explicit manual-check procedure with a stated expected outcome.
+- **Spec coverage:** §3 (resource/capability model) → Tasks 1, 3. §4 (roam + task-visit behavior) → Task 5, wired into rendering by Task 6. §5 (request flow) → Task 4, orchestrated by Task 7. §6 (map/visual scope, exact room table) → Task 2, extended visually by Task 10. §7 (UI) → Tasks 7-8, dark-themed by Task 11. §8 (testing approach) → each task's own test file, matching the spec's per-module breakdown exactly. §9 (explicitly deferred: real per-file data, cooldown/permanent-deny state, multi-desk visual variety, login-copy polish beyond the one line already changed) — none of these have a task, correctly, since they're out of scope by the spec's own words.
+- **Placeholder scan:** no TBD/TODO; every step carries real code, a real command, or (Task 8 Step 3, Task 10 Step 4, Task 11 Step 3, Task 12) an explicit manual-check procedure with a stated expected outcome.
 - **Type consistency:** `WorldAgent`'s new shape (Task 5) is used identically in Task 6 (`WorldCanvas.tsx`, reading `behaviorMode`/`progress`/`facing`) and Task 7 (`WorldView.tsx`, reading `behaviorMode`/`assignedRoomId`/`occupiedDeskId`) — no field name drifts between them. `FileRoom` (Task 1) is consumed with the same field names (`id`, `displayName`, `ownerId`, `requiresPermission`, `deskIds`) everywhere it's used (Tasks 3, 5, 7). Capability functions' `(agentId, roomId)` argument order (Task 3) matches every call site (Tasks 5's tests, Task 7). `AccessRequest`'s field names (Task 4) match Task 7's toast rendering exactly (`agentName`, `roomId`, `roomOwnerId`).
+- **Tasks 10-12 addendum (added mid-execution, after Tasks 1-9 were already planned/reviewed above):** Task 10 stays inside Task 2's asset-authoring boundary (same two scripts, same two generated files) and explicitly forbids touching any TypeScript file or any already-locked structural element (dimensions, spawn points, zones, door positions) — so it cannot regress Tasks 1/3/5/7's contracts with `resources.ts`. Task 11 stays inside `styles.css` only, touching no component logic, so it cannot regress any test (all of which assert behavior/DOM structure, not computed style values) — confirmed by Task 11's own Step 4 requiring the full suite to stay green. Task 12 (renumbered from the original Task 9) is unchanged in substance, with one added step (Step 4) to visually confirm Tasks 10-11's additions before calling the branch done.

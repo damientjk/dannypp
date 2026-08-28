@@ -1153,6 +1153,13 @@ textarea:focus {
 .view-toggle-button {
   width: 100%;
   margin: 12px 0;
+  background: #2e2e2a;
+  color: #f5f3ed;
+  border: 1px solid #464540;
+}
+
+.view-toggle-button:hover:not(:disabled) {
+  background: #353430;
 }
 
 .world-login {

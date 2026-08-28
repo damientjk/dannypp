@@ -15,6 +15,53 @@ vi.mock("../api", () => ({
   setSessionToken: vi.fn(),
 }));
 
+vi.mock("pixi.js", async () => {
+  const actual = await vi.importActual<typeof import("pixi.js")>("pixi.js");
+  return {
+    ...actual,
+    Application: class {
+      canvas = document.createElement("canvas");
+      stage = new actual.Container();
+      async init() {}
+      destroy() {}
+    },
+    Assets: { load: vi.fn().mockResolvedValue(actual.Texture.WHITE) },
+  };
+});
+
+vi.mock("./engineMap", async () => {
+  const { TiledMapRenderer } = await import("./engine/TiledMapRenderer");
+  const { Texture } = await import("pixi.js");
+  const width = 6;
+  const height = 3;
+  const mapData = {
+    width,
+    height,
+    tilewidth: 32,
+    tileheight: 32,
+    tilesets: [{ firstgid: 1, columns: 5, tilewidth: 32, tileheight: 32, tilecount: 5 }],
+    layers: [
+      { name: "floor", type: "tilelayer" as const, data: new Array(width * height).fill(1) },
+      { name: "collision", type: "tilelayer" as const, data: new Array(width * height).fill(0) },
+      {
+        name: "spawn-points",
+        type: "objectgroup" as const,
+        objects: [
+          { name: "common", x: 32, y: 32 },
+          { name: "house-a-door", x: 0, y: 0 },
+          { name: "house-b-door", x: 5 * 32, y: 0 },
+        ],
+      },
+      { name: "zones", type: "objectgroup" as const, objects: [] },
+    ],
+  };
+  const renderer = new TiledMapRenderer(mapData, [Texture.WHITE]);
+  return {
+    TILE_SIZE: 32,
+    loadWorldMap: vi.fn().mockResolvedValue(renderer),
+  };
+});
+
 const AGENT_A: Agent = {
   id: "agent-1",
   ownerId: "user-a",
@@ -43,6 +90,10 @@ describe("WorldView", () => {
 
   async function loginAndSelect() {
     render(<WorldView />);
+    await waitFor(() => {
+      const button = screen.getByText("Log in as User A").closest("button");
+      expect(button?.disabled).toBe(false);
+    });
     fireEvent.click(screen.getByText("Log in as User A"));
     await screen.findByText("Robot A");
     fireEvent.click(screen.getByText("Robot A"));

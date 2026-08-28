@@ -4,6 +4,8 @@ import type { Agent, AgentRun, HumanPrincipal, Message, PolicyRequestLike } from
 import { decideRoomEntry, getCapability, issueCapability, newId, revokeCapability } from "./decision";
 import { beginMoveToRoom, spawnWorldAgents } from "./agentSim";
 import { WorldCanvas } from "./WorldCanvas";
+import { loadWorldMap } from "./engineMap";
+import type { TiledMapRenderer } from "./engine/TiledMapRenderer";
 import type { DecisionEvent, RoomId, WorldAgent } from "./types";
 
 const TEST_USERS = [
@@ -20,8 +22,19 @@ export function WorldView() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [events, setEvents] = useState<DecisionEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [mapRenderer, setMapRenderer] = useState<TiledMapRenderer | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   selectedIdRef.current = selectedId;
+
+  useEffect(() => {
+    let cancelled = false;
+    loadWorldMap().then((renderer) => {
+      if (!cancelled) setMapRenderer(renderer);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const login = useCallback(async (userId: string, password: string) => {
     try {
@@ -31,7 +44,11 @@ export function WorldView() {
       const { agents: nextAgents } = await api.listAgents();
       const ownedAgents = nextAgents.filter((agent) => agent.ownerId === result.principal.id);
       setAgents(ownedAgents);
-      setWorldAgents(spawnWorldAgents(ownedAgents));
+      if (!mapRenderer) {
+        setError("World map is still loading — try again in a moment.");
+        return;
+      }
+      setWorldAgents(spawnWorldAgents(ownedAgents, mapRenderer!));
       for (const agent of ownedAgents) {
         issueCapability(agent.id, agent.ownerId);
       }
@@ -39,7 +56,7 @@ export function WorldView() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     }
-  }, []);
+  }, [mapRenderer]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -85,7 +102,7 @@ export function WorldView() {
       setWorldAgents((current) =>
         current.map((worldAgent) =>
           worldAgent.agentId === agent.id
-            ? beginMoveToRoom(worldAgent, room, decision.effect)
+            ? beginMoveToRoom(worldAgent, room, decision.effect, mapRenderer!)
             : worldAgent,
         ),
       );
@@ -102,7 +119,7 @@ export function WorldView() {
         ...current,
       ]);
     },
-    [agents, selectedId],
+    [agents, selectedId, mapRenderer],
   );
 
   const revoke = useCallback(() => {
@@ -123,6 +140,7 @@ export function WorldView() {
               key={user.userId}
               className={"world-select-card " + (index === 0 ? "world-select-card-a" : "world-select-card-b")}
               onClick={() => login(user.userId, user.password)}
+              disabled={!mapRenderer}
             >
               <span className="world-select-portrait" aria-hidden="true">
                 <span className="world-select-eye" />

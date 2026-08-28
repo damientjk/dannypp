@@ -117,3 +117,7 @@ Person 5's backend-facing tests, not this view.
   once teammates ship them.
 - Anything beyond a single common area + two houses (more rooms, richer
   pathing/AI) — out of scope for the first version.
+- Two details promised elsewhere in this doc were not actually built: §5's
+  placeholder-asset "rectangle + label" renders as a bare rectangle with no
+  label text, and §6's permit door/tile flash-green visual was never
+  implemented (only the deny/denied-bounce color change exists).

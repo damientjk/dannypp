@@ -1719,7 +1719,7 @@ Insert a world early-return immediately before the dashboard's final `return (` 
 ```tsx
   if (view === "world") {
     return (
-      <div className="app-shell pixel-theme">
+      <div className="world-shell pixel-theme">
         <header className="world-header">
           <div className="brand">
             <div className="brand-mark">A</div>
@@ -1863,6 +1863,18 @@ Expected: PASS.
 git add apps/web/src/App.tsx apps/web/src/App.test.tsx apps/web/src/styles.css
 git commit -m "feat: add Dashboard/World view toggle to the web app"
 ```
+
+**Note (post-plan amendment):** a follow-on visual redesign of the World
+login screen, done directly by the controller in commit `7b82ee9` (not
+through this plan's task loop, unlike the Task 7/9 deviations amended in
+`6d26314`), changed the World view's root class from `app-shell pixel-theme`
+to `world-shell pixel-theme` (a dedicated flex layout instead of reusing the
+dashboard's grid shell) and replaced the plain `.world-login` block above
+with a "save file select" styled login screen (portrait avatars, eyebrow/
+title/subtitle copy, per-user select cards) plus its own CSS block in
+`apps/web/src/styles.css`. The code and CSS snippets above reflect the
+pre-redesign state and are kept for historical reference rather than
+rewritten to match.
 
 ---
 

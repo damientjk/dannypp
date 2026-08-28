@@ -13,10 +13,11 @@
 - `pixi.js` version: `^8.5.1` — the vendored engine files use v8-only APIs (`new Texture({source, frame})` object constructor, async `Application.init()`). Do not install a v7 or earlier version.
 - The four vendored engine files (`TiledMapRenderer.ts`, `Camera.ts`, `pathfinding.ts`, `CharacterSprite.ts`) keep their original logic byte-for-byte except the one additive `CharacterSprite.setTint()` method — do not "clean up" or refactor their internals.
 - `Camera.ts` is vendored but **not wired into the renderer** — the map is 22×13 tiles (704×416px), small enough to show in full with no panning. Do not add camera-follow logic.
-- `WorldView.tsx` and `decision.ts` do not change in this plan. `WorldCanvas`'s public props stay `{ agents: WorldAgent[]; onFrame: (agents: WorldAgent[]) => void }`.
+- `decision.ts` does not change in this plan. `WorldView.tsx`'s login/roster/room-entry *orchestration logic* does not change — Task 7 only adds renderer-loading plumbing (a `mapRenderer` state value threaded into two existing call sites) on top of it. `WorldCanvas`'s public props stay `{ agents: WorldAgent[]; onFrame: (agents: WorldAgent[]) => void }`.
 - Tile size stays `32` (`TILE_SIZE`), matching the Tiled map's `tilewidth`/`tileheight` and the existing character/floor crop assets.
-- `apps/web/src/world/map.ts`, `map.test.ts`, `assets.ts`, `assets.test.ts` are deleted in this plan — their responsibilities move into the new Tiled map + `engineMap.ts`.
-- Every new/modified TypeScript file must pass `npm run --workspace apps/web typecheck` and `npm run --workspace apps/web test` before a task is considered done.
+- `apps/web/src/world/map.ts`, `map.test.ts`, `assets.ts`, `assets.test.ts` are deleted in this plan — their responsibilities move into the new Tiled map + `engineMap.ts`. **Both deletions happen in Task 6**, not before: `map.ts` stays in place through Tasks 3-5 because `WorldCanvas.tsx` (rewritten in Task 6) is its last consumer — deleting it earlier would break `WorldCanvas.tsx`'s then-still-current imports.
+- **`agentSim.ts`'s Task 4 signature changes (`spawnWorldAgents`/`beginMoveToRoom` gain a required `renderer` parameter) are consumed by `WorldCanvas.tsx`/`WorldCanvas.test.tsx` (Task 6) and `WorldView.tsx` (Task 7).** A project-wide `tsc -b` run after Task 4 will show errors in those not-yet-updated files — that is expected, not a Task 4 failure. Each task's own typecheck note below says exactly which errors are expected to remain and which task clears them. The project must be fully clean only from Task 7 onward.
+- Every new/modified TypeScript file must pass `npm run --workspace apps/web typecheck` and `npm run --workspace apps/web test` before a task is considered done, **except** for the specific, named cross-task typecheck errors called out above and in Tasks 4 and 6's own steps.
 
 ---
 
@@ -918,20 +919,14 @@ git commit -m "feat(world): author Tiled tileset + map from moderninteriors-win 
 **Files:**
 - Create: `apps/web/src/world/engineMap.ts`
 - Create: `apps/web/src/world/engineMap.test.ts`
-- Delete: `apps/web/src/world/map.ts`
-- Delete: `apps/web/src/world/map.test.ts`
+
+Note: `apps/web/src/world/map.ts`/`map.test.ts` are NOT deleted in this task, even though this task fully supersedes them. They stay in place through Tasks 3-5 because `WorldCanvas.tsx` (rewritten in Task 6) is their last remaining consumer — deleting them now would break `WorldCanvas.tsx`'s current imports before Task 6 has replaced them. Task 6 deletes both files.
 
 **Interfaces:**
 - Consumes: `TiledMapRenderer`, `TiledMap` from `./engine/TiledMapRenderer` (Task 1); `apps/web/public/world-assets/tileset.png` and `map.json` (Task 2, fetched at runtime via URL paths `/world-assets/tileset.png` and `/world-assets/map.json`).
 - Produces (consumed by Tasks 4 and 6): `export const TILE_SIZE = 32;` and `export async function loadWorldMap(): Promise<TiledMapRenderer>` — fetches `map.json`, loads `tileset.png` as a pixi `Texture` via `Assets.load`, and constructs a `TiledMapRenderer`.
 
-- [ ] **Step 1: Delete the superseded `map.ts`/`map.test.ts`**
-
-```bash
-git rm apps/web/src/world/map.ts apps/web/src/world/map.test.ts
-```
-
-- [ ] **Step 2: Write `engineMap.ts`**
+- [ ] **Step 1: Write `engineMap.ts`**
 
 Create `apps/web/src/world/engineMap.ts`:
 
@@ -951,7 +946,7 @@ export async function loadWorldMap(): Promise<TiledMapRenderer> {
 }
 ```
 
-- [ ] **Step 3: Write a failing test using a fixture map + `Texture.WHITE`**
+- [ ] **Step 2: Write a failing test using a fixture map + `Texture.WHITE`**
 
 Create `apps/web/src/world/engineMap.test.ts`:
 
@@ -1010,10 +1005,10 @@ describe("TiledMapRenderer against the fixture map (via engineMap's TILE_SIZE)",
 Run: `npm test --workspace apps/web -- engineMap`
 Expected: 2 passed (this exercises the real, vendored `TiledMapRenderer` — `loadWorldMap` itself, which does a real `fetch`/`Assets.load`, is covered by Task 6's component-level test instead).
 
-- [ ] **Step 4: Typecheck and commit**
+- [ ] **Step 3: Typecheck and commit**
 
 Run: `npm run --workspace apps/web typecheck`
-Expected: no errors (confirms nothing else still imports the deleted `./map`).
+Expected: no NEW errors introduced by this task's own files (`engineMap.ts`/`engineMap.test.ts` typecheck clean in isolation). `map.ts` still exists and is still imported by the untouched `agentSim.ts` and `WorldCanvas.tsx` at this point — that's expected, not a regression from this task.
 
 ```bash
 git add apps/web/src/world/engineMap.ts apps/web/src/world/engineMap.test.ts
@@ -1360,7 +1355,7 @@ Expected: 4 passed.
 - [ ] **Step 5: Typecheck and commit**
 
 Run: `npm run --workspace apps/web typecheck`
-Expected: no errors.
+Expected: errors ONLY in `WorldCanvas.tsx`, `WorldCanvas.test.tsx`, and `WorldView.tsx` — each calls `spawnWorldAgents`/`beginMoveToRoom` with the old, pre-Task-4 argument count, and none of those three files are touched by this task. That's expected (see Global Constraints): `WorldCanvas.tsx`/`WorldCanvas.test.tsx` are fixed in Task 6, `WorldView.tsx` in Task 7. If typecheck reports errors anywhere else (e.g. inside `agentSim.ts`/`types.ts`/`agentSim.test.ts` themselves), that's a real bug in this task's own code — fix it before committing.
 
 ```bash
 git add apps/web/src/world/types.ts apps/web/src/world/agentSim.ts apps/web/src/world/agentSim.test.ts
@@ -1450,10 +1445,12 @@ git commit -m "feat(world): adapt the single character crop into CharacterSprite
 - Modify: `apps/web/src/world/WorldCanvas.test.tsx`
 - Delete: `apps/web/src/world/assets.ts`
 - Delete: `apps/web/src/world/assets.test.ts`
+- Delete: `apps/web/src/world/map.ts`
+- Delete: `apps/web/src/world/map.test.ts`
 
 **Interfaces:**
-- Consumes: `loadWorldMap`, `TILE_SIZE` from `./engineMap` (Task 3); `spawnWorldAgents`... actually not directly — `WorldCanvas` receives `agents`/`onFrame` as props exactly as before (Task 4's `spawnWorldAgents`/`beginMoveToRoom` are called by `WorldView.tsx`, which Task 7 updates to pass the loaded renderer through); `tickAgent`, `settleAgent` from `./agentSim` (Task 4); `CharacterSprite` from `./engine/CharacterSprite` (Task 1); `buildCharacterFrames` from `./engineCharacter` (Task 5); `Application`, `Assets` from `pixi.js`.
-- Produces: `WorldCanvasProps` unchanged (`{ agents: WorldAgent[]; onFrame: (agents: WorldAgent[]) => void }`) — `WorldView.tsx` needs no changes for this component's sake.
+- Consumes: `loadWorldMap` from `./engineMap` (Task 3); `tickAgent`, `settleAgent` from `./agentSim` (Task 4); `CharacterSprite` from `./engine/CharacterSprite` (Task 1); `buildCharacterFrames` from `./engineCharacter` (Task 5); `Application`, `Assets` from `pixi.js`. `WorldCanvas` receives `agents`/`onFrame` as props exactly as before — it never calls `spawnWorldAgents`/`beginMoveToRoom` itself (those are `WorldView.tsx`'s job, updated in Task 7).
+- Produces: `WorldCanvasProps` unchanged (`{ agents: WorldAgent[]; onFrame: (agents: WorldAgent[]) => void }`) — `WorldView.tsx` needs no changes to this component's props for this task's sake (it still needs the Task 7 renderer-loading changes for its own call sites).
 
 - [ ] **Step 1: Update the test to mock only the GPU-boundary pixi exports**
 
@@ -1677,18 +1674,18 @@ export function WorldCanvas({ agents, onFrame }: WorldCanvasProps) {
 Run: `npm test --workspace apps/web -- WorldCanvas`
 Expected: 1 passed.
 
-- [ ] **Step 4: Delete the superseded `assets.ts`/`assets.test.ts`**
+- [ ] **Step 4: Delete the superseded `assets.ts`/`assets.test.ts` and `map.ts`/`map.test.ts`**
 
-Run: `grep -rn "from \"./assets\"" apps/web/src` — expect no output (nothing imports it once `WorldCanvas.tsx` no longer does).
+Run: `grep -rn "from \"./assets\"\|from \"./map\"" apps/web/src` — expect no output once `WorldCanvas.tsx` (this task) is the last file rewritten to stop importing either.
 
 ```bash
-git rm apps/web/src/world/assets.ts apps/web/src/world/assets.test.ts
+git rm apps/web/src/world/assets.ts apps/web/src/world/assets.test.ts apps/web/src/world/map.ts apps/web/src/world/map.test.ts
 ```
 
 - [ ] **Step 5: Typecheck and commit**
 
 Run: `npm run --workspace apps/web typecheck`
-Expected: no errors.
+Expected: errors ONLY in `WorldView.tsx` (still calls `spawnWorldAgents`/`beginMoveToRoom` with the old, pre-Task-4 argument count — fixed in Task 7). If typecheck reports errors anywhere else, that's a real bug in this task's own code — fix it before committing.
 
 ```bash
 git add apps/web/src/world/WorldCanvas.tsx apps/web/src/world/WorldCanvas.test.tsx
@@ -1758,15 +1755,70 @@ Change `beginMoveToRoom(worldAgent, room, decision.effect)` to `beginMoveToRoom(
 
 Find the login form's submit button and add `disabled={!mapRenderer}` to its existing `disabled` expression (combine with `&&`/`||` as appropriate for whatever loading condition it already checks, e.g. an in-flight login request flag).
 
-- [ ] **Step 5: Run the full test suite**
+- [ ] **Step 5: Add pixi/map mocks to `WorldView.test.tsx`**
+
+Confirmed: `WorldView.test.tsx` renders the real `<WorldView />` (which renders the real `<WorldCanvas />` after login) and drives login through the DOM, with no mock of `pixi.js` or `./engineMap` today. Without a mock, `loadWorldMap()`'s real `fetch`/`Assets.load` calls and `WorldCanvas`'s real `Application.init()` will hang or throw in the jsdom test environment (no network server, no WebGL). Add these two `vi.mock` calls to the top of `apps/web/src/world/WorldView.test.tsx`, immediately after the existing `vi.mock("../api", ...)` block (keep that block unchanged):
+
+```ts
+vi.mock("pixi.js", async () => {
+  const actual = await vi.importActual<typeof import("pixi.js")>("pixi.js");
+  return {
+    ...actual,
+    Application: class {
+      canvas = document.createElement("canvas");
+      stage = new actual.Container();
+      async init() {}
+      destroy() {}
+    },
+    Assets: { load: vi.fn().mockResolvedValue(actual.Texture.WHITE) },
+  };
+});
+
+vi.mock("./engineMap", async () => {
+  const { TiledMapRenderer } = await import("./engine/TiledMapRenderer");
+  const { Texture } = await import("pixi.js");
+  const width = 6;
+  const height = 3;
+  const mapData = {
+    width,
+    height,
+    tilewidth: 32,
+    tileheight: 32,
+    tilesets: [{ firstgid: 1, columns: 5, tilewidth: 32, tileheight: 32, tilecount: 5 }],
+    layers: [
+      { name: "floor", type: "tilelayer" as const, data: new Array(width * height).fill(1) },
+      { name: "collision", type: "tilelayer" as const, data: new Array(width * height).fill(0) },
+      {
+        name: "spawn-points",
+        type: "objectgroup" as const,
+        objects: [
+          { name: "common", x: 32, y: 32 },
+          { name: "house-a-door", x: 0, y: 0 },
+          { name: "house-b-door", x: 5 * 32, y: 0 },
+        ],
+      },
+      { name: "zones", type: "objectgroup" as const, objects: [] },
+    ],
+  };
+  const renderer = new TiledMapRenderer(mapData, [Texture.WHITE]);
+  return {
+    TILE_SIZE: 32,
+    loadWorldMap: vi.fn().mockResolvedValue(renderer),
+  };
+});
+```
+
+This uses the real, vendored `TiledMapRenderer` against a small fully-walkable fixture map (this test exercises `decision.ts`'s permit/deny flow, not pathfinding around walls, so no collision data is needed) — only the two genuine GPU/network boundaries (`pixi.js`'s `Application`/`Assets`, and `engineMap.ts`'s `fetch` call) are faked.
+
+- [ ] **Step 6: Run the full test suite**
 
 Run: `npm test --workspace apps/web`
-Expected: all tests pass, including `WorldView.test.tsx` (its `./api` mock and flow are untouched by this change; if it directly calls `spawnWorldAgents`/`beginMoveToRoom` anywhere, or renders `WorldView` and expects login to work without waiting for `loadWorldMap`, it needs `vi.mock("./engineMap", ...)` added the same way Task 6's `WorldCanvas.test.tsx` mocked it — check the file for a `spawnWorldAgents`/`beginMoveToRoom` import or a login-flow test before assuming no changes are needed).
+Expected: all tests pass, including all three `WorldView.test.tsx` cases.
 
-- [ ] **Step 6: Typecheck and commit**
+- [ ] **Step 7: Typecheck and commit**
 
 Run: `npm run --workspace apps/web typecheck`
-Expected: no errors.
+Expected: no errors — this is the last task with a pending cross-task call-site fix, so the project must be fully clean from here on.
 
 ```bash
 git add apps/web/src/world/WorldView.tsx apps/web/src/world/WorldView.test.tsx

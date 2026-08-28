@@ -22,6 +22,8 @@ export interface WorldAgent {
   progress: number;
   pendingEffect: PolicyEffect | null;
   pendingRoom: RoomId | null;
+  path: Array<{ x: number; y: number }>;
+  pathIndex: number;
 }
 
 export interface DecisionEvent {

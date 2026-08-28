@@ -5,16 +5,13 @@ import type { TiledMapRenderer } from "./engine/TiledMapRenderer";
 import { CharacterSprite } from "./engine/CharacterSprite";
 import { buildCharacterFrames } from "./engineCharacter";
 import { loadWorldMap } from "./engineMap";
-import { settleAgent, tickAgent } from "./agentSim";
+import { advanceBehavior, settleAgent, tickAgent } from "./agentSim";
 import type { WorldAgent } from "./types";
 
 export interface WorldCanvasProps {
   agents: WorldAgent[];
   onFrame: (agents: WorldAgent[]) => void;
 }
-
-const DENY_TINT = 0xc55353;
-const NORMAL_TINT = 0xffffff;
 
 export function WorldCanvas({ agents, onFrame }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -41,7 +38,9 @@ export function WorldCanvas({ agents, onFrame }: WorldCanvasProps) {
       const deltaMs = time - last;
       lastTime = time;
 
-      const next = agentsRef.current.map((agent) => settleAgent(tickAgent(agent, deltaMs)));
+      const next = agentsRef.current.map((agent) =>
+        advanceBehavior(settleAgent(tickAgent(agent, deltaMs)), renderer!),
+      );
       onFrameRef.current(next);
 
       const seen = new Set<string>();
@@ -54,8 +53,9 @@ export function WorldCanvas({ agents, onFrame }: WorldCanvasProps) {
           spritesRef.current.set(agent.agentId, sprite);
         }
         sprite.setPosition(agent.x + 16, agent.y + 32);
-        sprite.setAnimation(agent.status === "idle" ? "idle" : "walk", agent.facing);
-        sprite.setTint(agent.status === "denied-bounce" ? DENY_TINT : NORMAL_TINT);
+        const isMoving = agent.progress < 1;
+        const anim = agent.behaviorMode === "working" ? "type" : isMoving ? "walk" : "idle";
+        sprite.setAnimation(anim, agent.facing);
       }
       for (const [id, sprite] of spritesRef.current) {
         if (!seen.has(id)) {
@@ -111,8 +111,8 @@ export function WorldCanvas({ agents, onFrame }: WorldCanvasProps) {
       ref={canvasRef}
       className="world-canvas"
       data-testid="world-canvas"
-      width={704}
-      height={416}
+      width={1120}
+      height={640}
     />
   );
 }

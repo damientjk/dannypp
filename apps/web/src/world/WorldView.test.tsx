@@ -2,7 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent } from "../types";
 import { api } from "../api";
-import { resetCapabilities } from "./decision";
+import { FILE_ROOMS } from "./resources";
+import { issueCapability, resetCapabilities } from "./decision";
+import { resetRequests } from "./requests";
 import { WorldView } from "./WorldView";
 
 vi.mock("../api", () => ({
@@ -29,30 +31,37 @@ vi.mock("pixi.js", async () => {
   };
 });
 
+// Every room has a door + zone; the 4 owned rooms also get 2 desks each —
+// enough for assignedRoomFor (real, unmocked resources.ts) to resolve
+// correctly for an agent owned by either user-a or user-b.
 vi.mock("./engineMap", async () => {
   const { TiledMapRenderer } = await import("./engine/TiledMapRenderer");
   const { Texture } = await import("pixi.js");
-  const width = 6;
-  const height = 3;
+  const TILE = 32;
+  const spawnObjects: Array<{ name: string; x: number; y: number }> = [{ name: "common", x: TILE, y: TILE }];
+  const zoneObjects: Array<{ name: string; x: number; y: number; width: number; height: number }> = [];
+  const { FILE_ROOMS: rooms } = await import("./resources");
+  rooms.forEach((room, index) => {
+    const doorX = (5 + index * 3) * TILE;
+    spawnObjects.push({ name: `${room.id}-door`, x: doorX, y: TILE });
+    zoneObjects.push({ name: room.id, x: doorX, y: 0, width: 2 * TILE, height: 2 * TILE });
+    room.deskIds.forEach((deskId, deskIndex) => {
+      spawnObjects.push({ name: deskId, x: doorX + deskIndex * TILE, y: 0 });
+    });
+  });
+  const width = 40;
+  const height = 10;
   const mapData = {
     width,
     height,
-    tilewidth: 32,
-    tileheight: 32,
-    tilesets: [{ firstgid: 1, columns: 5, tilewidth: 32, tileheight: 32, tilecount: 5 }],
+    tilewidth: TILE,
+    tileheight: TILE,
+    tilesets: [{ firstgid: 1, columns: 11, tilewidth: TILE, tileheight: TILE, tilecount: 11 }],
     layers: [
       { name: "floor", type: "tilelayer" as const, data: new Array(width * height).fill(1) },
       { name: "collision", type: "tilelayer" as const, data: new Array(width * height).fill(0) },
-      {
-        name: "spawn-points",
-        type: "objectgroup" as const,
-        objects: [
-          { name: "common", x: 32, y: 32 },
-          { name: "house-a-door", x: 0, y: 0 },
-          { name: "house-b-door", x: 5 * 32, y: 0 },
-        ],
-      },
-      { name: "zones", type: "objectgroup" as const, objects: [] },
+      { name: "spawn-points", type: "objectgroup" as const, objects: spawnObjects },
+      { name: "zones", type: "objectgroup" as const, objects: zoneObjects },
     ],
   };
   const renderer = new TiledMapRenderer(mapData, [Texture.WHITE]);
@@ -63,7 +72,7 @@ vi.mock("./engineMap", async () => {
 });
 
 const AGENT_A: Agent = {
-  id: "agent-1",
+  id: "agent-a",
   ownerId: "user-a",
   name: "Robot A",
   description: "",
@@ -76,51 +85,63 @@ const AGENT_A: Agent = {
   updatedAt: "",
 };
 
+function agentAssignedRoom(agentId: string, ownerId: string) {
+  const owned = FILE_ROOMS.filter((r) => r.ownerId === ownerId && r.requiresPermission);
+  let hash = 0;
+  for (let i = 0; i < agentId.length; i++) hash = (hash * 31 + agentId.charCodeAt(i)) >>> 0;
+  return owned[hash % owned.length];
+}
+
 describe("WorldView", () => {
   beforeEach(() => {
     resetCapabilities();
+    resetRequests();
     vi.mocked(api.login).mockResolvedValue({
       sessionToken: "tok",
       principal: { kind: "human", id: "user-a", displayName: "User A" },
     });
-    vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
     vi.mocked(api.runs).mockResolvedValue({ runs: [] });
     vi.mocked(api.messages).mockResolvedValue({ messages: [] });
   });
 
-  async function loginAndSelect() {
+  async function login() {
     render(<WorldView />);
-    await waitFor(() => {
-      const button = screen.getByText("Log in as User A").closest("button");
-      expect(button?.disabled).toBe(false);
-    });
-    fireEvent.click(screen.getByText("Log in as User A"));
+    fireEvent.click(await screen.findByText("Log in as User A"));
     await screen.findByText("Robot A");
-    fireEvent.click(screen.getByText("Robot A"));
   }
 
-  it("permits an agent entering its own owner's house", async () => {
-    await loginAndSelect();
-    fireEvent.click(screen.getByText("Send to House A"));
-    await waitFor(() => expect(screen.getByText(/permit/)).toBeTruthy());
+  it("shows every agent from every owner once logged in", async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({
+      agents: [AGENT_A, { ...AGENT_A, id: "agent-b", ownerId: "user-b", name: "Robot B" }],
+    });
+    await login();
+    expect(await screen.findByText("Robot B")).toBeTruthy();
   });
 
-  it("denies an agent entering a different owner's house", async () => {
-    await loginAndSelect();
-    fireEvent.click(screen.getByText("Send to House B"));
-    await waitFor(() => expect(screen.getByText(/deny/)).toBeTruthy());
-  });
+  it("logs a permit and moves the agent off roaming when it already has a capability for its assigned room", async () => {
+    const room = agentAssignedRoom(AGENT_A.id, AGENT_A.ownerId);
+    issueCapability(AGENT_A.id, room.id);
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [{ ...AGENT_A, status: "busy" }] });
 
-  it("denies a subsequent attempt after the keycard is revoked", async () => {
-    await loginAndSelect();
-    fireEvent.click(screen.getByText("Send to House A"));
-    await waitFor(() => expect(screen.getByText(/permit/)).toBeTruthy());
+    await login();
 
-    fireEvent.click(screen.getByText("Revoke keycard"));
-    fireEvent.click(screen.getByText("Send to House A"));
     await waitFor(() => {
-      const denyEntries = screen.getAllByText(/deny/);
-      expect(denyEntries.length).toBeGreaterThan(0);
+      expect(screen.getByText(new RegExp(`${AGENT_A.name} → ${room.displayName}: permit`))).toBeTruthy();
+    });
+  });
+
+  it("queues a request toast when the agent has no capability yet, and Grant resolves it", async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [{ ...AGENT_A, status: "busy" }] });
+
+    await login();
+
+    const room = agentAssignedRoom(AGENT_A.id, AGENT_A.ownerId);
+    const toastText = await screen.findByText(new RegExp(`wants access to ${room.displayName}`));
+    expect(toastText).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Grant"));
+    await waitFor(() => {
+      expect(screen.queryByText(new RegExp(`wants access to ${room.displayName}`))).toBeNull();
     });
   });
 });

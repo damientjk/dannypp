@@ -1125,6 +1125,10 @@ textarea:focus {
   padding: 0;
 }
 
+.pixel-theme .world-header .brand-mark {
+  font-size: 16px;
+}
+
 .pixel-theme .world-header .brand strong {
   font-family: "Press Start 2P", ui-monospace, monospace;
   font-size: 11px;
@@ -1266,7 +1270,7 @@ textarea:focus {
   left: 12px;
 }
 
-.world-select-eye:last-of-type {
+.world-select-eye + .world-select-eye {
   right: 12px;
 }
 
@@ -1339,6 +1343,17 @@ textarea:focus {
   padding: 16px;
 }
 
+@media (max-width: 900px) {
+  .world-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .world-canvas {
+    width: 100%;
+    height: auto;
+  }
+}
+
 .world-canvas {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1372,10 +1387,6 @@ textarea:focus {
 }
 
 .effect-deny {
-  color: var(--red);
-}
-
-.world-error {
   color: var(--red);
 }
 

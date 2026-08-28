@@ -14,6 +14,7 @@ vi.mock("./api", () => ({
     messages: vi.fn(),
   },
   setAuthToken: vi.fn(),
+  setSessionToken: vi.fn(),
   ApiError: class ApiError extends Error {
     status = 0;
   },

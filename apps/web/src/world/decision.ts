@@ -3,6 +3,12 @@ import type { RoomId } from "./types";
 
 const capabilities = new Map<string, Capability>();
 
+// crypto.randomUUID is secure-context-only (undefined on plain HTTP for
+// anything but localhost) — `npm run dev` binds 0.0.0.0 for LAN demo access,
+// so fall back to a non-cryptographic id there.
+export const newId = () =>
+  crypto.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 // ponytail: in-memory mock standing in for the real backend PDP
 // (apps/server/src/policy/pdp.ts). Day 2 swap replaces only this
 // function's body with a fetch call — callers only ever depend on
@@ -14,7 +20,7 @@ const ROOM_OWNER: Record<RoomId, string> = {
 
 export function issueCapability(agentId: string, ownerId: string): Capability {
   const capability: Capability = {
-    id: crypto.randomUUID(),
+    id: newId(),
     scope: ownerId,
     expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     revokedAt: null,

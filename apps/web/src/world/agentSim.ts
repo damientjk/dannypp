@@ -6,8 +6,8 @@ const MOVE_SPEED_PX_PER_MS = 0.12;
 const BOUNCE_DISTANCE_PX = TILE_SIZE * 0.75;
 
 export function spawnWorldAgents(agents: Agent[]): WorldAgent[] {
-  return agents.map((agent) => {
-    const { x, y } = spawnPixelPosition();
+  return agents.map((agent, index) => {
+    const { x, y } = spawnPixelPosition(index);
     return {
       agentId: agent.id,
       ownerId: agent.ownerId,

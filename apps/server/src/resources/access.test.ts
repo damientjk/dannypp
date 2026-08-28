@@ -7,7 +7,7 @@ import type {
   HumanPrincipal,
   PolicyDecisionPoint,
 } from "../types.js";
-import { referencePdp } from "../capability/reference-pdp.js";
+import { pdp } from "../policy/pdp.js";
 import { agentPrincipalFor, CapabilityStore } from "../capability/store.js";
 import { createResourceAccessGate } from "./access.js";
 import { stagingRoot } from "./staging.js";
@@ -22,7 +22,7 @@ afterEach(async () => {
   }
 });
 
-async function makeFixture(pdp: PolicyDecisionPoint = referencePdp) {
+async function makeFixture(policy: PolicyDecisionPoint = pdp) {
   const root = await mkdtemp(path.join(tmpdir(), "launchpad-gate-"));
   const workspace = await mkdtemp(path.join(tmpdir(), "launchpad-ws-"));
   cleanup.push(root, workspace);
@@ -30,7 +30,7 @@ async function makeFixture(pdp: PolicyDecisionPoint = referencePdp) {
   const resources = new ResourceStore(root);
   await resources.initialize();
   const capabilities = new CapabilityStore();
-  const gate = createResourceAccessGate({ pdp, resources, capabilities });
+  const gate = createResourceAccessGate({ pdp: policy, resources, capabilities });
 
   const agentOfA: AgentPrincipal = {
     kind: "agent",
@@ -146,7 +146,7 @@ describe("resource access gate -- the enforcement point", () => {
     const spyPdp: PolicyDecisionPoint = {
       async decide(request) {
         consulted = true;
-        return referencePdp.decide(request);
+        return pdp.decide(request);
       },
     };
     const fixture = await makeFixture(spyPdp);

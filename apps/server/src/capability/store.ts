@@ -17,7 +17,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { AgentPrincipal, Capability } from "../types.js";
+import type { Agent, AgentPrincipal, Capability } from "../types.js";
 import { DENY_REASONS, type DenyReason } from "./reasons.js";
 import { defaultRunScope, parseScope } from "./scope.js";
 
@@ -84,6 +84,18 @@ const now = () => new Date();
 export class CapabilityStore {
   private readonly records = new Map<string, CapabilityRecord>();
 
+  /**
+   * Agents whose keycard the owner has shredded and not replaced.
+   *
+   * Revocation has to be a STANDING decision, not a one-off. A Run mints a
+   * fresh capability each time, so if revoking only killed that one object the
+   * next Run would quietly mint another and carry on -- "revoke, then the robot
+   * is still blocked" would be false on stage while every test still passed.
+   * Suspension is lifted only when the owner deliberately issues a new
+   * capability through `issue()`.
+   */
+  private readonly suspended = new Set<string>();
+
   constructor(
     private readonly defaultTtlMs: number = DEFAULT_CAPABILITY_TTL_MS,
   ) {}
@@ -94,6 +106,19 @@ export class CapabilityStore {
    * somebody else's house, and that is an invariant, not a policy decision.
    */
   issue(input: IssueInput): CapabilityRecord {
+    // An explicit issuance is the owner handing over a new keycard, which is
+    // exactly what lifts a suspension.
+    const record = this.mint(input);
+    this.suspended.delete(input.agentPrincipal.agentId);
+    return record;
+  }
+
+  /** Whether the owner has shredded this agent's keycard without replacing it. */
+  isSuspended(agentId: string): boolean {
+    return this.suspended.has(agentId);
+  }
+
+  private mint(input: IssueInput): CapabilityRecord {
     const parsed = parseScope(input.scope);
     if (!parsed) {
       throw new Error("Malformed capability scope: " + String(input.scope));
@@ -174,6 +199,9 @@ export class CapabilityStore {
       record.revokedAt = now().toISOString();
       record.revokedBy = revokedBy;
     }
+    // Standing decision: no new keycard is minted for this agent until the
+    // owner issues one explicitly.
+    this.suspended.add(record.agentId);
     return structuredClone(record);
   }
 
@@ -195,9 +223,25 @@ export class CapabilityStore {
     return validateCapability(record ? structuredClone(record) : null, at);
   }
 
+  /**
+   * Mints a capability that is dead on arrival, for an agent under a standing
+   * revocation. Registered so the denied attempt is auditable; does NOT lift
+   * the suspension.
+   */
+  issueSuspended(input: IssueInput): CapabilityRecord {
+    const record = this.mint(input);
+    const stored = this.records.get(record.id);
+    if (stored) {
+      stored.revokedAt = stored.issuedAt;
+      stored.revokedBy = "standing-revocation";
+    }
+    return structuredClone(this.records.get(record.id) ?? record);
+  }
+
   /** Test/demo helper. Never called by request handlers. */
   clear(): void {
     this.records.clear();
+    this.suspended.clear();
   }
 }
 
@@ -216,3 +260,47 @@ export function agentPrincipalFor(record: CapabilityRecord): AgentPrincipal {
 
 /** Process-wide store, matching how auth/session.ts exposes sessions. */
 export const capabilityStore = new CapabilityStore();
+
+/**
+ * Issue the capability an Agent Run acts under.
+ *
+ * This replaces `policy/placeholder-capability.ts` (Person 2's day-1 stand-in),
+ * keeping the exact `{ principal, capability }` shape their PEP already
+ * consumes, so the swap was a one-line import change at the single call site.
+ *
+ * The scope is `read:res://<ownerId>/*`, which satisfies both halves of the
+ * PDP: `capabilityOwner()` reads it as belonging to the owner (so Agent-object
+ * access passes), and `scopeAllows()` reads it as read-only over that owner's
+ * data namespace. One keycard, both doors.
+ *
+ * Unlike the placeholder, this capability is REGISTERED in the store, which is
+ * what makes it revocable -- the placeholder minted a fresh object per run that
+ * nothing could ever revoke.
+ */
+export function issueCapabilityForRun(
+  agent: Pick<Agent, "id" | "ownerId">,
+  runId?: string,
+): { principal: AgentPrincipal; capability: CapabilityRecord } {
+  const principal: AgentPrincipal = {
+    kind: "agent",
+    id: "agent:" + agent.id,
+    agentId: agent.id,
+    ownerId: agent.ownerId,
+  };
+  const input = {
+    agentPrincipal: principal,
+    scope: defaultRunScope(agent.ownerId),
+    runId: runId ?? null,
+  };
+
+  if (capabilityStore.isSuspended(agent.id)) {
+    // The owner shredded this agent's keycard. Mint the record anyway so the
+    // attempt is visible in the capability list and the audit log, but mint it
+    // already-revoked so the PDP denies with `capability-revoked` -- the same
+    // reason the shredding itself produced.
+    const revoked = capabilityStore.issueSuspended(input);
+    return { principal, capability: revoked };
+  }
+
+  return { principal, capability: capabilityStore.issue(input) };
+}

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { AgentPrincipal } from "../types.js";
 import {
   agentPrincipalFor,
+  capabilityStore,
   CapabilityStore,
+  issueCapabilityForRun,
   validateCapability,
 } from "./store.js";
 
@@ -181,5 +183,62 @@ describe("capability listing", () => {
     // If `get` returned a live reference, this capability would now read as
     // revoked and revocation could be forged from outside the store.
     expect(store.validate(capability.id).valid).toBe(true);
+  });
+});
+
+describe("revocation is a standing decision, not a one-off", () => {
+  it("blocks the NEXT run after the owner shreds the keycard", () => {
+    // The demo's headline moment. A Run mints a fresh capability each time, so
+    // without a standing suspension the next Run would quietly mint another and
+    // succeed -- "revoke, then the robot is still blocked" would be a lie.
+    const store = new CapabilityStore();
+    store.clear();
+
+    const first = issueCapabilityForRun({ id: "agent-9", ownerId: "user-a" }, "run-1");
+    expect(capabilityStore.validate(first.capability.id).valid).toBe(true);
+
+    capabilityStore.revoke(first.capability.id, "user-a");
+    expect(capabilityStore.isSuspended("agent-9")).toBe(true);
+
+    const second = issueCapabilityForRun({ id: "agent-9", ownerId: "user-a" }, "run-2");
+    expect(second.capability.revokedAt).not.toBeNull();
+    expect(capabilityStore.validate(second.capability.id)).toEqual({
+      valid: false,
+      reason: "capability-revoked",
+    });
+  });
+
+  it("lifts the suspension only when the owner issues a new keycard", () => {
+    capabilityStore.clear();
+    const run = issueCapabilityForRun({ id: "agent-10", ownerId: "user-a" }, "run-1");
+    capabilityStore.revoke(run.capability.id, "user-a");
+    expect(capabilityStore.isSuspended("agent-10")).toBe(true);
+
+    capabilityStore.issue({
+      agentPrincipal: {
+        kind: "agent",
+        id: "agent:agent-10",
+        agentId: "agent-10",
+        ownerId: "user-a",
+      },
+      scope: "read:res://user-a/*",
+    });
+    expect(capabilityStore.isSuspended("agent-10")).toBe(false);
+
+    const resumed = issueCapabilityForRun({ id: "agent-10", ownerId: "user-a" }, "run-2");
+    expect(capabilityStore.validate(resumed.capability.id).valid).toBe(true);
+    capabilityStore.clear();
+  });
+
+  it("suspends only the revoked agent, not every agent of that owner", () => {
+    capabilityStore.clear();
+    const nine = issueCapabilityForRun({ id: "agent-11", ownerId: "user-a" }, "run-1");
+    issueCapabilityForRun({ id: "agent-12", ownerId: "user-a" }, "run-2");
+
+    capabilityStore.revoke(nine.capability.id, "user-a");
+
+    expect(capabilityStore.isSuspended("agent-11")).toBe(true);
+    expect(capabilityStore.isSuspended("agent-12")).toBe(false);
+    capabilityStore.clear();
   });
 });

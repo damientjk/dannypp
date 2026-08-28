@@ -1,14 +1,25 @@
 import { randomUUID } from "node:crypto";
+import type { AuditEntry } from "./audit/log.js";
+import { AuditLog } from "./audit/log.js";
 import type { AppConfig } from "./config.js";
 import { isArkConfigured } from "./config.js";
 import { HttpError, RunCancelledError } from "./errors.js";
+import { issueCapabilityForRun } from "./capability/store.js";
+import type { ResourceAccessGate } from "./resources/access.js";
+import type { ResourceStore } from "./resources/store.js";
+import type { CallerContext } from "./policy/pep.js";
+import { AgentAction, PolicyDeniedError, checkAgentAccess } from "./policy/pep.js";
+import { buildAgentResource } from "./policy/resource.js";
 import { JsonStore } from "./store.js";
 import type {
   Agent,
+  AgentPrincipal,
   AgentRun,
   AgentRunner,
+  Capability,
   CreateAgentInput,
   Message,
+  Principal,
   UpdateAgentInput,
 } from "./types.js";
 import { WorkspaceManager } from "./workspace.js";
@@ -34,7 +45,58 @@ export class AgentService {
     private readonly store: JsonStore,
     private readonly workspaces: WorkspaceManager,
     private readonly runner: AgentRunner,
+    private readonly audit: AuditLog,
+    /**
+     * Capability-gated resource materialisation (Person 3). Optional so the
+     * baseline and Person 2's existing tests can construct a service without
+     * it; index.ts always supplies it.
+     */
+    private readonly resourceAccess?: {
+      gate: ResourceAccessGate;
+      resources: ResourceStore;
+    },
   ) {}
+
+  private findAgentRecord(id: string): Agent {
+    const agent = this.store.snapshot().agents.find((item) => item.id === id);
+    if (!agent) {
+      throw new HttpError(404, "Agent not found");
+    }
+    return agent;
+  }
+
+  private async decideAndAudit(
+    principal: Principal,
+    action: string,
+    agent: Pick<Agent, "id" | "ownerId">,
+    requestId: string,
+    capability?: Capability,
+  ) {
+    const decision = await checkAgentAccess(principal, action, agent, requestId, capability);
+    await this.audit.append({
+      requestId,
+      decidedAt: decision.decidedAt,
+      humanId: principal.kind === "human" ? principal.id : principal.ownerId,
+      agentId: agent.id,
+      principalKind: principal.kind,
+      action,
+      resource: buildAgentResource(agent),
+      effect: decision.effect,
+      reason: decision.reason,
+    });
+    return decision;
+  }
+
+  private async enforce(
+    caller: CallerContext,
+    action: string,
+    agent: Pick<Agent, "id" | "ownerId">,
+  ): Promise<void> {
+    const decision = await this.decideAndAudit(caller.principal, action, agent, caller.requestId);
+    if (decision.effect === "deny") {
+      throw new HttpError(403, decision.reason);
+    }
+  }
 
   async initialize(): Promise<void> {
     await this.store.initialize();
@@ -56,17 +118,16 @@ export class AgentService {
     });
   }
 
-  listAgents(): Agent[] {
+  listAgents(caller: CallerContext): Agent[] {
     return this.store
       .snapshot()
-      .agents.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+      .agents.filter((agent) => agent.ownerId === caller.principal.id)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
-  getAgent(id: string): Agent {
-    const agent = this.store.snapshot().agents.find((item) => item.id === id);
-    if (!agent) {
-      throw new HttpError(404, "Agent not found");
-    }
+  async getAgent(caller: CallerContext, id: string): Promise<Agent> {
+    const agent = this.findAgentRecord(id);
+    await this.enforce(caller, AgentAction.Read, agent);
     return agent;
   }
 
@@ -91,8 +152,9 @@ export class AgentService {
     return agent;
   }
 
-  async updateAgent(id: string, input: UpdateAgentInput): Promise<Agent> {
-    const current = this.getAgent(id);
+  async updateAgent(caller: CallerContext, id: string, input: UpdateAgentInput): Promise<Agent> {
+    const current = this.findAgentRecord(id);
+    await this.enforce(caller, AgentAction.Write, current);
     if (current.status === "busy") {
       throw new HttpError(409, "Stop the active run before editing this Agent");
     }
@@ -115,8 +177,9 @@ export class AgentService {
     return updated;
   }
 
-  async deleteAgent(id: string): Promise<{ archivedWorkspace: string }> {
-    const agent = this.getAgent(id);
+  async deleteAgent(caller: CallerContext, id: string): Promise<{ archivedWorkspace: string }> {
+    const agent = this.findAgentRecord(id);
+    await this.enforce(caller, AgentAction.Delete, agent);
     await this.cancelExecution(id);
     const archivedWorkspace = await this.workspaces.archive(agent);
     await this.store.mutate((database) => {
@@ -127,44 +190,52 @@ export class AgentService {
     return { archivedWorkspace };
   }
 
-  async startAgent(id: string): Promise<Agent> {
+  async startAgent(caller: CallerContext, id: string): Promise<Agent> {
+    await this.enforce(caller, AgentAction.Write, this.findAgentRecord(id));
     return this.setStatus(id, "ready");
   }
 
-  async stopAgent(id: string): Promise<Agent> {
-    this.getAgent(id);
+  async stopAgent(caller: CallerContext, id: string): Promise<Agent> {
+    await this.enforce(caller, AgentAction.Write, this.findAgentRecord(id));
     await this.cancelExecution(id);
     return this.setStatus(id, "stopped");
   }
 
-  getMessages(agentId: string): Message[] {
-    this.getAgent(agentId);
+  async getMessages(caller: CallerContext, agentId: string): Promise<Message[]> {
+    await this.enforce(caller, AgentAction.Read, this.findAgentRecord(agentId));
     return this.store
       .snapshot()
       .messages.filter((message) => message.agentId === agentId)
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   }
 
-  getRun(runId: string): AgentRun {
+  async getRun(caller: CallerContext, runId: string): Promise<AgentRun> {
     const run = this.store.snapshot().runs.find((item) => item.id === runId);
     if (!run) {
       throw new HttpError(404, "Run not found");
     }
+    await this.enforce(caller, AgentAction.Read, this.findAgentRecord(run.agentId));
     return run;
   }
 
-  getRuns(agentId: string): AgentRun[] {
-    this.getAgent(agentId);
+  async getRuns(caller: CallerContext, agentId: string): Promise<AgentRun[]> {
+    await this.enforce(caller, AgentAction.Read, this.findAgentRecord(agentId));
     return this.store
       .snapshot()
       .runs.filter((run) => run.agentId === agentId)
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
+  async listAudit(caller: CallerContext): Promise<AuditEntry[]> {
+    return this.audit.listForHuman(caller.principal.id);
+  }
+
   async sendMessage(
+    caller: CallerContext,
     agentId: string,
     prompt: string,
   ): Promise<{ run: AgentRun; message: Message }> {
+    await this.enforce(caller, AgentAction.Execute, this.findAgentRecord(agentId));
     if (!isArkConfigured(this.config)) {
       throw new HttpError(
         503,
@@ -252,9 +323,27 @@ export class AgentService {
       }
     });
     try {
+      const { principal, capability } = issueCapabilityForRun(agentAtStart, run.id);
+      const decision = await this.decideAndAudit(
+        principal,
+        AgentAction.Execute,
+        agentAtStart,
+        run.id,
+        capability,
+      );
+      if (decision.effect === "deny") {
+        throw new PolicyDeniedError(decision.reason);
+      }
       if (this.cancellationRequests.has(agentAtStart.id)) {
         throw new RunCancelledError();
       }
+
+      // Materialise exactly the resources this keycard opens. Each one is a
+      // separate PDP decision, so the Agent's workspace ends up containing
+      // what it is allowed to see and nothing else -- and after a revocation
+      // it never gets this far, so it sees nothing at all.
+      await this.stagePermittedResources(agentAtStart, principal, capability.id, run.id);
+
       const result = await this.runner.run({
         agentId: agentAtStart.id,
         workspacePath: agentAtStart.workspacePath,
@@ -305,6 +394,44 @@ export class AgentService {
           agent.lastError = cancelled ? null : message;
           agent.updatedAt = completedAt;
         }
+      });
+    } finally {
+      // Always wipe the inbox, including on the denied and cancelled paths.
+      // Clearing only at run start is not enough: a run denied before staging
+      // never reaches that point, so the PREVIOUS run's files would still be
+      // sitting in the workspace for the next one to read.
+      await this.resourceAccess?.gate.clear(agentAtStart.workspacePath);
+    }
+  }
+
+  /**
+   * Copies every resource the run's capability permits into the Agent's
+   * workspace inbox. Denials are silent here by design: they are already
+   * recorded as PolicyDecisions by the gate, and a run should still proceed
+   * with the subset it is entitled to.
+   */
+  private async stagePermittedResources(
+    agent: Agent,
+    principal: AgentPrincipal,
+    capabilityId: string,
+    requestId: string,
+  ): Promise<void> {
+    if (!this.resourceAccess) return;
+    const { gate, resources } = this.resourceAccess;
+
+    // Always start from a clean inbox. Without this, a file staged by an
+    // earlier permitted run would still be sitting there, and the run after a
+    // revocation would read it and appear to succeed.
+    await gate.clear(agent.workspacePath);
+
+    for (const ref of await resources.list(agent.ownerId)) {
+      await gate.access({
+        principal,
+        action: "read",
+        resourceUri: ref.uri,
+        requestId,
+        capabilityId,
+        workspacePath: agent.workspacePath,
       });
     }
   }

@@ -8,7 +8,7 @@ import { loadConfig } from "./config.js";
 import type { AgentService } from "./agent-service.js";
 import type { AgentPrincipal } from "./types.js";
 import { CapabilityStore } from "./capability/store.js";
-import { referencePdp } from "./capability/reference-pdp.js";
+import { pdp } from "./policy/pdp.js";
 import { createResourceAccessGate } from "./resources/access.js";
 import { ResourceStore } from "./resources/store.js";
 
@@ -44,7 +44,7 @@ async function makeApp() {
   await resources.initialize();
   const capabilities = new CapabilityStore();
   const gate = createResourceAccessGate({
-    pdp: referencePdp,
+    pdp: pdp,
     resources,
     capabilities,
   });

@@ -1,7 +1,12 @@
 # Person 3 — Capabilities & Protected Resources: the contract
 
-Status: **implemented and green.** `npm run check` passes; `docs/demo/person3-evidence.sh`
-passes 12/12 against a live backend.
+Status: **implemented, fused with Person 2's PDP/PEP/audit, and green.**
+`npm run check` passes (167 tests); `docs/demo/person3-evidence.sh` passes 12/12 against a live
+backend.
+
+> **Merged 2026-08-29.** Person 2's `policy-pep-audit` and Person 3's `capability`/`resources`
+> are now one system with a single PDP. See §9 for what changed in the fusion and the one
+> decision still open for the team.
 
 This is the interface the rest of the team codes against. Nothing here requires a change to
 `types.ts` — Person 1's frozen contract was sufficient as shipped.
@@ -63,58 +68,34 @@ Permits carry `capability-in-scope` (agent) or `owner-principal` (human).
 
 ---
 
-## 4. For Person 2 — the PDP
+## 4. The PDP (Person 2's `policy/pdp.ts`) — now unified
 
-Your `decide()` becomes a wrapper. Do **not** re-implement scope matching; there must be exactly
-one matcher in the repo and it is `capability/scope.ts`.
+There is **one** `decide()` for the platform, and it dispatches on resource family:
 
-```ts
-// apps/server/src/policy/pdp.ts
-import { authorizeCapability } from "../capability/authorize.js";
+| Resource | Shape | Rules applied |
+|---|---|---|
+| an Agent object | `agent:<ownerId>:<agentId>` | caller owns it, plus a live keycard bound to that owner |
+| a data resource | `res://<ownerId>/<name>` | delegates to `authorizeCapability` — action + scope pattern |
 
-export const pdp: PolicyDecisionPoint = {
-  async decide(request) {
-    const verdict = authorizeCapability(request);   // takes PolicyRequest as-is
-    return {
-      ...verdict,
-      requestId: request.requestId,
-      decidedAt: new Date().toISOString(),
-    };
-    // ...and write your audit entry here.
-  },
-};
-```
+Anything else is `malformed-resource`. The PDP throws nothing: on an internal error it
+default-denies with `pdp-error`.
 
-`authorizeCapability` reads `principal`, `action`, `resource` and `capability` straight off the
-`PolicyRequest`, so **your PDP needs no reference to my capability store at all.** It never throws.
+`capability/reference-pdp.ts` has been **deleted** — it was a stand-in and the real PDP now
+covers both families. `policy/placeholder-capability.ts` has been **deleted** and replaced by
+`issueCapabilityForRun()` in `capability/store.ts`, which keeps the exact
+`{ principal, capability }` shape Person 2's PEP already consumed.
 
-When yours is ready, swap it in at [`index.ts`](../apps/server/src/index.ts) where `referencePdp`
-is currently wired, and delete `capability/reference-pdp.ts`. **Do not wire the existing stub in
-`policy/pdp.ts` as-is** — it permits everything, which would silently disable every denial in the
-demo while all the tests kept passing.
-
-### Issuing at run start
+The two scope grammars coexist deliberately, reconciled by one helper:
 
 ```ts
-import { capabilityStore } from "../capability/store.js";
-const capability = capabilityStore.issueForRun(agentPrincipal, run.id);  // read-only, 5 min
+capabilityOwner("read:res://user-a/*")  // -> "user-a"   (Person 3)
+capabilityOwner("owner:user-a")         // -> "user-a"   (Person 2)
 ```
 
-### Enforcing at the runner boundary
-
-```ts
-const result = await gate.access({
-  principal: agentPrincipal,
-  action: "read",
-  resourceUri,                 // from an explicit request field, NEVER parsed from the prompt
-  requestId: run.id,
-  capabilityId: capability.id,
-  workspacePath: agent.workspacePath,
-});
-if (result.effect === "deny") throw new HttpError(403, result.decision.reason);
-// ...run the agent; the file is now at <workspace>/inbox/<name>
-finally { await gate.clear(agent.workspacePath); }   // <-- REQUIRED, see §6
-```
+The PDP binds a keycard to an owner through that helper rather than comparing scope strings, so
+a capability minted by either half satisfies both. A run capability is
+`read:res://<ownerId>/*`, which `capabilityOwner()` reads as the owner (Agent access passes) and
+`scopeAllows()` reads as read-only over that owner's data. One keycard, both doors.
 
 ## 5. For Person 4 — the UI
 
@@ -137,7 +118,7 @@ perfectly well signed in.
 
 ## 6. For Person 5 — testing
 
-Already covered by 141 passing tests, including every negative case on your list:
+Already covered by 167 passing tests, including every negative case on your list:
 
 | Case | Where |
 |---|---|
@@ -149,6 +130,8 @@ Already covered by 141 passing tests, including every negative case on your list
 | path traversal | `resources/uri.test.ts` — 20 attack strings |
 | non-owner revoke | `middleware-routes.test.ts` |
 | secret redaction | `secrets/redact-integration.test.ts` — asserts the key is absent from the DB **on disk** |
+| revocation survives to the next run | `capability/store.test.ts` |
+| a real Run sees only what its keycard opens | `run-staging.test.ts` |
 
 Fixtures you asked for: `ttlMs` on `issue()`, and the throwing-PDP pattern at the bottom of
 `resources/access.test.ts`.
@@ -183,3 +166,48 @@ other test carries on passing. Covered in `resources/staging.test.ts`.
 5. **`POST /api/capabilities` exists for the demo.** Normally the PEP issues at run start. It is
    safe — the owner comes from the session, never the body, so a caller can only ever mint a
    keycard to their own namespace — but it is a convenience route, not part of the design.
+
+---
+
+## 9. The fusion (2026-08-29) — what changed and what is still open
+
+Merging Person 2's `policy-pep-audit` with Person 3's work surfaced three defects that each
+would have survived to the stage. All three are fixed and pinned by tests.
+
+**1. Two PDPs would have denied everything.** Person 2's `decide()` rejected any resource not
+matching `agent:<owner>:<id>`, so every `res://` request would have returned `malformed-resource`.
+Person 2's capability check also compared scope strings exactly against `owner:<id>`, so every
+Person 3 capability would have failed as `capability-scope-mismatch`. Fixed by dispatching on
+resource family and binding via `capabilityOwner()` (§4).
+
+**2. Revocation did not survive to the next run.** Each Run mints a fresh capability, so
+revoking one had no effect on the following Run — the demo's headline moment
+("shred the keycard, the robot is still blocked") was false. Revocation is now a **standing
+decision**: `revoke()` suspends the agent, and no new keycard is minted until the owner
+explicitly issues one via `POST /api/capabilities`. Pinned by
+`capability/store.test.ts > revocation is a standing decision`.
+
+**3. A denied run left the previous run's files in the workspace.** Staging was cleared at run
+*start*, but a run denied before staging never reached that point — so the Agent could still read
+a resource its current keycard no longer opened. Clearing now happens in a `finally`, covering the
+denied and cancelled paths. Pinned by `run-staging.test.ts`.
+
+### Still open — one decision for the team
+
+**The two halves use different deny-reason vocabularies.** They overlap where it matters
+(`capability-revoked` and `capability-expired` are identical in both), but they diverge elsewhere:
+
+| Agent resources (Person 2) | Data resources (Person 3) |
+|---|---|
+| `not-owner` | `out-of-scope` |
+| `missing-capability` | `capability-unknown` |
+| `malformed-resource` | `resource-unknown` |
+| `pdp-error` | `policy-error` |
+| `capability-scope-mismatch` | `out-of-scope` |
+| permit: `owner-match` / `capability-valid` | permit: `owner-principal` / `capability-in-scope` |
+
+Nothing is broken by this — Person 4 renders `decision.reason` verbatim and both are truthful —
+but a judge reading the audit log sees two words for one idea. Unifying is a 15-minute change
+plus test updates, and it is **not Person 3's call to make unilaterally**: it touches Person 2's
+tests and Person 4's copy. Recommend picking one set at the next standup. Whoever changes it must
+update `capability/reasons.ts`, `policy/pdp.ts`, `policy/pdp.test.ts` and this table together.

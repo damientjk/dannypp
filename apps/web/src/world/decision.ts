@@ -1,5 +1,5 @@
 import type { Capability, PolicyDecision, PolicyRequestLike } from "../types";
-import type { RoomId } from "./types";
+import { roomById } from "./resources";
 
 const capabilities = new Map<string, Capability>();
 
@@ -9,33 +9,45 @@ const capabilities = new Map<string, Capability>();
 export const newId = () =>
   crypto.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-// ponytail: in-memory mock standing in for the real backend PDP
-// (apps/server/src/policy/pdp.ts). Day 2 swap replaces only this
-// function's body with a fetch call — callers only ever depend on
-// the PolicyDecision shape, so nothing else changes.
-const ROOM_OWNER: Record<RoomId, string> = {
-  "house-a": "user-a",
-  "house-b": "user-b",
-};
+function capabilityKey(agentId: string, roomId: string): string {
+  return `${agentId}:${roomId}`;
+}
 
-export function issueCapability(agentId: string, ownerId: string): Capability {
+// ponytail: in-memory mock standing in for the real backend PDP
+// (apps/server/src/policy/pdp.ts). Day 2 swap replaces only decideRoomEntry's
+// body with a fetch call — callers only ever depend on the PolicyDecision
+// shape, so nothing else changes.
+export function issueCapability(agentId: string, roomId: string): Capability {
   const capability: Capability = {
     id: newId(),
-    scope: ownerId,
+    scope: roomId,
     expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     revokedAt: null,
   };
-  capabilities.set(agentId, capability);
+  capabilities.set(capabilityKey(agentId, roomId), capability);
   return capability;
 }
 
-export function getCapability(agentId: string): Capability | undefined {
-  return capabilities.get(agentId);
+export function getCapability(agentId: string, roomId: string): Capability | undefined {
+  return capabilities.get(capabilityKey(agentId, roomId));
 }
 
-export function revokeCapability(agentId: string): void {
-  const capability = capabilities.get(agentId);
+export function revokeCapability(agentId: string, roomId: string): void {
+  const capability = capabilities.get(capabilityKey(agentId, roomId));
   if (capability) capability.revokedAt = new Date().toISOString();
+}
+
+export function grantedRoomsFor(agentId: string): string[] {
+  const prefix = `${agentId}:`;
+  const now = Date.now();
+  const rooms: string[] = [];
+  for (const [mapKey, capability] of capabilities) {
+    if (!mapKey.startsWith(prefix)) continue;
+    if (capability.revokedAt) continue;
+    if (new Date(capability.expiresAt).getTime() < now) continue;
+    rooms.push(mapKey.slice(prefix.length));
+  }
+  return rooms;
 }
 
 export function resetCapabilities(): void {
@@ -45,8 +57,11 @@ export function resetCapabilities(): void {
 export async function decideRoomEntry(request: PolicyRequestLike): Promise<PolicyDecision> {
   const decidedAt = new Date().toISOString();
   const { capability, resource, requestId } = request;
-  const roomOwner = ROOM_OWNER[resource as RoomId];
+  const room = roomById(resource);
 
+  if (!room.requiresPermission) {
+    return { effect: "permit", reason: "no permission required for this room", requestId, decidedAt };
+  }
   if (!capability) {
     return { effect: "deny", reason: "no capability issued", requestId, decidedAt };
   }
@@ -56,13 +71,13 @@ export async function decideRoomEntry(request: PolicyRequestLike): Promise<Polic
   if (new Date(capability.expiresAt).getTime() < Date.now()) {
     return { effect: "deny", reason: "capability expired", requestId, decidedAt };
   }
-  if (capability.scope !== roomOwner) {
+  if (capability.scope !== resource) {
     return {
       effect: "deny",
-      reason: `capability scoped to ${capability.scope}, room owned by ${roomOwner}`,
+      reason: `capability scoped to ${capability.scope}, not ${resource}`,
       requestId,
       decidedAt,
     };
   }
-  return { effect: "permit", reason: "capability scope matches room owner", requestId, decidedAt };
+  return { effect: "permit", reason: "capability scope matches requested room", requestId, decidedAt };
 }

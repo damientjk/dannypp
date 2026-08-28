@@ -1346,18 +1346,28 @@ textarea:focus {
   flex: 1;
   display: grid;
   grid-template-columns: auto 320px;
+  grid-template-rows: auto auto;
   gap: 16px;
   padding: 16px;
+  position: relative;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1200px) {
   .world-layout {
     grid-template-columns: 1fr;
   }
+}
 
-  .world-canvas {
-    width: 100%;
-    height: auto;
+.world-canvas-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  grid-column: 1;
+  grid-row: 1;
+}
+
+@media (max-width: 1200px) {
+  .world-canvas-wrap {
+    grid-column: 1;
   }
 }
 
@@ -1367,12 +1377,38 @@ textarea:focus {
   background: var(--paper);
   /* keep the drawn pixel art crisp at its scaled-up display size */
   image-rendering: pixelated;
+  display: block;
 }
 
 .world-panel {
   display: grid;
   gap: 16px;
   align-content: start;
+  grid-column: 2;
+  grid-row: 1;
+}
+
+@media (max-width: 1200px) {
+  .world-panel {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+
+.world-agent-strip {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 1200px) {
+  .world-agent-strip {
+    grid-row: 3;
+  }
 }
 
 .world-roster,
@@ -1386,6 +1422,102 @@ textarea:focus {
 
 .world-controls {
   display: grid;
+  gap: 8px;
+}
+
+.world-agent-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  cursor: pointer;
+  min-width: 96px;
+}
+
+.world-agent-card.selected {
+  border-color: var(--pw-a, #ff6b5e);
+  border-width: 2px;
+}
+
+.world-agent-avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--line);
+  font-weight: 700;
+}
+
+.world-agent-name {
+  font-size: 0.9em;
+  font-weight: 600;
+}
+
+.world-agent-status-pill {
+  font-size: 0.75em;
+  color: var(--muted, #666);
+  text-transform: uppercase;
+}
+
+.world-detail-panel {
+  display: grid;
+  gap: 6px;
+}
+
+.world-detail-role,
+.world-detail-task {
+  margin: 0;
+}
+
+.world-detail-empty {
+  color: var(--muted, #666);
+  font-style: italic;
+}
+
+.world-granted-rooms {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.world-granted-rooms li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.world-request-toasts {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: grid;
+  gap: 8px;
+  max-width: 280px;
+  z-index: 10;
+}
+
+.world-request-toast {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.world-request-toast p {
+  margin: 0 0 8px;
+}
+
+.world-request-actions {
+  display: flex;
   gap: 8px;
 }
 

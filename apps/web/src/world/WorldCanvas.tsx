@@ -55,13 +55,8 @@ export function WorldCanvas({ agents, onFrame }: WorldCanvasProps) {
       const next = agentsRef.current.map((agent) => settleAgent(tickAgent(agent, deltaMs)));
       onFrameRef.current(next);
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (const room of ROOMS) {
-        const px = room.x * TILE_SIZE;
-        const py = room.y * TILE_SIZE;
-        const pw = room.width * TILE_SIZE;
-        const ph = room.height * TILE_SIZE;
-        const floorImage = loadAsset(ROOM_ASSET_KEYS[room.id]);
+      const drawFloor = (px: number, py: number, pw: number, ph: number, assetKey: AssetKey, fallbackColor: string) => {
+        const floorImage = loadAsset(assetKey);
         if (floorImage) {
           let pattern = patternCacheRef.current.get(floorImage);
           if (!pattern) {
@@ -81,9 +76,21 @@ export function WorldCanvas({ agents, onFrame }: WorldCanvasProps) {
             ctx.drawImage(floorImage, px, py, pw, ph);
           }
         } else {
-          ctx.fillStyle = ROOM_COLORS[room.id] ?? "#cccccc";
+          ctx.fillStyle = fallbackColor;
           ctx.fillRect(px, py, pw, ph);
         }
+      };
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // full-bleed ground first, so there's no gap between rooms showing
+      // the page background through
+      drawFloor(0, 0, canvas.width, canvas.height, ROOM_ASSET_KEYS.common, ROOM_COLORS.common);
+      for (const room of ROOMS) {
+        const px = room.x * TILE_SIZE;
+        const py = room.y * TILE_SIZE;
+        const pw = room.width * TILE_SIZE;
+        const ph = room.height * TILE_SIZE;
+        drawFloor(px, py, pw, ph, ROOM_ASSET_KEYS[room.id], ROOM_COLORS[room.id] ?? "#cccccc");
       }
       const characterImage = loadAsset("character.default");
       for (const agent of next) {

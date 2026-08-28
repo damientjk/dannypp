@@ -13,6 +13,12 @@ class FakeCanvasRenderingContext2D {
   arc(): void {}
   fill(): void {}
   drawImage(): void {}
+  save(): void {}
+  restore(): void {}
+  translate(): void {}
+  createPattern(): null {
+    return null;
+  }
 }
 
 Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {

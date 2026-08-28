@@ -7,6 +7,13 @@ import { z } from "zod";
 import type { AppConfig } from "./config.js";
 import { HttpError } from "./errors.js";
 import type { AgentService } from "./agent-service.js";
+import { authenticate, findUser } from "./auth/users.js";
+import { issueSession, resolveSession } from "./auth/session.js";
+import type { HumanPrincipal } from "./types.js";
+
+declare module "fastify" {
+  interface FastifyRequest { principal?: HumanPrincipal | undefined; }
+}
 
 const agentIdParams = z.object({ id: z.string().uuid() });
 const runIdParams = z.object({ id: z.string().uuid() });
@@ -21,6 +28,10 @@ const updateAgentBody = createAgentBody.partial().refine(
 );
 const messageBody = z.object({
   content: z.string().trim().min(1).max(50_000),
+});
+const loginBody = z.object({
+  userId: z.string().trim().min(1),
+  password: z.string().min(1),
 });
 
 export async function createApp(
@@ -63,6 +74,13 @@ export async function createApp(
     }
   });
 
+  app.addHook("onRequest", async (request) => {
+    const header = request.headers["x-session-token"];
+    const token = typeof header === "string" ? header : undefined;
+    const userId = resolveSession(token);
+    request.principal = (userId && findUser(userId)) || undefined;
+  });
+
   app.get("/api/health", async () => ({
     ok: true,
     service: "volc-agent-launchpad",
@@ -70,13 +88,32 @@ export async function createApp(
 
   app.get("/api/auth", async () => ({ required: config.authToken.length > 0 }));
 
+  app.post("/api/auth/login", async (request) => {
+    const body = loginBody.parse(request.body);
+    const principal = authenticate(body.userId, body.password);
+    if (!principal) {
+      throw new HttpError(401, "Invalid credentials");
+    }
+    return { sessionToken: issueSession(principal.id), principal };
+  });
+
+  app.get("/api/auth/me", async (request) => {
+    if (!request.principal) {
+      throw new HttpError(401, "Not signed in");
+    }
+    return { principal: request.principal };
+  });
+
   app.get("/api/system", async () => service.systemInfo());
 
   app.get("/api/agents", async () => ({ agents: service.listAgents() }));
 
   app.post("/api/agents", async (request, reply) => {
+    if (!request.principal) {
+      throw new HttpError(401, "Sign in to create an Agent");
+    }
     const body = createAgentBody.parse(request.body);
-    const agent = await service.createAgent(body);
+    const agent = await service.createAgent({ ...body, ownerId: request.principal.id });
     return reply.code(201).send({ agent });
   });
 

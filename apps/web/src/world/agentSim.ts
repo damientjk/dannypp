@@ -1,14 +1,13 @@
-import type { Agent, PolicyEffect } from "../types";
+import type { Agent } from "../types";
 import type { TiledMapRenderer } from "./engine/TiledMapRenderer";
 import { findPath } from "./engine/pathfinding";
-import type { Facing, RoomId, WorldAgent } from "./types";
+import { assignedRoomFor, isGatedTile } from "./resources";
+import type { FileRoom } from "./resources";
+import type { Facing, WorldAgent } from "./types";
 
 const MOVE_SPEED_PX_PER_MS = 0.12;
-
-const DOOR_SPAWN_NAME: Record<RoomId, string> = {
-  "house-a": "house-a-door",
-  "house-b": "house-b-door",
-};
+const ROAM_RADIUS_TILES = 4;
+const ROAM_PICK_ATTEMPTS = 20;
 
 export function spawnWorldAgents(agents: Agent[], renderer: TiledMapRenderer): WorldAgent[] {
   const spawnTile = renderer.getSpawnPoint("common") ?? { x: 0, y: 0 };
@@ -25,13 +24,12 @@ export function spawnWorldAgents(agents: Agent[], renderer: TiledMapRenderer): W
       targetX: x,
       targetY: y,
       facing: "down",
-      status: "idle",
-      currentRoom: "common",
       progress: 1,
-      pendingEffect: null,
-      pendingRoom: null,
       path: [],
       pathIndex: 0,
+      behaviorMode: "roaming",
+      assignedRoomId: assignedRoomFor(agent)?.id ?? null,
+      occupiedDeskId: null,
     };
   });
 }
@@ -49,22 +47,28 @@ function walkableAdapter(renderer: TiledMapRenderer) {
   };
 }
 
-export function beginMoveToRoom(
-  agent: WorldAgent,
-  room: RoomId,
-  effect: PolicyEffect,
-  renderer: TiledMapRenderer,
-): WorldAgent {
-  const doorTile = renderer.getSpawnPoint(DOOR_SPAWN_NAME[room]) ?? { x: 0, y: 0 };
-  const startTile = renderer.pixelToTile(agent.x, agent.y);
-  const tileHops = findPath(walkableAdapter(renderer), startTile, doorTile) ?? [];
-  const pixelWaypoints = [
-    { x: agent.x, y: agent.y },
-    ...tileHops.map((tile) => renderer.tileToPixel(tile.x, tile.y)),
-  ];
-  const first = pixelWaypoints[0];
-  const next = pixelWaypoints[1] ?? first;
+function openRoamAdapter(renderer: TiledMapRenderer) {
+  return {
+    width: renderer.width,
+    height: renderer.height,
+    isWalkable: (x: number, y: number) => renderer.isWalkable(x, y) && !isGatedTile(renderer, x, y),
+  };
+}
 
+function pathWaypoints(
+  renderer: TiledMapRenderer,
+  agent: WorldAgent,
+  goalTile: { x: number; y: number },
+  adapter: ReturnType<typeof walkableAdapter>,
+): Array<{ x: number; y: number }> {
+  const startTile = renderer.pixelToTile(agent.x, agent.y);
+  const tileHops = findPath(adapter, startTile, goalTile) ?? [];
+  return [{ x: agent.x, y: agent.y }, ...tileHops.map((tile) => renderer.tileToPixel(tile.x, tile.y))];
+}
+
+function beginPath(agent: WorldAgent, waypoints: Array<{ x: number; y: number }>): WorldAgent {
+  const first = waypoints[0];
+  const next = waypoints[1] ?? first;
   return {
     ...agent,
     originX: first.x,
@@ -72,36 +76,58 @@ export function beginMoveToRoom(
     targetX: next.x,
     targetY: next.y,
     facing: facingFromDelta(next.x - first.x, next.y - first.y),
-    status: "walking",
     progress: 0,
-    pendingEffect: effect,
-    pendingRoom: room,
-    path: pixelWaypoints,
+    path: waypoints,
     pathIndex: 0,
   };
 }
 
-function beginDeniedBounce(agent: WorldAgent): WorldAgent {
-  const rawDx = agent.targetX - agent.originX;
-  const rawDy = agent.targetY - agent.originY;
-  const isDegenerate = rawDx === 0 && rawDy === 0;
-  const dx = isDegenerate ? 0 : rawDx;
-  const dy = isDegenerate ? -1 : rawDy; // fallback: bounce south, toward the corridor
-  const length = Math.hypot(dx, dy) || 1;
-  // isDegenerate uses a synthetic unit-length direction vector, so cap-by-length
-  // would clamp the bounce to 1px (still invisible) — use the fixed cap directly.
-  const bounceDistance = isDegenerate ? 24 : Math.min(length, 24);
+/** Only re-picks a roam target when idle (no path left to walk) and still
+ *  meant to be roaming — heading-to-desk/working agents are untouched;
+ *  their transitions are driven by settleAgent or by the caller's async
+ *  task-visit orchestration (decideRoomEntry can't run inside a
+ *  synchronous per-frame function). */
+export function advanceBehavior(agent: WorldAgent, renderer: TiledMapRenderer): WorldAgent {
+  if (agent.behaviorMode !== "roaming" || agent.path.length > 0) return agent;
+
+  const adapter = openRoamAdapter(renderer);
+  const startTile = renderer.pixelToTile(agent.x, agent.y);
+  for (let attempt = 0; attempt < ROAM_PICK_ATTEMPTS; attempt++) {
+    const dx = Math.floor(Math.random() * (ROAM_RADIUS_TILES * 2 + 1)) - ROAM_RADIUS_TILES;
+    const dy = Math.floor(Math.random() * (ROAM_RADIUS_TILES * 2 + 1)) - ROAM_RADIUS_TILES;
+    const candidate = { x: startTile.x + dx, y: startTile.y + dy };
+    if (!adapter.isWalkable(candidate.x, candidate.y)) continue;
+    const waypoints = pathWaypoints(renderer, agent, candidate, adapter);
+    if (waypoints.length <= 1) continue; // start === goal or unreachable; try another candidate
+    return beginPath(agent, waypoints);
+  }
+  return agent; // nothing new to wander to this cycle; retry next frame
+}
+
+export function beginHeadingToDesk(
+  agent: WorldAgent,
+  room: FileRoom,
+  occupiedDeskIds: Set<string>,
+  renderer: TiledMapRenderer,
+): WorldAgent | null {
+  const freeDeskId = room.deskIds.find((id) => !occupiedDeskIds.has(id));
+  if (!freeDeskId) return null;
+  const deskTile = renderer.getSpawnPoint(freeDeskId);
+  if (!deskTile) return null;
+
+  const waypoints = pathWaypoints(renderer, agent, deskTile, walkableAdapter(renderer));
+  return {
+    ...beginPath(agent, waypoints),
+    behaviorMode: "heading-to-desk",
+    occupiedDeskId: freeDeskId,
+  };
+}
+
+export function endWorking(agent: WorldAgent): WorldAgent {
   return {
     ...agent,
-    originX: agent.x,
-    originY: agent.y,
-    targetX: agent.x - (dx / length) * bounceDistance,
-    targetY: agent.y - (dy / length) * bounceDistance,
-    facing: facingFromDelta(-dx, -dy),
-    status: "denied-bounce",
-    progress: 0,
-    pendingEffect: null,
-    pendingRoom: null,
+    behaviorMode: "roaming",
+    occupiedDeskId: null,
     path: [],
     pathIndex: 0,
   };
@@ -123,35 +149,26 @@ export function tickAgent(agent: WorldAgent, deltaMs: number): WorldAgent {
 export function settleAgent(agent: WorldAgent): WorldAgent {
   if (agent.progress < 1) return agent;
 
-  if (agent.status === "walking") {
-    const nextIndex = agent.pathIndex + 1;
-    if (nextIndex < agent.path.length - 1) {
-      const from = agent.path[nextIndex];
-      const to = agent.path[nextIndex + 1];
-      return {
-        ...agent,
-        pathIndex: nextIndex,
-        originX: from.x,
-        originY: from.y,
-        targetX: to.x,
-        targetY: to.y,
-        facing: facingFromDelta(to.x - from.x, to.y - from.y),
-        progress: 0,
-      };
-    }
-    if (agent.pendingEffect === "deny") return beginDeniedBounce(agent);
+  const nextIndex = agent.pathIndex + 1;
+  if (nextIndex < agent.path.length - 1) {
+    const from = agent.path[nextIndex];
+    const to = agent.path[nextIndex + 1];
     return {
       ...agent,
-      status: "idle",
-      currentRoom: agent.pendingRoom ?? agent.currentRoom,
-      pendingEffect: null,
-      pendingRoom: null,
-      path: [],
-      pathIndex: 0,
+      pathIndex: nextIndex,
+      originX: from.x,
+      originY: from.y,
+      targetX: to.x,
+      targetY: to.y,
+      facing: facingFromDelta(to.x - from.x, to.y - from.y),
+      progress: 0,
     };
   }
-  if (agent.status === "denied-bounce") {
-    return { ...agent, status: "idle" };
+
+  if (agent.path.length === 0) return agent; // already at rest, nothing to settle
+
+  if (agent.behaviorMode === "heading-to-desk") {
+    return { ...agent, behaviorMode: "working", path: [], pathIndex: 0 };
   }
-  return agent;
+  return { ...agent, path: [], pathIndex: 0 };
 }

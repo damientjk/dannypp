@@ -35,6 +35,7 @@ export function WorldCanvas({ agents, onFrame }: WorldCanvasProps) {
   const onFrameRef = useRef(onFrame);
   const lastTimeRef = useRef<number | null>(null);
   const frameIdRef = useRef(0);
+  const patternCacheRef = useRef(new Map<HTMLImageElement, CanvasPattern>());
 
   agentsRef.current = agents;
   onFrameRef.current = onFrame;
@@ -62,7 +63,23 @@ export function WorldCanvas({ agents, onFrame }: WorldCanvasProps) {
         const ph = room.height * TILE_SIZE;
         const floorImage = loadAsset(ROOM_ASSET_KEYS[room.id]);
         if (floorImage) {
-          ctx.drawImage(floorImage, px, py, pw, ph);
+          let pattern = patternCacheRef.current.get(floorImage);
+          if (!pattern) {
+            const created = ctx.createPattern(floorImage, "repeat");
+            if (created) {
+              patternCacheRef.current.set(floorImage, created);
+              pattern = created;
+            }
+          }
+          if (pattern) {
+            ctx.save();
+            ctx.translate(px, py);
+            ctx.fillStyle = pattern;
+            ctx.fillRect(0, 0, pw, ph);
+            ctx.restore();
+          } else {
+            ctx.drawImage(floorImage, px, py, pw, ph);
+          }
         } else {
           ctx.fillStyle = ROOM_COLORS[room.id] ?? "#cccccc";
           ctx.fillRect(px, py, pw, ph);

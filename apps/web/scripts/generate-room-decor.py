@@ -12,6 +12,7 @@ import json
 import shutil
 import sys
 from pathlib import Path
+from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from room_layout import TILE, HEIGHT, ROOM_H, ROOMS, DESKS, EQUIPMENT, DECOR, AMBIENT
@@ -40,7 +41,6 @@ def copy_asset(src_rel: str, dest_rel: str, crop: tuple[int, int, int, int] | No
     if crop is None:
         shutil.copyfile(src, dest)
     else:
-        from PIL import Image
         Image.open(src).convert("RGBA").crop(crop).save(dest)
 
 
@@ -67,6 +67,11 @@ def main() -> None:
             if binding is None:
                 continue
             src_name, frames = binding
+            sheet_path = MODERNINTERIORS / EQUIPMENT_SRC_DIR / src_name
+            sheet_width = Image.open(sheet_path).width
+            assert sheet_width == frames * 32, (
+                f"{src_name}: {sheet_width}px sheet is not {frames} x 32px frames"
+            )
             dest_rel = f"equipment/{src_name}"
             copy_asset(f"{EQUIPMENT_SRC_DIR}/{src_name}", dest_rel)
             equipment_entries.append({

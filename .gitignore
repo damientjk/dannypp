@@ -8,6 +8,7 @@ data/
 workspaces/
 codex-home/
 coverage/
+__pycache__/
 *.log
 *.tsbuildinfo
 .DS_Store

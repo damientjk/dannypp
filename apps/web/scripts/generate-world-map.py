@@ -123,7 +123,7 @@ def main() -> None:
             "height": (ROOM_H - 2) * TILE,
         }
 
-    spawn_objects = [tile_obj("common", 17, 9)]
+    spawn_objects = [tile_obj("common", WIDTH // 2, ROOM_H + HALLWAY_H // 2)]
     for room in ROOMS:
         door_x, door_y = door_tile(room)
         spawn_objects.append(tile_obj(f"{room['id']}-door", door_x, door_y))

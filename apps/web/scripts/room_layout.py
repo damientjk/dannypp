@@ -17,6 +17,9 @@ ROOM_W, ROOM_H = 11, 8    # outer footprint incl. 1-tile wall ring
 GAP = 1                    # cosmetic filler between same-row room columns (blocked, not a real path)
 HALLWAY_H = 4               # real walkable plaza between the two room rows
 
+assert ROOM_W * 3 + GAP * 2 == WIDTH
+assert ROOM_H * 2 + HALLWAY_H == HEIGHT
+
 # id, owner (None = unprotected/common), row ("top"/"bottom"), x0 (left
 # column of the outer footprint), theme (used only for decor-file naming),
 # floor = (sheet_name, col, row) crop out of Room_Builder_Floors_32x32.png.

@@ -199,6 +199,12 @@ export function WorldView() {
     // ponytail: length as a cheap "roster changed" signal, not a deep dep
   }, [agents, mapRenderer, worldAgents.length]);
 
+  // Re-fetch whenever the selected agent's polled status changes (not just
+  // on selection) — otherwise a run that starts *after* the agent is already
+  // selected never appears, and the detail panel's "current task" is stuck
+  // showing "Idle" for an agent that's visibly busy and walking to its desk.
+  const selectedAgentStatus = agents.find((agent) => agent.id === selectedId)?.status;
+
   useEffect(() => {
     if (!selectedId) {
       setRuns([]);
@@ -217,7 +223,7 @@ export function WorldView() {
         if (selectedIdRef.current === selectedId) setMessages(result.messages);
       })
       .catch(() => {});
-  }, [selectedId]);
+  }, [selectedId, selectedAgentStatus]);
 
   const grantRequest = useCallback((request: AccessRequest) => {
     issueCapability(request.agentId, request.roomId);

@@ -1521,12 +1521,18 @@ textarea:focus {
   gap: 8px;
 }
 
-.effect-permit {
+.effect-permit,
+.effect-granted {
   color: var(--green);
 }
 
-.effect-deny {
+.effect-deny,
+.effect-denied {
   color: var(--red);
+}
+
+.effect-requested {
+  color: var(--muted, inherit);
 }
 
 .pixel-theme {

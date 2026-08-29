@@ -14,9 +14,16 @@ import { WorldCanvas } from "./WorldCanvas";
 import { loadWorldMap } from "./engineMap";
 import type { TiledMapRenderer } from "./engine/TiledMapRenderer";
 import type { AccessRequest } from "./requests";
-import { hasPendingRequest, pendingRequestsFor, queueRequest, resolveRequest } from "./requests";
+import {
+  clearDeniedForAgent,
+  hasPendingRequest,
+  markDenied,
+  pendingRequestsFor,
+  queueRequest,
+  resolveRequest,
+} from "./requests";
 import { roomById } from "./resources";
-import type { DecisionEvent, WorldAgent } from "./types";
+import type { LogEntry, WorldAgent } from "./types";
 
 const TEST_USERS = [
   { userId: "user-a", password: "demo-a", label: "Log in as User A" },
@@ -32,7 +39,7 @@ export function WorldView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [events, setEvents] = useState<DecisionEvent[]>([]);
+  const [events, setEvents] = useState<LogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mapRenderer, setMapRenderer] = useState<TiledMapRenderer | null>(null);
   const [, setRequestVersion] = useState(0);
@@ -121,6 +128,16 @@ export function WorldView() {
     if (!mapRenderer) return;
     let cancelled = false;
 
+    // Desks claimed so far *in this pass*. Seeded from the last-committed
+    // occupancy and updated after every successful claim below — since
+    // decideRoomEntry never really suspends (no I/O), this loop drains as a
+    // chain of microtasks with no render committing in between, so without
+    // this accumulator every agent in one poll would see the same stale
+    // snapshot and could pile onto the same desk (finding 1).
+    const claimed = new Set(
+      worldAgentsRef.current.filter((wa) => wa.occupiedDeskId).map((wa) => wa.occupiedDeskId!),
+    );
+
     (async () => {
       for (const agent of agents) {
         if (cancelled) return;
@@ -147,41 +164,67 @@ export function WorldView() {
           const decision = await decideRoomEntry(request);
           if (cancelled) return;
 
-          setEvents((current) => [
-            {
-              requestId,
-              agentId: agent.id,
-              agentName: agent.name,
-              room: room.id,
-              effect: decision.effect,
-              reason: decision.reason,
-              decidedAt: decision.decidedAt,
-            },
-            ...current,
-          ]);
-
+          // Log the raw PDP decision only once it represents an actual state
+          // change, not on every re-decided-but-nothing-changed poll — see
+          // finding 6 (permit while every desk is full) and its analogue on
+          // the deny side, now covered by the same guard.
           if (decision.effect === "permit") {
-            const occupied = new Set(
-              worldAgentsRef.current.filter((wa) => wa.occupiedDeskId).map((wa) => wa.occupiedDeskId!),
-            );
-            setWorldAgents((current) =>
-              current.map((wa) =>
-                wa.agentId === agent.id ? beginHeadingToDesk(wa, room, occupied, mapRenderer) ?? wa : wa,
-              ),
-            );
+            const updated = beginHeadingToDesk(worldAgent, room, claimed, mapRenderer);
+            if (updated) {
+              claimed.add(updated.occupiedDeskId!);
+              setWorldAgents((current) =>
+                current.map((wa) => (wa.agentId === agent.id ? updated : wa)),
+              );
+              setEvents((current) => [
+                {
+                  id: requestId,
+                  category: "permit",
+                  message: `${agent.name} → ${room.displayName}: permit (${decision.reason})`,
+                  timestamp: decision.decidedAt,
+                },
+                ...current,
+              ]);
+            }
+            // else: every desk is occupied, agent keeps roaming and waits
+            // (spec §4) — nothing changed, so nothing new to log.
           } else {
-            queueRequest({
+            const queued = queueRequest({
               agentId: agent.id,
               agentName: agent.name,
               roomId: room.id,
               roomOwnerId: room.ownerId!,
             });
-            setRequestVersion((v) => v + 1);
+            if (queued) {
+              setEvents((current) => [
+                {
+                  id: requestId,
+                  category: "deny",
+                  message: `${agent.name} → ${room.displayName}: deny (${decision.reason})`,
+                  timestamp: decision.decidedAt,
+                },
+                {
+                  id: newId(),
+                  category: "requested",
+                  message: `${agent.name} requested access to ${room.displayName}`,
+                  timestamp: decision.decidedAt,
+                },
+                ...current,
+              ]);
+              setRequestVersion((v) => v + 1);
+            }
+            // else: already pending or already denied this cycle — no new
+            // toast, no duplicate log line (finding 2).
           }
-        } else if (!isBusy && worldAgent.behaviorMode === "working") {
-          setWorldAgents((current) =>
-            current.map((wa) => (wa.agentId === agent.id ? endWorking(wa) : wa)),
-          );
+        } else if (!isBusy) {
+          // Task cycle ended — clear any denied marks so a later cycle can
+          // ask again (spec §5), regardless of whether the agent ever made
+          // it to a desk (a denied agent stays "roaming", never "working").
+          clearDeniedForAgent(agent.id);
+          if (worldAgent.behaviorMode === "working") {
+            setWorldAgents((current) =>
+              current.map((wa) => (wa.agentId === agent.id ? endWorking(wa) : wa)),
+            );
+          }
         }
       }
     })();
@@ -229,12 +272,31 @@ export function WorldView() {
     issueCapability(request.agentId, request.roomId);
     resolveRequest(request.id);
     setRequestVersion((v) => v + 1);
-  }, []);
+    setEvents((current) => [
+      {
+        id: newId(),
+        category: "granted",
+        message: `${principal?.displayName ?? "Owner"} granted ${request.agentName} access to ${roomById(request.roomId).displayName}`,
+        timestamp: new Date().toISOString(),
+      },
+      ...current,
+    ]);
+  }, [principal]);
 
   const denyRequest = useCallback((request: AccessRequest) => {
     resolveRequest(request.id);
+    markDenied(request.agentId, request.roomId);
     setRequestVersion((v) => v + 1);
-  }, []);
+    setEvents((current) => [
+      {
+        id: newId(),
+        category: "denied",
+        message: `${principal?.displayName ?? "Owner"} denied ${request.agentName} access to ${roomById(request.roomId).displayName}`,
+        timestamp: new Date().toISOString(),
+      },
+      ...current,
+    ]);
+  }, [principal]);
 
   const revokeRoom = useCallback((agentId: string, roomId: string) => {
     revokeCapability(agentId, roomId);
@@ -318,8 +380,8 @@ export function WorldView() {
           <h4>Security log</h4>
           <ul>
             {events.map((event) => (
-              <li key={event.requestId} className={"effect-" + event.effect}>
-                {event.agentName} → {roomById(event.room).displayName}: {event.effect} ({event.reason})
+              <li key={event.id} className={"effect-" + event.category}>
+                {event.message}
               </li>
             ))}
           </ul>
@@ -346,7 +408,9 @@ export function WorldView() {
               ? "working"
               : worldAgent?.behaviorMode === "heading-to-desk"
                 ? "heading to desk"
-                : "roaming";
+                : worldAgent?.assignedRoomId && hasPendingRequest(agent.id, worldAgent.assignedRoomId)
+                  ? "awaiting access"
+                  : "roaming";
           return (
             <button
               key={agent.id}

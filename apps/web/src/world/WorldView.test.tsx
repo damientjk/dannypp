@@ -5,7 +5,15 @@ import { api } from "../api";
 import { FILE_ROOMS } from "./resources";
 import { issueCapability, resetCapabilities } from "./decision";
 import { resetRequests } from "./requests";
+import { beginHeadingToDesk } from "./agentSim";
 import { WorldView } from "./WorldView";
+
+// Wrap the real beginHeadingToDesk in a spy (default behavior unchanged) so
+// finding 1's test can observe the occupiedDeskId each call actually claimed.
+vi.mock("./agentSim", async () => {
+  const actual = await vi.importActual<typeof import("./agentSim")>("./agentSim");
+  return { ...actual, beginHeadingToDesk: vi.fn(actual.beginHeadingToDesk) };
+});
 
 vi.mock("../api", () => ({
   api: {
@@ -96,6 +104,7 @@ describe("WorldView", () => {
   beforeEach(() => {
     resetCapabilities();
     resetRequests();
+    vi.mocked(beginHeadingToDesk).mockClear();
     vi.mocked(api.login).mockResolvedValue({
       sessionToken: "tok",
       principal: { kind: "human", id: "user-a", displayName: "User A" },
@@ -139,9 +148,98 @@ describe("WorldView", () => {
     const toastText = await screen.findByText(new RegExp(`wants access to ${room.displayName}`));
     expect(toastText).toBeTruthy();
 
+    // finding 3: the request itself shows up in the security log, not just
+    // as a toast.
+    await screen.findByText(new RegExp(`${AGENT_A.name} requested access to ${room.displayName}`));
+
+    // finding 4: while the request is pending, the agent's status pill
+    // reads "awaiting access" instead of plain "roaming".
+    expect(screen.getByText("awaiting access")).toBeTruthy();
+
     fireEvent.click(screen.getByText("Grant"));
     await waitFor(() => {
       expect(screen.queryByText(new RegExp(`wants access to ${room.displayName}`))).toBeNull();
     });
+
+    // finding 3: the grant itself is also logged.
+    await screen.findByText(new RegExp(`granted ${AGENT_A.name} access to ${room.displayName}`));
+  });
+
+  it("claims a different desk for each of two same-room agents busy in the same poll (finding 1)", async () => {
+    const AGENT_A0: Agent = { ...AGENT_A, id: "agent-a0", name: "Robot A0" };
+    const AGENT_A2: Agent = { ...AGENT_A, id: "agent-a2", name: "Robot A2" };
+    const room0 = agentAssignedRoom(AGENT_A0.id, AGENT_A0.ownerId);
+    const room2 = agentAssignedRoom(AGENT_A2.id, AGENT_A2.ownerId);
+    // sanity check on the test setup itself: both ids must hash to the same
+    // owned room, or this test isn't exercising the collision at all.
+    expect(room0.id).toBe(room2.id);
+
+    issueCapability(AGENT_A0.id, room0.id);
+    issueCapability(AGENT_A2.id, room2.id);
+    vi.mocked(api.listAgents).mockResolvedValue({
+      agents: [{ ...AGENT_A0, status: "busy" }, { ...AGENT_A2, status: "busy" }],
+    });
+
+    render(<WorldView />);
+    fireEvent.click(await screen.findByText("Log in as User A"));
+    await screen.findByText("Robot A0");
+    await screen.findByText("Robot A2");
+
+    await waitFor(() => {
+      expect(vi.mocked(beginHeadingToDesk).mock.results.length).toBeGreaterThanOrEqual(2);
+    });
+
+    const claimedDeskIds = vi
+      .mocked(beginHeadingToDesk)
+      .mock.results.map((result) => result.value)
+      .filter((agent): agent is NonNullable<typeof agent> => agent != null)
+      .map((agent) => agent.occupiedDeskId);
+
+    // Both agents got a desk, and it's not the same one — before the fix,
+    // both calls saw the same stale "nothing occupied yet" snapshot and both
+    // picked desk 1.
+    expect(claimedDeskIds).toHaveLength(2);
+    expect(new Set(claimedDeskIds).size).toBe(2);
+  });
+
+  it("does not log a permit for the agent left waiting when every desk is full (finding 6)", async () => {
+    // agent-a0/a2/a4 all hash to the same owned room ("billing", 2 desks) —
+    // see the hash table derived in the finding-1 test above.
+    const A0: Agent = { ...AGENT_A, id: "agent-a0", name: "Robot A0" };
+    const A2: Agent = { ...AGENT_A, id: "agent-a2", name: "Robot A2" };
+    const A4: Agent = { ...AGENT_A, id: "agent-a4", name: "Robot A4" };
+    const room = agentAssignedRoom(A0.id, A0.ownerId);
+    expect(agentAssignedRoom(A2.id, A2.ownerId).id).toBe(room.id);
+    expect(agentAssignedRoom(A4.id, A4.ownerId).id).toBe(room.id);
+    expect(room.deskIds).toHaveLength(2);
+
+    issueCapability(A0.id, room.id);
+    issueCapability(A2.id, room.id);
+    issueCapability(A4.id, room.id);
+    vi.mocked(api.listAgents).mockResolvedValue({
+      agents: [
+        { ...A0, status: "busy" },
+        { ...A2, status: "busy" },
+        { ...A4, status: "busy" },
+      ],
+    });
+
+    render(<WorldView />);
+    fireEvent.click(await screen.findByText("Log in as User A"));
+    await screen.findByText("Robot A0");
+    await screen.findByText("Robot A2");
+    await screen.findByText("Robot A4");
+
+    // Both desks get claimed (2 successful calls); the third agent's call
+    // returns null and must not produce a third "permit" log line.
+    await waitFor(() => {
+      const successes = vi
+        .mocked(beginHeadingToDesk)
+        .mock.results.filter((result) => result.value != null);
+      expect(successes.length).toBe(2);
+    });
+
+    const permitEntries = screen.getAllByText(new RegExp(`${room.displayName}: permit`));
+    expect(permitEntries).toHaveLength(2);
   });
 });

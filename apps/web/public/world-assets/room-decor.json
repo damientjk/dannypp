@@ -24,6 +24,36 @@
       "image": "decor/auth-module/plant.png",
       "x": 64,
       "y": 160
+    },
+    {
+      "image": "decor/analytics/trophy-left.png",
+      "x": 448,
+      "y": 32
+    },
+    {
+      "image": "decor/analytics/trophy-right.png",
+      "x": 640,
+      "y": 32
+    },
+    {
+      "image": "decor/analytics/ping-pong.png",
+      "x": 512,
+      "y": 96
+    },
+    {
+      "image": "decor/analytics/seat.png",
+      "x": 448,
+      "y": 128
+    },
+    {
+      "image": "decor/analytics/pennant.png",
+      "x": 448,
+      "y": 160
+    },
+    {
+      "image": "decor/analytics/plant.png",
+      "x": 640,
+      "y": 160
     }
   ],
   "equipment": [

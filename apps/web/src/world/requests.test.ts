@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  clearDeniedForAgent,
   hasPendingRequest,
+  markDenied,
   pendingRequestsFor,
   queueRequest,
   resetRequests,
@@ -62,5 +64,35 @@ describe("requests", () => {
     resolveRequest(request!.id);
     expect(hasPendingRequest("agent-1", "auth-module")).toBe(false);
     expect(pendingRequestsFor("user-a")).toEqual([]);
+  });
+
+  it("does not re-queue a pair that was denied, until the denied mark is cleared", () => {
+    const request = queueRequest({
+      agentId: "agent-1",
+      agentName: "Robot A",
+      roomId: "auth-module",
+      roomOwnerId: "user-a",
+    });
+    resolveRequest(request!.id);
+    markDenied("agent-1", "auth-module");
+
+    const reQueued = queueRequest({
+      agentId: "agent-1",
+      agentName: "Robot A",
+      roomId: "auth-module",
+      roomOwnerId: "user-a",
+    });
+    expect(reQueued).toBeNull();
+
+    // simulate the agent's task cycle ending
+    clearDeniedForAgent("agent-1");
+
+    const afterClear = queueRequest({
+      agentId: "agent-1",
+      agentName: "Robot A",
+      roomId: "auth-module",
+      roomOwnerId: "user-a",
+    });
+    expect(afterClear).not.toBeNull();
   });
 });

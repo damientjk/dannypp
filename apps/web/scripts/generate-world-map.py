@@ -33,7 +33,7 @@ ROOM_WIDTH, ROOM_HEIGHT = 9, 7
 GID_BLANK = 0
 GID_HALLWAY = 1
 GID_AUTH_MODULE = 2
-GID_KITCHEN = 3
+GID_ANALYTICS = 3
 GID_DATABASE = 4
 GID_BILLING = 5
 GID_LIVING_ROOM = 6
@@ -47,7 +47,7 @@ GID_PLANT = 13
 
 ROOMS = [
     dict(id="auth-module", floor=GID_AUTH_MODULE, owner="user-a", row="top", x0=0),
-    dict(id="kitchen", floor=GID_KITCHEN, owner=None, row="top", x0=13),
+    dict(id="analytics", floor=GID_ANALYTICS, owner="user-a", row="top", x0=13),
     dict(id="database", floor=GID_DATABASE, owner="user-b", row="top", x0=26),
     dict(id="billing", floor=GID_BILLING, owner="user-a", row="bottom", x0=0),
     dict(id="living-room", floor=GID_LIVING_ROOM, owner=None, row="bottom", x0=13),

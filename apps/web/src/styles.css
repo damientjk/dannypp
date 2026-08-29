@@ -1739,3 +1739,182 @@ textarea:focus {
   font-size: 10px;
   line-height: 1.8;
 }
+
+/* --- Agent colour coding --------------------------------------------- */
+
+/* The roster avatar and the log dot both take their colour inline from
+   cssColorForAgent(), so an agent reads the same in the panel as on the map. */
+.log-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.world-request-toast .log-dot {
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* --- Keycard wall ----------------------------------------------------- */
+
+.keycard-wall {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.keycard {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 7px 10px 7px 0;
+  border-radius: 8px;
+  border: 1px solid var(--w-line, #2b3245);
+  background: var(--w-surface-2, #1e2333);
+  overflow: hidden;
+}
+
+.keycard-stripe {
+  width: 4px;
+  flex: none;
+  background: var(--w-line, #2b3245);
+}
+
+.keycard-body {
+  display: grid;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.keycard-room {
+  font-size: 12px;
+  color: var(--w-text, #e7eaf3);
+}
+
+.keycard-state {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--w-muted, #8b93a9);
+}
+
+.keycard-mark {
+  align-self: center;
+  font-size: 13px;
+  color: var(--w-muted, #8b93a9);
+}
+
+.keycard-held .keycard-room {
+  font-weight: 600;
+}
+
+.keycard-held .keycard-state,
+.keycard-held .keycard-mark {
+  color: var(--w-permit, #57c785);
+}
+
+.keycard-missing {
+  opacity: 0.75;
+}
+
+/* A room owned by somebody else is not a "not yet" — it is a "never, by you". */
+.keycard-foreign {
+  border-style: dashed;
+  opacity: 0.6;
+}
+
+.keycard-foreign .keycard-state,
+.keycard-foreign .keycard-mark {
+  color: var(--w-deny, #e2687a);
+}
+
+/* --- Grant / deny confirmation --------------------------------------- */
+
+.world-request-confirm {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--w-line, #2b3245);
+}
+
+.world-request-question {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--w-muted, #8b93a9);
+}
+
+.world-request-actions .confirm-grant {
+  border-color: rgba(87, 199, 133, 0.5);
+  color: var(--w-permit, #57c785);
+}
+
+.world-request-actions .confirm-deny {
+  border-color: rgba(226, 104, 122, 0.5);
+  color: var(--w-deny, #e2687a);
+}
+
+/* --- Request toast buttons ------------------------------------------- */
+
+/* These had no background of their own, so they fell back to the browser's
+   light default button face while `button { color: inherit }` handed them the
+   dark theme's pale ink — pale text on a pale box, i.e. an unreadable blank
+   button. Every state below is stated explicitly for that reason. */
+.world-request-actions button {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--ink);
+  background: #2a2822;
+  border: 1px solid var(--line);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.world-request-actions button:hover {
+  background: #35322a;
+  border-color: var(--muted);
+}
+
+.world-request-actions button:focus-visible {
+  outline: 2px solid var(--purple-dark);
+  outline-offset: 2px;
+}
+
+.world-request-actions .confirm-grant {
+  color: var(--green);
+  border-color: var(--green);
+  background: rgba(76, 185, 143, 0.14);
+}
+
+.world-request-actions .confirm-grant:hover {
+  background: rgba(76, 185, 143, 0.24);
+}
+
+.world-request-actions .confirm-deny {
+  color: var(--red);
+  border-color: var(--red);
+  background: rgba(224, 122, 116, 0.14);
+}
+
+.world-request-actions .confirm-deny:hover {
+  background: rgba(224, 122, 116, 0.24);
+}
+
+/* The toast body sits on --paper; make sure its copy uses the theme ink
+   rather than inheriting whatever the surrounding surface had. */
+.world-request-toast p {
+  color: var(--ink);
+}
+
+.world-request-question {
+  color: var(--muted);
+}

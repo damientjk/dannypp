@@ -22,13 +22,17 @@ import {
   queueRequest,
   resolveRequest,
 } from "./requests";
-import { roomById } from "./resources";
+import { FILE_ROOMS, roomById, roomForTask } from "./resources";
+import { cssColorForAgent } from "./agentAppearance";
 import type { LogEntry, WorldAgent } from "./types";
 
-const TEST_USERS = [
-  { userId: "user-a", password: "demo-a", label: "Log in as User A" },
-  { userId: "user-b", password: "demo-b", label: "Log in as User B" },
-];
+/**
+ * Every Agent in this world belongs to one human: the person who created them.
+ * Other owners still exist as *resource* owners (see FILE_ROOMS) — that is what
+ * keeps "an Agent may not touch another owner's room" demonstrable — but there
+ * is no second signed-in identity to choose between.
+ */
+const OWNER = { userId: "user-a", password: "demo-a", label: "Enter the world" };
 
 const AGENT_POLL_MS = 3000;
 
@@ -63,6 +67,11 @@ export function WorldView() {
   const [mapRenderer, setMapRenderer] = useState<TiledMapRenderer | null>(null);
   const [, setRequestVersion] = useState(0);
   const [roaming, setRoaming] = useState(true);
+  // A grant/deny is a permission change, so it takes two deliberate clicks:
+  // the first only arms the decision, the second commits it.
+  const [pendingDecision, setPendingDecision] = useState<
+    { requestId: string; action: "grant" | "deny" } | null
+  >(null);
   const selectedIdRef = useRef<string | null>(null);
   selectedIdRef.current = selectedId;
   const worldAgentsRef = useRef<WorldAgent[]>([]);
@@ -166,8 +175,20 @@ export function WorldView() {
 
         const isBusy = agent.status === "busy";
         if (isBusy && worldAgent.behaviorMode === "roaming") {
-          if (hasPendingRequest(agent.id, worldAgent.assignedRoomId)) continue;
-          const room = roomById(worldAgent.assignedRoomId);
+          // Where the Agent goes is decided by the task it was handed, not by
+          // a hash — which is also how it can end up at a folder its owner
+          // does not own. Resolution is deliberately ownership-blind; the
+          // guard below is the thing that refuses.
+          const room = roomForTask(await activePromptFor(agent.id), agent);
+          if (!room) continue;
+          if (hasPendingRequest(agent.id, room.id)) continue;
+          if (room.id !== worldAgent.assignedRoomId) {
+            setWorldAgents((current) =>
+              current.map((wa) =>
+                wa.agentId === agent.id ? { ...wa, assignedRoomId: room.id } : wa,
+              ),
+            );
+          }
           const requestId = newId();
           const request: PolicyRequestLike = {
             principal: {
@@ -198,6 +219,7 @@ export function WorldView() {
               setEvents((current) => [
                 {
                   id: requestId,
+                  agentId: agent.id,
                   category: "permit",
                   message: `${agent.name} → ${room.displayName}: permit (${decision.reason})`,
                   timestamp: decision.decidedAt,
@@ -218,12 +240,14 @@ export function WorldView() {
               setEvents((current) => [
                 {
                   id: requestId,
+                  agentId: agent.id,
                   category: "deny",
                   message: `${agent.name} → ${room.displayName}: deny (${decision.reason})`,
                   timestamp: decision.decidedAt,
                 },
                 {
                   id: newId(),
+                  agentId: agent.id,
                   category: "requested",
                   message: `${agent.name} requested access to ${room.displayName}`,
                   timestamp: decision.decidedAt,
@@ -288,13 +312,29 @@ export function WorldView() {
       .catch(() => {});
   }, [selectedId, selectedAgentStatus]);
 
+  /** Prompt of the run this agent is currently on, or null if it has none. */
+  const activePromptFor = useCallback(async (agentId: string): Promise<string | null> => {
+    try {
+      const { runs: agentRuns } = await api.runs(agentId);
+      const active = agentRuns.find(
+        (run) => run.status === "running" || run.status === "queued",
+      );
+      return active?.prompt ?? null;
+    } catch {
+      // A failed lookup just means we fall back to the agent's home room.
+      return null;
+    }
+  }, []);
+
   const grantRequest = useCallback((request: AccessRequest) => {
+    setPendingDecision(null);
     issueCapability(request.agentId, request.roomId);
     resolveRequest(request.id);
     setRequestVersion((v) => v + 1);
     setEvents((current) => [
       {
         id: newId(),
+        agentId: request.agentId,
         category: "granted",
         message: `${principal?.displayName ?? "Owner"} granted ${request.agentName} access to ${roomById(request.roomId).displayName}`,
         timestamp: new Date().toISOString(),
@@ -304,12 +344,14 @@ export function WorldView() {
   }, [principal]);
 
   const denyRequest = useCallback((request: AccessRequest) => {
+    setPendingDecision(null);
     resolveRequest(request.id);
     markDenied(request.agentId, request.roomId);
     setRequestVersion((v) => v + 1);
     setEvents((current) => [
       {
         id: newId(),
+        agentId: request.agentId,
         category: "denied",
         message: `${principal?.displayName ?? "Owner"} denied ${request.agentName} access to ${roomById(request.roomId).displayName}`,
         timestamp: new Date().toISOString(),
@@ -324,27 +366,24 @@ export function WorldView() {
         <div className="world-title-box">
           <p className="world-eyebrow">SIGN IN</p>
           <h2 className="world-title">Agent Pixel World</h2>
-          <p className="world-subtitle">log in to grant or receive access requests for your rooms</p>
+          <p className="world-subtitle">sign in to grant or refuse access requests from your agents</p>
         </div>
         <div className="world-select-grid">
-          {TEST_USERS.map((user, index) => (
-            <button
-              key={user.userId}
-              className={"world-select-card " + (index === 0 ? "world-select-card-a" : "world-select-card-b")}
-              onClick={() => login(user.userId, user.password)}
-              disabled={!mapRenderer}
-            >
-              <span className="world-select-portrait" aria-hidden="true">
-                <span className="world-select-eye" />
-                <span className="world-select-eye" />
-                <span className="world-select-mouth" />
-              </span>
-              <span className="world-select-label">{user.label}</span>
-              <span className="world-select-cursor" aria-hidden="true">
-                ►
-              </span>
-            </button>
-          ))}
+          <button
+            className="world-select-card world-select-card-a"
+            onClick={() => login(OWNER.userId, OWNER.password)}
+            disabled={!mapRenderer}
+          >
+            <span className="world-select-portrait" aria-hidden="true">
+              <span className="world-select-eye" />
+              <span className="world-select-eye" />
+              <span className="world-select-mouth" />
+            </span>
+            <span className="world-select-label">{OWNER.label}</span>
+            <span className="world-select-cursor" aria-hidden="true">
+              ►
+            </span>
+          </button>
         </div>
         {error && <p className="world-title-error">▋ {error}</p>}
       </div>
@@ -357,6 +396,9 @@ export function WorldView() {
   const selectedGrantedRooms = selectedAgent ? grantedRoomsFor(selectedAgent.id) : [];
   const activeRun = runs.find((run) => run.status === "running" || run.status === "queued") ?? null;
   const myRequests = pendingRequestsFor(principal.id);
+  // Attempts the policy engine refused, counted over the whole session. NOT a
+  // live "how many agents are blocked right now": granting access does not
+  // decrement it, and an owner's own refusal is category "denied", not "deny".
   const blockedCount = events.filter((event) => event.category === "deny").length;
 
   // Revokes every room this agent currently holds, in one action — the
@@ -368,6 +410,7 @@ export function WorldView() {
     setEvents((current) => [
       {
         id: newId(),
+        agentId: selectedAgent.id,
         category: "denied",
         message: `${principal.displayName} shredded ${selectedAgent.name}'s keycard (${selectedGrantedRooms.length} room${selectedGrantedRooms.length === 1 ? "" : "s"} revoked)`,
         timestamp: new Date().toISOString(),
@@ -379,7 +422,12 @@ export function WorldView() {
   return (
     <div className="world-layout">
       <div className="world-canvas-wrap">
-        <WorldCanvas agents={worldAgents} onFrame={setWorldAgents} paused={!roaming} />
+        <WorldCanvas
+          agents={worldAgents}
+          onFrame={setWorldAgents}
+          paused={!roaming}
+          viewerOwnerId={principal.id}
+        />
       </div>
       <aside className="world-panel">
         <header className="panel-block panel-identity">
@@ -414,7 +462,11 @@ export function WorldView() {
                     className={agent.id === selectedId ? "selected" : ""}
                     onClick={() => setSelectedId((current) => (current === agent.id ? null : agent.id))}
                   >
-                    <span className="world-agent-avatar" aria-hidden="true">
+                    <span
+                      className="world-agent-avatar"
+                      style={{ background: cssColorForAgent(agent.id) }}
+                      aria-hidden="true"
+                    >
                       {agent.name.charAt(0)}
                     </span>
                     <span className="roster-name">{agent.name}</span>
@@ -436,16 +488,37 @@ export function WorldView() {
             <p className="world-detail-task">
               {selectedAgent.status === "busy" && activeRun ? activeRun.prompt : "Idle"}
             </p>
-            <h5>Granted rooms</h5>
-            {selectedGrantedRooms.length === 0 ? (
-              <p className="world-detail-empty">None yet</p>
-            ) : (
-              <ul className="world-granted-rooms">
-                {selectedGrantedRooms.map((roomId) => (
-                  <li key={roomId}>{roomById(roomId).displayName}</li>
-                ))}
-              </ul>
-            )}
+            <h5>Keycards</h5>
+            {/* Every protected room, not just the granted ones — the point is
+                to show at a glance which rooms this agent may NOT enter. */}
+            <ul className="keycard-wall">
+              {FILE_ROOMS.filter((room) => room.requiresPermission).map((room) => {
+                const held = selectedGrantedRooms.includes(room.id);
+                const foreign = room.ownerId !== principal.id;
+                const state = foreign ? "foreign" : held ? "held" : "missing";
+                const stateLabel = foreign
+                  ? "another owner"
+                  : held
+                    ? "keycard held"
+                    : "no keycard";
+                return (
+                  <li key={room.id} className={"keycard keycard-" + state}>
+                    <span
+                      className="keycard-stripe"
+                      style={held ? { background: cssColorForAgent(selectedAgent.id) } : undefined}
+                      aria-hidden="true"
+                    />
+                    <span className="keycard-body">
+                      <span className="keycard-room">{room.displayName}</span>
+                      <span className="keycard-state">{stateLabel}</span>
+                    </span>
+                    <span className="keycard-mark" aria-hidden="true">
+                      {foreign ? "✕" : held ? "✓" : "–"}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
             <button className="revoke-button" onClick={shredKeycard} disabled={selectedGrantedRooms.length === 0}>
               Shred this agent&apos;s keycard
             </button>
@@ -457,7 +530,7 @@ export function WorldView() {
                 <strong>{agents.length}</strong> agents
               </span>
               <span className={blockedCount > 0 ? "stat-deny" : ""}>
-                <strong>{blockedCount}</strong> blocked
+                <strong>{blockedCount}</strong> blocked attempts
               </span>
             </div>
             <p className="world-detail-empty">Select an agent to view its permissions and traits.</p>
@@ -476,6 +549,13 @@ export function WorldView() {
               {events.map((event) => (
                 <li key={event.id} className={"log-row effect-" + event.category}>
                   <span className="log-head">
+                    {event.agentId && (
+                      <span
+                        className="log-dot"
+                        style={{ background: cssColorForAgent(event.agentId) }}
+                        aria-hidden="true"
+                      />
+                    )}
                     <span className="log-time">{formatDecisionTime(event.timestamp)}</span>
                     <span className={"log-badge log-badge-" + event.category}>
                       {LOG_BADGE_LABELS[event.category]}
@@ -489,17 +569,55 @@ export function WorldView() {
         </section>
       </aside>
       <div className="world-request-toasts">
-        {myRequests.map((request) => (
-          <div key={request.id} className="world-request-toast">
-            <p>
-              {request.agentName} wants access to {roomById(request.roomId).displayName}
-            </p>
-            <div className="world-request-actions">
-              <button onClick={() => grantRequest(request)}>Grant</button>
-              <button onClick={() => denyRequest(request)}>Deny</button>
+        {myRequests.map((request) => {
+          const armed = pendingDecision?.requestId === request.id ? pendingDecision.action : null;
+          const roomName = roomById(request.roomId).displayName;
+          return (
+            <div key={request.id} className="world-request-toast">
+              <p>
+                <span
+                  className="log-dot"
+                  style={{ background: cssColorForAgent(request.agentId) }}
+                  aria-hidden="true"
+                />
+                {request.agentName} wants access to {roomName}
+              </p>
+              {armed ? (
+                <div className="world-request-confirm">
+                  <p className="world-request-question">
+                    {armed === "grant"
+                      ? `Give ${request.agentName} a keycard for ${roomName}?`
+                      : `Refuse ${request.agentName} access to ${roomName}?`}
+                  </p>
+                  <div className="world-request-actions">
+                    <button
+                      className={armed === "grant" ? "confirm-grant" : "confirm-deny"}
+                      onClick={() =>
+                        armed === "grant" ? grantRequest(request) : denyRequest(request)
+                      }
+                    >
+                      {armed === "grant" ? "Confirm grant" : "Confirm deny"}
+                    </button>
+                    <button onClick={() => setPendingDecision(null)}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="world-request-actions">
+                  <button
+                    onClick={() => setPendingDecision({ requestId: request.id, action: "grant" })}
+                  >
+                    Grant
+                  </button>
+                  <button
+                    onClick={() => setPendingDecision({ requestId: request.id, action: "deny" })}
+                  >
+                    Deny
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

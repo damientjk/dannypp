@@ -32,4 +32,6 @@ export interface LogEntry {
   message: string;
   category: LogCategory;
   timestamp: string;
+  /** Agent the entry is about, so the row can carry that agent's colour. */
+  agentId?: string;
 }

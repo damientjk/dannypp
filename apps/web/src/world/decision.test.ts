@@ -31,7 +31,7 @@ describe("decideRoomEntry", () => {
   });
 
   it("permits entry to a common room with no capability at all", async () => {
-    const decision = await decideRoomEntry(requestFor("agent-1", "user-a", "kitchen"));
+    const decision = await decideRoomEntry(requestFor("agent-1", "user-a", "living-room"));
     expect(decision.effect).toBe("permit");
   });
 

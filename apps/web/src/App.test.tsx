@@ -109,7 +109,7 @@ describe("App view toggle", () => {
     await screen.findByText("Create Agent");
 
     fireEvent.click(screen.getByText("World"));
-    await screen.findByText("Log in as User A");
+    await screen.findByText("Enter the world");
 
     fireEvent.click(screen.getByText("← Dashboard"));
     await screen.findByText("Create Agent");

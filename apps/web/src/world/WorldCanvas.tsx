@@ -154,7 +154,10 @@ export function WorldCanvas({
 
         const equipmentContainers: Container[] = roomDecor.equipment.map((entry) => {
           const es = new EquipmentSprite(textureByPath.get(entry.image)!, entry.frames);
-          es.setPosition(entry.x, entry.y);
+          // +32 shifts the reference point from the tile's top edge to its
+          // bottom edge, matching EquipmentSprite's bottom-left anchor --
+          // same convention as the agent.y + 32 offset just above.
+          es.setPosition(entry.x, entry.y + 32);
           if (entry.spawnPoint === null) es.setWorking(true); // ambient: always animating
           else equipmentSprites.set(entry.spawnPoint, es);
           return es.container;

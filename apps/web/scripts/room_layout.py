@@ -76,19 +76,32 @@ EQUIPMENT = {
 # found via scripts/asset_contact_sheet.py, since the Theme_Sorter_Singles
 # folders carry no metadata beyond a sequential number.
 DECOR = {
+    # bookshelf-left/right and reading-desk-1/2 are cropped straight out of
+    # the category's full (non-Singles) composite sheet -- the
+    # Theme_Sorter_Singles_32x32/5_Classroom_and_Library_Singles_32x32/
+    # folder the design spec assumed turned out to be a band/music
+    # classroom set with no bookshelf, desk, or chair singles at all (see
+    # task-7-report.md). Both desk crops already include their integrated
+    # bench seat, so no separate chair item is needed here.
     "auth-module": [
-        dict(col=1, row=0, dest="bookshelf-left.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_120.png"),
-        dict(col=7, row=0, dest="bookshelf-right.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_121.png"),
+        # col=0/col=6, not the original col=1/col=7: this bookshelf is a
+        # 3x3-tile object (the Singles-folder substitute it replaces was
+        # only 1x2), so the old columns either overlapped
+        # reading-desk-1 at (3,2) or ran past the interior's right edge
+        # (col 8 max) into the wall. Corner placement flanking the desks
+        # avoids both and reads as a reading nook between two shelves.
+        dict(col=0, row=0, dest="bookshelf-left.png",
+             src="1_Interiors/32x32/Theme_Sorter_32x32/5_Classroom_and_library_32x32.png",
+             crop=(0, 416, 96, 512)),
+        dict(col=6, row=0, dest="bookshelf-right.png",
+             src="1_Interiors/32x32/Theme_Sorter_32x32/5_Classroom_and_library_32x32.png",
+             crop=(0, 416, 96, 512)),
         dict(col=3, row=2, dest="reading-desk-1.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_46.png"),
+             src="1_Interiors/32x32/Theme_Sorter_32x32/5_Classroom_and_library_32x32.png",
+             crop=(160, 32, 192, 96)),
         dict(col=5, row=2, dest="reading-desk-2.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_47.png"),
-        dict(col=3, row=3, dest="chair-1.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_33.png"),
-        dict(col=5, row=3, dest="chair-2.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_33.png"),
+             src="1_Interiors/32x32/Theme_Sorter_32x32/5_Classroom_and_library_32x32.png",
+             crop=(64, 32, 96, 96)),
         dict(col=1, row=4, dest="plant.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_16.png"),
     ],

@@ -2,12 +2,12 @@
   "decor": [
     {
       "image": "decor/auth-module/bookshelf-left.png",
-      "x": 64,
+      "x": 32,
       "y": 32
     },
     {
       "image": "decor/auth-module/bookshelf-right.png",
-      "x": 256,
+      "x": 224,
       "y": 32
     },
     {
@@ -19,16 +19,6 @@
       "image": "decor/auth-module/reading-desk-2.png",
       "x": 192,
       "y": 96
-    },
-    {
-      "image": "decor/auth-module/chair-1.png",
-      "x": 128,
-      "y": 128
-    },
-    {
-      "image": "decor/auth-module/chair-2.png",
-      "x": 192,
-      "y": 128
     },
     {
       "image": "decor/auth-module/plant.png",

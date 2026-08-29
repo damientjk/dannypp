@@ -33,11 +33,15 @@ def room_origin(room):
     return x0 + 1, y0 + 1
 
 
-def copy_asset(src_rel: str, dest_rel: str) -> None:
+def copy_asset(src_rel: str, dest_rel: str, crop: tuple[int, int, int, int] | None = None) -> None:
     src = MODERNINTERIORS / src_rel
     dest = WORLD_ASSETS / dest_rel
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(src, dest)
+    if crop is None:
+        shutil.copyfile(src, dest)
+    else:
+        from PIL import Image
+        Image.open(src).convert("RGBA").crop(crop).save(dest)
 
 
 def main() -> None:
@@ -50,7 +54,7 @@ def main() -> None:
 
         for item in DECOR.get(room_id, []):
             dest_rel = f"decor/{room_id}/{item['dest']}"
-            copy_asset(item["src"], dest_rel)
+            copy_asset(item["src"], dest_rel, item.get("crop"))
             decor_entries.append({
                 "image": dest_rel,
                 "x": (ox + item["col"]) * TILE,

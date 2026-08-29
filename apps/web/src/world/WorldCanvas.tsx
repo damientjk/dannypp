@@ -11,16 +11,20 @@ import type { WorldAgent } from "./types";
 export interface WorldCanvasProps {
   agents: WorldAgent[];
   onFrame: (agents: WorldAgent[]) => void;
+  /** Freezes movement in place (sprites stay put) without tearing the loop down. */
+  paused?: boolean;
 }
 
-export function WorldCanvas({ agents, onFrame }: WorldCanvasProps) {
+export function WorldCanvas({ agents, onFrame, paused = false }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const agentsRef = useRef(agents);
   const onFrameRef = useRef(onFrame);
+  const pausedRef = useRef(paused);
   const spritesRef = useRef(new Map<string, CharacterSprite>());
 
   agentsRef.current = agents;
   onFrameRef.current = onFrame;
+  pausedRef.current = paused;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -38,10 +42,10 @@ export function WorldCanvas({ agents, onFrame }: WorldCanvasProps) {
       const deltaMs = time - last;
       lastTime = time;
 
-      const next = agentsRef.current.map((agent) =>
-        advanceBehavior(settleAgent(tickAgent(agent, deltaMs)), renderer!),
-      );
-      onFrameRef.current(next);
+      const next = pausedRef.current
+        ? agentsRef.current
+        : agentsRef.current.map((agent) => advanceBehavior(settleAgent(tickAgent(agent, deltaMs)), renderer!));
+      if (!pausedRef.current) onFrameRef.current(next);
 
       const seen = new Set<string>();
       for (const agent of next) {
@@ -85,6 +89,11 @@ export function WorldCanvas({ agents, onFrame }: WorldCanvasProps) {
           height: renderer.height * renderer.tileSize,
           backgroundAlpha: 0,
           antialias: false,
+          // Without these, Pixi sizes the canvas's backing store for a
+          // HiDPI display but leaves its CSS box at that same pixel count,
+          // so on a retina screen the map renders at 2x its intended size.
+          resolution: window.devicePixelRatio || 1,
+          autoDensity: true,
         });
         if (disposed) {
           app.destroy();

@@ -32,6 +32,25 @@ const TEST_USERS = [
 
 const AGENT_POLL_MS = 3000;
 
+/** Wall-clock time of the decision, so the log reads as an audit trail. */
+function formatDecisionTime(iso: string): string {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return "--:--:--";
+  return parsed.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+const LOG_BADGE_LABELS: Record<LogEntry["category"], string> = {
+  permit: "ALLOWED",
+  deny: "BLOCKED",
+  requested: "REQUESTED",
+  granted: "GRANTED",
+  denied: "DENIED",
+};
+
 export function WorldView() {
   const [principal, setPrincipal] = useState<HumanPrincipal | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -43,6 +62,7 @@ export function WorldView() {
   const [error, setError] = useState<string | null>(null);
   const [mapRenderer, setMapRenderer] = useState<TiledMapRenderer | null>(null);
   const [, setRequestVersion] = useState(0);
+  const [roaming, setRoaming] = useState(true);
   const selectedIdRef = useRef<string | null>(null);
   selectedIdRef.current = selectedId;
   const worldAgentsRef = useRef<WorldAgent[]>([]);
@@ -298,11 +318,6 @@ export function WorldView() {
     ]);
   }, [principal]);
 
-  const revokeRoom = useCallback((agentId: string, roomId: string) => {
-    revokeCapability(agentId, roomId);
-    setRequestVersion((v) => v + 1);
-  }, []);
-
   if (!principal) {
     return (
       <div className="world-login">
@@ -342,17 +357,79 @@ export function WorldView() {
   const selectedGrantedRooms = selectedAgent ? grantedRoomsFor(selectedAgent.id) : [];
   const activeRun = runs.find((run) => run.status === "running" || run.status === "queued") ?? null;
   const myRequests = pendingRequestsFor(principal.id);
+  const blockedCount = events.filter((event) => event.category === "deny").length;
+
+  // Revokes every room this agent currently holds, in one action — the
+  // detail panel just lists what it has, it never offers a per-room undo.
+  const shredKeycard = () => {
+    if (!selectedAgent || selectedGrantedRooms.length === 0) return;
+    for (const roomId of selectedGrantedRooms) revokeCapability(selectedAgent.id, roomId);
+    setRequestVersion((v) => v + 1);
+    setEvents((current) => [
+      {
+        id: newId(),
+        category: "denied",
+        message: `${principal.displayName} shredded ${selectedAgent.name}'s keycard (${selectedGrantedRooms.length} room${selectedGrantedRooms.length === 1 ? "" : "s"} revoked)`,
+        timestamp: new Date().toISOString(),
+      },
+      ...current,
+    ]);
+  };
 
   return (
     <div className="world-layout">
       <div className="world-canvas-wrap">
-        <WorldCanvas agents={worldAgents} onFrame={setWorldAgents} />
+        <WorldCanvas agents={worldAgents} onFrame={setWorldAgents} paused={!roaming} />
       </div>
       <aside className="world-panel">
-        <h3>{principal.displayName}</h3>
+        <header className="panel-block panel-identity">
+          <span className="panel-eyebrow">Signed in as</span>
+          <h3>{principal.displayName}</h3>
+        </header>
+
+        <section className="panel-block">
+          <div className="panel-head">
+            <h4>Agents</h4>
+            <button
+              className={"roam-toggle " + (roaming ? "roam-on" : "")}
+              onClick={() => setRoaming((value) => !value)}
+            >
+              {roaming ? "Pause roaming" : "Resume roaming"}
+            </button>
+          </div>
+          <ul className="world-roster">
+            {agents.map((agent) => {
+              const worldAgent = worldAgents.find((wa) => wa.agentId === agent.id);
+              const modeLabel =
+                worldAgent?.behaviorMode === "working"
+                  ? "working"
+                  : worldAgent?.behaviorMode === "heading-to-desk"
+                    ? "heading to desk"
+                    : worldAgent?.assignedRoomId && hasPendingRequest(agent.id, worldAgent.assignedRoomId)
+                      ? "awaiting access"
+                      : "roaming";
+              return (
+                <li key={agent.id}>
+                  <button
+                    className={agent.id === selectedId ? "selected" : ""}
+                    onClick={() => setSelectedId((current) => (current === agent.id ? null : agent.id))}
+                  >
+                    <span className="world-agent-avatar" aria-hidden="true">
+                      {agent.name.charAt(0)}
+                    </span>
+                    <span className="roster-name">{agent.name}</span>
+                    <span className="roster-state">{modeLabel}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
         {selectedAgent ? (
-          <div className="world-detail-panel">
+          <section className="panel-block world-detail-panel">
             <h4>{selectedAgent.name}</h4>
+            <p className="world-detail-role">{selectedAgent.description || "No description on file."}</p>
             <p className="world-detail-role">
               {selectedRoom ? `Works on: ${selectedRoom.displayName}` : "No assigned room"}
             </p>
@@ -365,26 +442,50 @@ export function WorldView() {
             ) : (
               <ul className="world-granted-rooms">
                 {selectedGrantedRooms.map((roomId) => (
-                  <li key={roomId}>
-                    {roomById(roomId).displayName}
-                    <button onClick={() => revokeRoom(selectedAgent.id, roomId)}>Revoke</button>
-                  </li>
+                  <li key={roomId}>{roomById(roomId).displayName}</li>
                 ))}
               </ul>
             )}
-          </div>
+            <button className="revoke-button" onClick={shredKeycard} disabled={selectedGrantedRooms.length === 0}>
+              Shred this agent&apos;s keycard
+            </button>
+          </section>
         ) : (
-          <p className="world-detail-empty">Select an agent below</p>
+          <section className="panel-block">
+            <div className="panel-stats">
+              <span>
+                <strong>{agents.length}</strong> agents
+              </span>
+              <span className={blockedCount > 0 ? "stat-deny" : ""}>
+                <strong>{blockedCount}</strong> blocked
+              </span>
+            </div>
+            <p className="world-detail-empty">Select an agent to view its permissions and traits.</p>
+          </section>
         )}
-        <section>
-          <h4>Security log</h4>
-          <ul>
-            {events.map((event) => (
-              <li key={event.id} className={"effect-" + event.category}>
-                {event.message}
-              </li>
-            ))}
-          </ul>
+
+        <section className="panel-block security-log">
+          <div className="panel-head">
+            <h4>Security log</h4>
+            <span className="panel-count">{events.length}</span>
+          </div>
+          {events.length === 0 ? (
+            <p className="security-log-empty">No access attempts yet.</p>
+          ) : (
+            <ul>
+              {events.map((event) => (
+                <li key={event.id} className={"log-row effect-" + event.category}>
+                  <span className="log-head">
+                    <span className="log-time">{formatDecisionTime(event.timestamp)}</span>
+                    <span className={"log-badge log-badge-" + event.category}>
+                      {LOG_BADGE_LABELS[event.category]}
+                    </span>
+                  </span>
+                  <span className="log-message">{event.message}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </aside>
       <div className="world-request-toasts">
@@ -399,32 +500,6 @@ export function WorldView() {
             </div>
           </div>
         ))}
-      </div>
-      <div className="world-agent-strip">
-        {agents.map((agent) => {
-          const worldAgent = worldAgents.find((wa) => wa.agentId === agent.id);
-          const modeLabel =
-            worldAgent?.behaviorMode === "working"
-              ? "working"
-              : worldAgent?.behaviorMode === "heading-to-desk"
-                ? "heading to desk"
-                : worldAgent?.assignedRoomId && hasPendingRequest(agent.id, worldAgent.assignedRoomId)
-                  ? "awaiting access"
-                  : "roaming";
-          return (
-            <button
-              key={agent.id}
-              className={"world-agent-card " + (agent.id === selectedId ? "selected" : "")}
-              onClick={() => setSelectedId(agent.id)}
-            >
-              <span className="world-agent-avatar" aria-hidden="true">
-                {agent.name.charAt(0)}
-              </span>
-              <span className="world-agent-name">{agent.name}</span>
-              <span className="world-agent-status-pill">{modeLabel}</span>
-            </button>
-          );
-        })}
       </div>
     </div>
   );

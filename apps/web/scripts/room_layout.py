@@ -76,7 +76,22 @@ EQUIPMENT = {
 # found via scripts/asset_contact_sheet.py, since the Theme_Sorter_Singles
 # folders carry no metadata beyond a sequential number.
 DECOR = {
-    "auth-module": [],
+    "auth-module": [
+        dict(col=1, row=0, dest="bookshelf-left.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_120.png"),
+        dict(col=7, row=0, dest="bookshelf-right.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_121.png"),
+        dict(col=3, row=2, dest="reading-desk-1.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_46.png"),
+        dict(col=5, row=2, dest="reading-desk-2.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_47.png"),
+        dict(col=3, row=3, dest="chair-1.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_33.png"),
+        dict(col=5, row=3, dest="chair-2.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_33.png"),
+        dict(col=1, row=4, dest="plant.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_16.png"),
+    ],
     "analytics": [],
     "database": [],
     "billing": [],
@@ -86,4 +101,7 @@ DECOR = {
 
 # Always-animating props not gated on any desk occupancy (col, row, dest,
 # src, frames, room_id). Empty until Task 7 adds Library's ambient candle.
-AMBIENT = []
+AMBIENT = [
+    dict(room_id="auth-module", col=7, row=5, dest="animated_wall_candle_32x32.png",
+         src="3_Animated_objects/32x32/spritesheets/animated_wall_candle_32x32.png", frames=3),
+]

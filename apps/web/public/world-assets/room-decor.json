@@ -1,5 +1,41 @@
 {
-  "decor": [],
+  "decor": [
+    {
+      "image": "decor/auth-module/bookshelf-left.png",
+      "x": 64,
+      "y": 32
+    },
+    {
+      "image": "decor/auth-module/bookshelf-right.png",
+      "x": 256,
+      "y": 32
+    },
+    {
+      "image": "decor/auth-module/reading-desk-1.png",
+      "x": 128,
+      "y": 96
+    },
+    {
+      "image": "decor/auth-module/reading-desk-2.png",
+      "x": 192,
+      "y": 96
+    },
+    {
+      "image": "decor/auth-module/chair-1.png",
+      "x": 128,
+      "y": 128
+    },
+    {
+      "image": "decor/auth-module/chair-2.png",
+      "x": 192,
+      "y": 128
+    },
+    {
+      "image": "decor/auth-module/plant.png",
+      "x": 64,
+      "y": 160
+    }
+  ],
   "equipment": [
     {
       "image": "equipment/animated_TV_reportage_32x32.png",
@@ -42,6 +78,13 @@
       "x": 992,
       "y": 512,
       "spawnPoint": "desk-deploy-config-2"
+    },
+    {
+      "image": "equipment/animated_wall_candle_32x32.png",
+      "frames": 3,
+      "x": 256,
+      "y": 192,
+      "spawnPoint": null
     }
   ]
 }

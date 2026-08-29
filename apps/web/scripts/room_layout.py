@@ -214,7 +214,39 @@ DECOR = {
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/8_Gym_Singles_32x32/Gym_Singles_32x32_195.png"),
     ],
     "living-room": [],
-    "deploy-config": [],
+    # 6_Music_and_Sport_Singles_32x32/ (same folder Task 8 searched) has no
+    # standalone stool/crate Singles file either -- it's the same
+    # never-split piano-stool row Task 8 already found and partly used
+    # (analytics/seat.png took the red-topped one at crop x144-177). The row
+    # has two other color variants at x16-49 (orange-trimmed legs) and
+    # x80-113 (plain grey legs), both confirmed via pixel bounding-box scan
+    # (34x26, identical shape to the already-shipped seat.png), so this room
+    # uses those two instead of reusing analytics' exact stool.
+    #
+    # Plants reuse the Living_Room_Singles_32x32 folder like every other
+    # room (auth-module, analytics, database all found their plant(s)
+    # there): _15 is a distinct succulent-in-a-pot (not previously used,
+    # for variety) and _16 is the round leafy plant auth-module/analytics
+    # already used (reused per the brief's "if convenient"). Both are
+    # 32x64 (1x2 tiles), so col=1/col=7, row=4 is the same flush-to-back-
+    # wall flanking placement every other room already settled on. Plant-
+    # right was moved off the brief's draft (7,1) to (7,4): at row=1 it
+    # would sit directly beside crate-2 (6,1), whose 34px-wide crop bleeds
+    # 2px past its own tile into col 7 -- the same clipping the analytics
+    # task's comment flagged as worth avoiding for a placed object, not just
+    # empty space.
+    "deploy-config": [
+        dict(col=2, row=2, dest="crate-1.png",
+             src="1_Interiors/32x32/Theme_Sorter_32x32/6_Music_and_sport_32x32.png",
+             crop=(16, 142, 50, 168)),
+        dict(col=6, row=1, dest="crate-2.png",
+             src="1_Interiors/32x32/Theme_Sorter_32x32/6_Music_and_sport_32x32.png",
+             crop=(80, 142, 114, 168)),
+        dict(col=1, row=4, dest="plant-left.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_15.png"),
+        dict(col=7, row=4, dest="plant-right.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_16.png"),
+    ],
 }
 
 # Always-animating props not gated on any desk occupancy (col, row, dest,

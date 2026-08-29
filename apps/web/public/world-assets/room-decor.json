@@ -109,6 +109,26 @@
       "image": "decor/billing/yoga-mat.png",
       "x": 256,
       "y": 448
+    },
+    {
+      "image": "decor/deploy-config/crate-1.png",
+      "x": 864,
+      "y": 480
+    },
+    {
+      "image": "decor/deploy-config/crate-2.png",
+      "x": 992,
+      "y": 448
+    },
+    {
+      "image": "decor/deploy-config/plant-left.png",
+      "x": 832,
+      "y": 544
+    },
+    {
+      "image": "decor/deploy-config/plant-right.png",
+      "x": 1024,
+      "y": 544
     }
   ],
   "equipment": [

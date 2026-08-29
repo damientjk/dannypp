@@ -2,6 +2,7 @@ import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { WorldAgent } from "./types";
 import { WorldCanvas } from "./WorldCanvas";
+import { loadRoomDecor } from "./roomDecor";
 
 vi.mock("pixi.js", async () => {
   const actual = await vi.importActual<typeof import("pixi.js")>("pixi.js");
@@ -35,9 +36,14 @@ vi.mock("./engineMap", async () => {
       tileToPixel: (x: number, y: number) => ({ x: x * 32, y: y * 32 }),
       pixelToTile: (x: number, y: number) => ({ x: Math.floor(x / 32), y: Math.floor(y / 32) }),
       isWalkable: () => true,
+      addDecorLayer: vi.fn(),
     }),
   };
 });
+
+vi.mock("./roomDecor", () => ({
+  loadRoomDecor: vi.fn().mockResolvedValue({ decor: [], equipment: [] }),
+}));
 
 function agent(overrides: Partial<WorldAgent> = {}): WorldAgent {
   return {
@@ -86,6 +92,28 @@ describe("WorldCanvas", () => {
     // An agent with progress:1 and no path, left alone for several frames,
     // should have been given a fresh roam path by advanceBehavior.
     expect(last[0].path.length).toBeGreaterThan(0);
+
+    unmount();
+  });
+
+  it("loads equipment entries and keeps ticking without throwing", async () => {
+    vi.mocked(loadRoomDecor).mockResolvedValueOnce({
+      decor: [{ image: "decor/auth-module/bookshelf.png", x: 64, y: 32 }],
+      equipment: [
+        {
+          image: "equipment/animated_punching_bag_left_32x32.png",
+          frames: 12,
+          x: 128,
+          y: 96,
+          spawnPoint: "desk-billing-1",
+        },
+      ],
+    });
+    const onFrame = vi.fn();
+    const { unmount } = render(<WorldCanvas agents={[agent()]} onFrame={onFrame} />);
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(onFrame).toHaveBeenCalled();
 
     unmount();
   });

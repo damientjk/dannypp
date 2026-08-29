@@ -47,3 +47,43 @@ DESKS = {
     "billing": [(3, 3), (5, 3)],
     "deploy-config": [(2, 4), (6, 3)],
 }
+
+# Which desk index (0-based) in DESKS gets an animated equipment sprite, and
+# its spritesheet (filename only, under
+# moderninteriors-win/3_Animated_objects/32x32/spritesheets/) + row-0 frame
+# count (verified via PNG dimensions during planning: width/32).
+#
+# Desks not listed here still work exactly the same in agentSim.ts --
+# behaviorMode still flips to "working" -- they just don't get an animated
+# prop. No plain "sit and use" equivalent exists in the pack for
+# analytics-desk-1 (ping-pong table) or database-desk-1 (chabudai table);
+# auth-module's two reading desks are the disclosed Library gap from the
+# design spec §5 (no non-Halloween reading/book animation exists at all).
+# Those three become static DECOR entries instead -- see Tasks 7, 8, 9.
+EQUIPMENT = {
+    ("billing", 0): ("animated_punching_bag_left_32x32.png", 12),
+    ("billing", 1): ("animated_treadmill_32x32.png", 9),
+    ("analytics", 1): ("animated_TV_reportage_32x32.png", 72),
+    ("database", 1): ("animated_incense_burner_4_10_loop_32x32.png", 13),
+    ("deploy-config", 0): ("animated_wall_piano_32x32.png", 16),
+    ("deploy-config", 1): ("animated_amplifier_32x32.png", 3),
+}
+
+# Static (non-animated) decor per room. Each entry: col, row
+# (interior-relative, 0-8 / 0-5), dest (filename under
+# decor/<room-id>/), src (path relative to moderninteriors-win/). Filled in
+# incrementally, one room at a time, by Tasks 7-12 -- each entry's src is
+# found via scripts/asset_contact_sheet.py, since the Theme_Sorter_Singles
+# folders carry no metadata beyond a sequential number.
+DECOR = {
+    "auth-module": [],
+    "analytics": [],
+    "database": [],
+    "billing": [],
+    "living-room": [],
+    "deploy-config": [],
+}
+
+# Always-animating props not gated on any desk occupancy (col, row, dest,
+# src, frames, room_id). Empty until Task 7 adds Library's ambient candle.
+AMBIENT = []

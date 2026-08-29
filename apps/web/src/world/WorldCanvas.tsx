@@ -1,10 +1,12 @@
 import { useEffect, useRef } from "react";
-import { Application, Assets, Container, Graphics, Text } from "pixi.js";
+import { Application, Assets, Container, Graphics, Sprite, Text } from "pixi.js";
 import type { Texture } from "pixi.js";
 import type { TiledMapRenderer } from "./engine/TiledMapRenderer";
 import { CharacterSprite } from "./engine/CharacterSprite";
+import { EquipmentSprite } from "./engine/EquipmentSprite";
 import { buildCharacterFrames } from "./engineCharacter";
 import { loadWorldMap } from "./engineMap";
+import { loadRoomDecor } from "./roomDecor";
 import { advanceBehavior, settleAgent, tickAgent } from "./agentSim";
 import { colorForAgent } from "./agentAppearance";
 import { FILE_ROOMS } from "./resources";
@@ -51,6 +53,7 @@ export function WorldCanvas({
     let renderer: TiledMapRenderer | null = null;
     let characterTexture: Texture | null = null;
     let lastTime: number | null = null;
+    const equipmentSprites = new Map<string, EquipmentSprite>();
 
     const tick = (time: number) => {
       if (disposed || !renderer) return;
@@ -62,6 +65,15 @@ export function WorldCanvas({
         ? agentsRef.current
         : agentsRef.current.map((agent) => advanceBehavior(settleAgent(tickAgent(agent, deltaMs)), renderer!));
       if (!pausedRef.current) onFrameRef.current(next);
+
+      const workingSpawnPoints = new Set(
+        next
+          .filter((a) => a.behaviorMode === "working" && a.occupiedDeskId)
+          .map((a) => a.occupiedDeskId as string),
+      );
+      for (const [spawnPoint, es] of equipmentSprites) {
+        es.setWorking(workingSpawnPoints.has(spawnPoint));
+      }
 
       const seen = new Set<string>();
       for (const agent of next) {
@@ -92,9 +104,10 @@ export function WorldCanvas({
 
     (async () => {
       try {
-        const [loadedRenderer, loadedCharacterTexture] = await Promise.all([
+        const [loadedRenderer, loadedCharacterTexture, roomDecor] = await Promise.all([
           loadWorldMap(),
           Assets.load("/world-assets/characters/default.png"),
+          loadRoomDecor(),
         ]);
         if (disposed) return;
 
@@ -127,6 +140,28 @@ export function WorldCanvas({
           console.warn("Room overlay unavailable:", labelError);
         }
 
+        const imagePaths = [
+          ...new Set([...roomDecor.decor.map((d) => d.image), ...roomDecor.equipment.map((e) => e.image)]),
+        ];
+        const textures = await Promise.all(imagePaths.map((p) => Assets.load(`/world-assets/${p}`)));
+        const textureByPath = new Map(imagePaths.map((p, i) => [p, textures[i]]));
+
+        const decorSprites: Container[] = roomDecor.decor.map((entry) => {
+          const sprite = new Sprite(textureByPath.get(entry.image));
+          sprite.position.set(entry.x, entry.y);
+          return sprite;
+        });
+
+        const equipmentContainers: Container[] = roomDecor.equipment.map((entry) => {
+          const es = new EquipmentSprite(textureByPath.get(entry.image)!, entry.frames);
+          es.setPosition(entry.x, entry.y);
+          if (entry.spawnPoint === null) es.setWorking(true); // ambient: always animating
+          else equipmentSprites.set(entry.spawnPoint, es);
+          return es.container;
+        });
+
+        renderer.addDecorLayer([...decorSprites, ...equipmentContainers]);
+
         requestAnimationFrame(tick);
       } catch (err) {
         console.error("WorldCanvas failed to initialize:", err);
@@ -137,6 +172,7 @@ export function WorldCanvas({
       disposed = true;
       for (const sprite of spritesRef.current.values()) sprite.destroy();
       spritesRef.current.clear();
+      for (const es of equipmentSprites.values()) es.destroy();
       app?.destroy();
     };
   }, []);

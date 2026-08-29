@@ -1,0 +1,47 @@
+{
+  "decor": [],
+  "equipment": [
+    {
+      "image": "equipment/animated_TV_reportage_32x32.png",
+      "frames": 72,
+      "x": 608,
+      "y": 128,
+      "spawnPoint": "desk-analytics-2"
+    },
+    {
+      "image": "equipment/animated_incense_burner_4_10_loop_32x32.png",
+      "frames": 13,
+      "x": 960,
+      "y": 96,
+      "spawnPoint": "desk-database-2"
+    },
+    {
+      "image": "equipment/animated_punching_bag_left_32x32.png",
+      "frames": 12,
+      "x": 128,
+      "y": 512,
+      "spawnPoint": "desk-billing-1"
+    },
+    {
+      "image": "equipment/animated_treadmill_32x32.png",
+      "frames": 9,
+      "x": 192,
+      "y": 512,
+      "spawnPoint": "desk-billing-2"
+    },
+    {
+      "image": "equipment/animated_wall_piano_32x32.png",
+      "frames": 16,
+      "x": 864,
+      "y": 544,
+      "spawnPoint": "desk-deploy-config-1"
+    },
+    {
+      "image": "equipment/animated_amplifier_32x32.png",
+      "frames": 3,
+      "x": 992,
+      "y": 512,
+      "spawnPoint": "desk-deploy-config-2"
+    }
+  ]
+}

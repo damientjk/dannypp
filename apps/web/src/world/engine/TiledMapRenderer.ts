@@ -102,6 +102,20 @@ export class TiledMapRenderer {
   getZone(name: string): ZoneRect | undefined { return this.zones.get(name); }
   getAllZones(): Map<string, ZoneRect> { return this.zones; }
 
+  /** Freeform pixel-positioned props (furniture, equipment) layered above
+   *  the tile grid but below every character, so an agent walking past a
+   *  room's decor always draws in front of it. Unlike the GID tile layers,
+   *  entries here aren't grid-locked -- each Container sits at whatever
+   *  pixel position its caller already set on it (see WorldCanvas.tsx,
+   *  which builds these from room-decor.json's pixel coordinates). */
+  addDecorLayer(items: Container[]): void {
+    const layer = new Container();
+    layer.label = "decor";
+    for (const item of items) layer.addChild(item);
+    const charIndex = this.rootContainer.getChildIndex(this.characterContainer);
+    this.rootContainer.addChildAt(layer, charIndex);
+  }
+
   gidAt(layerName: string, tx: number, ty: number): number {
     const layer = this.findLayer(layerName, "tilelayer");
     if (!layer?.data || tx < 0 || ty < 0 || tx >= this.width || ty >= this.height) return 0;

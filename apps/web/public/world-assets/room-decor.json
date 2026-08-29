@@ -89,6 +89,26 @@
       "image": "decor/database/bonsai-right.png",
       "x": 1024,
       "y": 160
+    },
+    {
+      "image": "decor/billing/mirror-left.png",
+      "x": 64,
+      "y": 544
+    },
+    {
+      "image": "decor/billing/mirror-right.png",
+      "x": 256,
+      "y": 544
+    },
+    {
+      "image": "decor/billing/dumbbell-rack.png",
+      "x": 64,
+      "y": 448
+    },
+    {
+      "image": "decor/billing/yoga-mat.png",
+      "x": 256,
+      "y": 448
     }
   ],
   "equipment": [

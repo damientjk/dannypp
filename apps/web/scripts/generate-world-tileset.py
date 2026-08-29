@@ -142,11 +142,18 @@ def main() -> None:
     tiles = [Image.new("RGBA", (TILE, TILE), (0, 0, 0, 0))]  # gid 0: blank
     for source_path, col, row in FLOOR_TILES:
         tiles.append(crop_tile(sheet_cache, source_path, col, row))
-    tiles.append(shade_wall(crop_tile(sheet_cache, *WALL_TILE)))
+    wall_tile = shade_wall(crop_tile(sheet_cache, *WALL_TILE))
+    tiles.append(wall_tile)
     tiles.append(crop_tile(sheet_cache, *DESK_TILE))
     tiles.append(crop_tile(sheet_cache, *RUG_TILE))
-    tiles.append(crop_tile(sheet_cache, *WINDOW_LEFT_TILE))
-    tiles.append(crop_tile(sheet_cache, *WINDOW_RIGHT_TILE))
+    # Both window crops are only opaque in their bottom ~45% (rows 16-29 of
+    # their 32x32 cell) — placing the raw crop directly into the wall ring
+    # replaces the wall tile outright, so the transparent 55% shows nothing
+    # behind it: a floating window over a gash into the void. Composite each
+    # crop onto its own COPY of the shaded wall tile instead, so the wall's
+    # own texture/shading shows through the window crop's transparent rows.
+    tiles.append(Image.alpha_composite(wall_tile.copy(), crop_tile(sheet_cache, *WINDOW_LEFT_TILE)))
+    tiles.append(Image.alpha_composite(wall_tile.copy(), crop_tile(sheet_cache, *WINDOW_RIGHT_TILE)))
     tiles.append(crop_tile(sheet_cache, *PLANT_TILE))
 
     sheet = Image.new("RGBA", (TILE * len(tiles), TILE), (0, 0, 0, 0))

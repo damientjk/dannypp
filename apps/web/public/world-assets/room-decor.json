@@ -111,6 +111,36 @@
       "y": 448
     },
     {
+      "image": "decor/living-room/rug.png",
+      "x": 512,
+      "y": 512
+    },
+    {
+      "image": "decor/living-room/sofa.png",
+      "x": 448,
+      "y": 448
+    },
+    {
+      "image": "decor/living-room/coffee-table.png",
+      "x": 576,
+      "y": 480
+    },
+    {
+      "image": "decor/living-room/tv.png",
+      "x": 576,
+      "y": 544
+    },
+    {
+      "image": "decor/living-room/plant-left.png",
+      "x": 416,
+      "y": 448
+    },
+    {
+      "image": "decor/living-room/plant-right.png",
+      "x": 640,
+      "y": 448
+    },
+    {
       "image": "decor/deploy-config/crate-1.png",
       "x": 864,
       "y": 480

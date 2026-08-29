@@ -213,7 +213,56 @@ DECOR = {
         dict(col=7, row=1, dest="yoga-mat.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/8_Gym_Singles_32x32/Gym_Singles_32x32_195.png"),
     ],
-    "living-room": [],
+    # 2_Living_Room_Singles_32x32/ (122 files, all individually eyeballed via
+    # asset_contact_sheet.py plus a numeric-dimension scan) turned out to be
+    # a Victorian bedroom/parlor set -- wardrobes, vanities, nightstands,
+    # lamps, mirrors, a grandfather clock -- with zero TV, zero coffee
+    # table, and zero rug. The category's composite sheet
+    # (Theme_Sorter_32x32/2_LivingRoom_32x32.png) was checked in full next
+    # (same lesson as Tasks 7/8/9) and does have real 3-seat/2-seat sofas in
+    # four colorways (its own back-cushion + seat-cushion tile pair, ~110px
+    # tall) but still no coffee table, no TV, and no rug. Per the task's
+    # explicit fallback rule (no clean match after checking both Singles and
+    # the composite -- pick the closest reasonable alternative from a nearby
+    # category), three of the six items come from elsewhere:
+    #   - tv.png: 3_Animated_objects' animated_old_tv_32x32.png, frame 0 of
+    #     its 6-frame static/noise loop (a retro CRT set, not a flatscreen,
+    #     but unambiguously "a TV" -- cropped to one still frame since this
+    #     room has no EQUIPMENT/animation).
+    #   - coffee-table.png: reuses the Singles folder's cream tufted
+    #     bench/ottoman (_33) as an ottoman-style coffee table -- a real
+    #     furniture convention, not just a placeholder swap.
+    #   - rug.png: a real bordered area-rug sprite from
+    #     Theme_Sorter_32x32/26_Condominium_32x32.png (tan colorway, of 3
+    #     available), the exact "reuse a floor-pattern piece" case the brief
+    #     called out.
+    # Layout: the sofa (96x110, ~3x3.4 tiles) is far taller than any other
+    # room's decor, so it gets its own column lane (1-3) with nothing else
+    # sharing those columns/rows; the coffee table sits stacked directly
+    # above the TV in a second lane (5-6) against the back wall, out of the
+    # sofa's way entirely. rug.png is listed first so it renders underneath
+    # the sofa's front edge (they deliberately overlap a few px -- a rug
+    # peeking from under a couch) while stopping just short of the table.
+    # Plants flank the door at col=0/col=7 per every other room's
+    # convention; row=0 (the door's own row) is left empty like every prior
+    # room's DECOR list already does.
+    "living-room": [
+        dict(col=3, row=3, dest="rug.png",
+             src="1_Interiors/32x32/Theme_Sorter_32x32/26_Condominium_32x32.png",
+             crop=(450, 192, 508, 222)),
+        dict(col=1, row=1, dest="sofa.png",
+             src="1_Interiors/32x32/Theme_Sorter_32x32/2_LivingRoom_32x32.png",
+             crop=(128, 906, 224, 1016)),
+        dict(col=5, row=2, dest="coffee-table.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_33.png"),
+        dict(col=5, row=4, dest="tv.png",
+             src="3_Animated_objects/32x32/spritesheets/animated_old_tv_32x32.png",
+             crop=(0, 0, 64, 64)),
+        dict(col=0, row=1, dest="plant-left.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_15.png"),
+        dict(col=7, row=1, dest="plant-right.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_17.png"),
+    ],
     # 6_Music_and_Sport_Singles_32x32/ (same folder Task 8 searched) has no
     # standalone stool/crate Singles file either -- it's the same
     # never-split piano-stool row Task 8 already found and partly used

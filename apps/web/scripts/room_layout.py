@@ -140,7 +140,47 @@ DECOR = {
         dict(col=7, row=4, dest="plant.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_16.png"),
     ],
-    "database": [],
+    # 20_Japanese_Interiors_Singles_32x32/ has a shoji screen, several
+    # kotatsu-style low tables, and two distinct potted bonsai as clean
+    # Singles files. It does NOT have a plain flat floor cushion (zabuton)
+    # -- the only cushion-shaped Singles items are either an L-backed
+    # zaisu chair or a stacked pile of round poufs -- but the category's
+    # composite sheet (20_Japanese_interiors_32x32.png, note lowercase
+    # "interiors" in that filename vs. the Singles folder's capitalized
+    # one) has a clean row of 5 flat square cushions that never got split
+    # out, same lesson as Tasks 7/8's cropped items (see task-9-report.md).
+    # _61 and _62 (the two shoji files) are byte-identical, so shoji-right
+    # just reuses _61 rather than copying a pointless duplicate under a
+    # different source name.
+    "database": [
+        dict(col=1, row=0, dest="shoji-left.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/20_Japanese_Interiors_Singles_32x32/Japanese_Interiors_Singles_32x32_61.png"),
+        dict(col=7, row=0, dest="shoji-right.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/20_Japanese_Interiors_Singles_32x32/Japanese_Interiors_Singles_32x32_61.png"),
+        # Matches desk index 0 (desk-database-1) exactly, same pattern as
+        # auth-module's reading desks and analytics's ping-pong table --
+        # this IS that desk's visual reskin. 64x64 (2x2 tiles), so it
+        # occupies cols 3-4 / rows 2-3 and leaves desk index 1 at (5,2)
+        # (the animated incense burner, a single 32x32 tile) untouched.
+        dict(col=3, row=2, dest="chabudai.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/20_Japanese_Interiors_Singles_32x32/Japanese_Interiors_Singles_32x32_51.png"),
+        # Cropped from the composite sheet, not a Singles file -- see the
+        # block comment above. Both are 26x24px, well inside a single
+        # tile. Placed at col 2 / col 5 (not the brief's draft col
+        # 3/col 5) so neither sits under the chabudai's own cols 3-4
+        # footprint; each lands directly beside one of the table's two
+        # front corners instead.
+        dict(col=2, row=3, dest="cushion-1.png",
+             src="1_Interiors/32x32/Theme_Sorter_32x32/20_Japanese_interiors_32x32.png",
+             crop=(354, 404, 380, 428)),
+        dict(col=5, row=3, dest="cushion-2.png",
+             src="1_Interiors/32x32/Theme_Sorter_32x32/20_Japanese_interiors_32x32.png",
+             crop=(450, 404, 476, 428)),
+        dict(col=1, row=4, dest="bonsai-left.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/20_Japanese_Interiors_Singles_32x32/Japanese_Interiors_Singles_32x32_56.png"),
+        dict(col=7, row=4, dest="bonsai-right.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/20_Japanese_Interiors_Singles_32x32/Japanese_Interiors_Singles_32x32_57.png"),
+    ],
     "billing": [],
     "living-room": [],
     "deploy-config": [],

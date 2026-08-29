@@ -54,6 +54,41 @@
       "image": "decor/analytics/plant.png",
       "x": 640,
       "y": 160
+    },
+    {
+      "image": "decor/database/shoji-left.png",
+      "x": 832,
+      "y": 32
+    },
+    {
+      "image": "decor/database/shoji-right.png",
+      "x": 1024,
+      "y": 32
+    },
+    {
+      "image": "decor/database/chabudai.png",
+      "x": 896,
+      "y": 96
+    },
+    {
+      "image": "decor/database/cushion-1.png",
+      "x": 864,
+      "y": 128
+    },
+    {
+      "image": "decor/database/cushion-2.png",
+      "x": 960,
+      "y": 128
+    },
+    {
+      "image": "decor/database/bonsai-left.png",
+      "x": 832,
+      "y": 160
+    },
+    {
+      "image": "decor/database/bonsai-right.png",
+      "x": 1024,
+      "y": 160
     }
   ],
   "equipment": [

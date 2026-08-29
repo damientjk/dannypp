@@ -2,20 +2,20 @@
 
 :root {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #20211f;
-  background: #f2f1ed;
+  color: #ece9e2;
+  background: #171613;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --ink: #20211f;
-  --muted: #777870;
-  --line: #deddd6;
-  --paper: #fbfaf7;
-  --purple: #6954d9;
-  --purple-dark: #513db9;
-  --purple-soft: #efecff;
-  --green: #33906d;
-  --red: #c55353;
-  --shadow: 0 24px 60px rgba(39, 38, 33, 0.12);
+  --ink: #ece9e2;
+  --muted: #9c9a90;
+  --line: #3a382f;
+  --paper: #211f1a;
+  --purple: #7a66e3;
+  --purple-dark: #9483f5;
+  --purple-soft: #2b2640;
+  --green: #4cb98f;
+  --red: #e07a74;
+  --shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
 }
 
 * {
@@ -33,7 +33,7 @@ body {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: radial-gradient(circle at top, #f0edff, #f2f1ed 45%);
+  background: radial-gradient(circle at top, #221d3a, #171613 45%);
 }
 
 .auth-card {
@@ -171,21 +171,21 @@ button {
 }
 
 .button-ghost {
-  background: #f0efea;
-  color: #464741;
+  background: #2c2b26;
+  color: #d8d6cd;
 }
 
 .button-ghost:hover:not(:disabled) {
-  background: #e4e2da;
+  background: #38372f;
 }
 
 .button-danger {
-  background: #f7e9e7;
-  color: #ae4646;
+  background: #3a2320;
+  color: #e2837c;
 }
 
 .button-danger:hover:not(:disabled) {
-  background: #f1d9d6;
+  background: #452a26;
 }
 
 .create-button {
@@ -303,10 +303,10 @@ button {
 }
 
 .empty-sidebar {
-  color: #777770;
+  color: #918f85;
   font-size: 12px;
   text-align: center;
-  border: 1px dashed #42423d;
+  border: 1px dashed #4c4b44;
   border-radius: 12px;
   padding: 24px 12px;
 }
@@ -355,8 +355,8 @@ button {
   min-height: 100vh;
   padding: 22px 34px 34px;
   background:
-    radial-gradient(circle at 86% -10%, rgba(105, 84, 217, 0.09), transparent 30%),
-    #f2f1ed;
+    radial-gradient(circle at 86% -10%, rgba(122, 102, 227, 0.14), transparent 30%),
+    #171613;
 }
 
 .config-banner,
@@ -372,9 +372,9 @@ button {
 
 .config-banner {
   gap: 10px;
-  color: #6c541b;
-  background: #fff7d8;
-  border: 1px solid #eddda1;
+  color: #f0d488;
+  background: #3a2f10;
+  border: 1px solid #5c4a1e;
 }
 
 .config-banner > span {
@@ -385,7 +385,7 @@ button {
   border-radius: 7px;
   color: white;
   font-weight: 700;
-  background: #bc9239;
+  background: #caa04a;
 }
 
 .config-banner strong,
@@ -402,9 +402,9 @@ button {
 
 .error-banner {
   justify-content: space-between;
-  color: #a13f3f;
-  background: #fae8e6;
-  border: 1px solid #edc4c0;
+  color: #f0a49d;
+  background: #3a201e;
+  border: 1px solid #5c332f;
 }
 
 .error-banner button {
@@ -465,8 +465,8 @@ button {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  background: #e5e4df;
-  color: #666760;
+  background: #2c2b26;
+  color: #c9c7bd;
 }
 
 .status-dot {
@@ -476,18 +476,18 @@ button {
 }
 
 .status-ready {
-  color: #277756;
-  background: #dcf2e9;
+  color: #6fd9ab;
+  background: #163527;
 }
 
 .status-busy {
-  color: #5640bc;
-  background: #e8e4fb;
+  color: #a99bf0;
+  background: #241f3f;
 }
 
 .status-error {
-  color: #ac4343;
-  background: #f6dfdc;
+  color: #e2867e;
+  background: #3a2420;
 }
 
 .settings-panel,
@@ -497,7 +497,7 @@ button {
   margin-right: auto;
   background: var(--paper);
   border: 1px solid var(--line);
-  box-shadow: 0 12px 36px rgba(43, 42, 38, 0.06);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
 }
 
 .settings-panel {
@@ -535,7 +535,7 @@ button {
 
 label {
   display: block;
-  color: #575851;
+  color: #b8b6ab;
   font-size: 11px;
   font-weight: 600;
 }
@@ -543,8 +543,8 @@ label {
 input,
 textarea {
   width: 100%;
-  border: 1px solid #d9d7cf;
-  background: white;
+  border: 1px solid #3f3e37;
+  background: #17160f;
   border-radius: 9px;
   color: var(--ink);
   outline: none;
@@ -584,7 +584,7 @@ textarea:focus {
 
 .panel-footer code {
   font-size: 9px;
-  color: #8a8a83;
+  color: #9b9a90;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -604,8 +604,8 @@ textarea:focus {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #e5e3dc;
-  background: rgba(251, 250, 247, 0.94);
+  border-bottom: 1px solid #33322c;
+  background: rgba(33, 31, 26, 0.94);
 }
 
 .playground h2 {
@@ -614,9 +614,9 @@ textarea:focus {
 }
 
 .session-info {
-  color: #777870;
+  color: #9c9a90;
   font-size: 9px;
-  border: 1px solid #e0ded6;
+  border: 1px solid #3a392f;
   border-radius: 999px;
   padding: 5px 9px;
   display: flex;
@@ -637,8 +637,8 @@ textarea:focus {
   overflow-y: auto;
   padding: 28px max(28px, calc((100% - 760px) / 2));
   background:
-    linear-gradient(rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.52)),
-    radial-gradient(circle at 20% 0, #f1effb, transparent 38%);
+    linear-gradient(rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.25)),
+    radial-gradient(circle at 20% 0, #241f3d, transparent 38%);
 }
 
 .welcome {
@@ -657,7 +657,7 @@ textarea:focus {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  border: 1px solid #d9d3f4;
+  border: 1px solid #3c3560;
   position: relative;
   margin-bottom: 18px;
 }
@@ -666,7 +666,7 @@ textarea:focus {
 .welcome-orbit::after {
   content: "";
   position: absolute;
-  border: 1px solid #e6e2f7;
+  border: 1px solid #34304f;
   border-radius: 50%;
 }
 
@@ -704,7 +704,7 @@ textarea:focus {
 
 .welcome > p {
   max-width: 470px;
-  color: #81827b;
+  color: #a6a498;
   font-size: 11px;
   line-height: 1.6;
   margin: 8px 0 20px;
@@ -719,12 +719,12 @@ textarea:focus {
 
 .prompt-grid button {
   min-height: 86px;
-  border: 1px solid #e0ded6;
+  border: 1px solid #3a392f;
   border-radius: 11px;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.04);
   text-align: left;
-  color: #65665f;
+  color: #c7c5ba;
   font-size: 10px;
   line-height: 1.45;
   cursor: pointer;
@@ -734,8 +734,8 @@ textarea:focus {
 .prompt-grid button:hover {
   border-color: #a99be9;
   transform: translateY(-2px);
-  background: white;
-  box-shadow: 0 8px 20px rgba(57, 48, 103, 0.08);
+  background: #2a2823;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
 }
 
 .prompt-grid span {
@@ -767,7 +767,7 @@ textarea:focus {
 .message-body {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: #40413d;
+  color: #dcdad0;
   font-size: 12px;
   line-height: 1.65;
 }
@@ -781,9 +781,9 @@ textarea:focus {
 }
 
 .message-user .message-body {
-  background: #ebe7fc;
-  color: #4b3d86;
-  border: 1px solid #ddd6f8;
+  background: #2a2447;
+  color: #c9bdf5;
+  border: 1px solid #3c3564;
   border-radius: 13px 4px 13px 13px;
   padding: 11px 13px;
 }
@@ -802,7 +802,7 @@ textarea:focus {
   align-items: center;
   gap: 9px;
   font-size: 11px;
-  color: #6f6f69;
+  color: #a19f95;
 }
 
 .spinner {
@@ -820,17 +820,17 @@ textarea:focus {
   flex-direction: column;
   gap: 5px;
   border-left: 2px solid var(--red);
-  background: #fbefed;
+  background: #3a2420;
   padding: 10px 12px;
-  color: #9e4545;
+  color: #e2938c;
   font-size: 11px;
 }
 
 .composer {
   margin: 0;
-  border-top: 1px solid #e1dfd8;
+  border-top: 1px solid #33322c;
   padding: 13px max(22px, calc((100% - 800px) / 2)) 15px;
-  background: #f8f7f3;
+  background: #1c1b18;
 }
 
 .composer textarea {
@@ -868,7 +868,7 @@ textarea:focus {
 }
 
 .send-button:disabled {
-  background: #cfcdc6;
+  background: #3a392f;
   cursor: not-allowed;
 }
 
@@ -1509,7 +1509,7 @@ textarea:focus {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
 }
 
 .world-request-toast p {

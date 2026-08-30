@@ -186,7 +186,7 @@ export function WorldCanvas({
       className="world-canvas"
       data-testid="world-canvas"
       width={1120}
-      height={640}
+      height={672}
     />
   );
 }

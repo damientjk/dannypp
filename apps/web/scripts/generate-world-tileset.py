@@ -57,7 +57,14 @@ def main() -> None:
         # stripe in its top ~12px meant for an interior wall segment, not
         # the outermost edge of this game's wall stack; see this file's
         # own history / the plan's Amendment 4 for how that was found).
-        base_tile = crop_tile(cache, WALLS_SHEET, 0, room["wall"] * 2 + 1)
+        # Column 1, not column 0: column 0 carries a 2px dark seam baked
+        # into its left edge (part of the sheet's own per-block border
+        # art), which repeats every 32px as a "picket fence" line across
+        # any wall run. Column 1 is the same body color with no dark left
+        # edge, while still keeping the dark top edge (cap tile) / dark
+        # bottom edge (base tile) intact -- verified for all 6 wall
+        # indices this game uses (Task 10's own verification).
+        base_tile = crop_tile(cache, WALLS_SHEET, 1, room["wall"] * 2 + 1)
         cap_tile = base_tile.copy()
         tiles.append(cap_tile)
         tiles.append(base_tile)

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent } from "../types";
 import { api } from "../api";
@@ -102,6 +102,9 @@ function agentAssignedRoom(agentId: string, ownerId: string) {
 
 describe("WorldView", () => {
   beforeEach(() => {
+    // The picker persists to localStorage, so leaking it across tests would
+    // make the default-selection assertion depend on test order.
+    window.localStorage.clear();
     resetCapabilities();
     resetRequests();
     vi.mocked(beginHeadingToDesk).mockClear();
@@ -118,6 +121,38 @@ describe("WorldView", () => {
     fireEvent.click(await screen.findByText("Enter the world"));
     await screen.findByText("Robot A");
   }
+
+  describe("character-set picker", () => {
+    it("offers both skins and starts on the crewmates", async () => {
+      vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+      await login();
+
+      const crewmates = screen.getByRole("button", { name: "Crewmates" });
+      const fallback = screen.getByRole("button", { name: "Default" });
+      expect(crewmates.getAttribute("aria-pressed")).toBe("true");
+      expect(fallback.getAttribute("aria-pressed")).toBe("false");
+    });
+
+    it("switches the selection and remembers it across a remount", async () => {
+      vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+      await login();
+
+      fireEvent.click(screen.getByRole("button", { name: "Default" }));
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: "Default" }).getAttribute("aria-pressed"),
+        ).toBe("true");
+      });
+
+      cleanup();
+      await login();
+      // The preference is the point of persisting it: a reload must not throw
+      // the viewer back onto the crewmates.
+      expect(
+        screen.getByRole("button", { name: "Default" }).getAttribute("aria-pressed"),
+      ).toBe("true");
+    });
+  });
 
   it("shows every agent from every owner once logged in", async () => {
     vi.mocked(api.listAgents).mockResolvedValue({

@@ -1918,3 +1918,30 @@ textarea:focus {
 .world-request-question {
   color: var(--muted);
 }
+
+/* Character-set picker: a two-up segmented control in the control room, using
+   the same pill vocabulary as .roam-toggle so it reads as part of the panel. */
+.skin-toggle {
+  display: flex;
+  gap: 6px;
+}
+.skin-option {
+  flex: 1;
+  font: inherit;
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--muted);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.skin-option:hover {
+  color: var(--ink);
+  border-color: var(--pw-border, var(--muted));
+}
+.skin-option.skin-on {
+  color: var(--pw-border, var(--green));
+  border-color: var(--pw-border, var(--green));
+}

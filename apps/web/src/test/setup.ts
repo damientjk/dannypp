@@ -71,3 +71,29 @@ window.cancelAnimationFrame = (id: number): void => {
   if (timer) clearTimeout(timer);
   pendingTimers.delete(id);
 };
+
+// jsdom does not implement Storage here, and the world persists the viewer's
+// character-set choice through localStorage. Without this the preference code
+// silently takes its "storage unavailable" fallback and can never be tested.
+// The property *exists* on window but reads as undefined, so test the value
+// rather than using an `in` check.
+if (!window.localStorage) {
+  const store = new Map<string, string>();
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, String(value));
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+      clear: () => store.clear(),
+      key: (index: number) => [...store.keys()][index] ?? null,
+      get length() {
+        return store.size;
+      },
+    },
+  });
+}

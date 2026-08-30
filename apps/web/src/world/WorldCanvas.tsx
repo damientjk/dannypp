@@ -4,6 +4,8 @@ import type { Texture } from "pixi.js";
 import type { TiledMapRenderer } from "./engine/TiledMapRenderer";
 import { CharacterSprite } from "./engine/CharacterSprite";
 import { buildCharacterFrames } from "./engineCharacter";
+import { CHARACTER_SETS, DEFAULT_CHARACTER_SET_ID } from "./characterSets";
+import type { CharacterSetId } from "./characterSets";
 import { loadWorldMap } from "./engineMap";
 import { advanceBehavior, settleAgent, tickAgent } from "./agentSim";
 import { colorForAgent } from "./agentAppearance";
@@ -24,6 +26,9 @@ export interface WorldCanvasProps {
   paused?: boolean;
   /** Signed-in human, so rooms can be drawn as "yours" or "somebody else's". */
   viewerOwnerId?: string | null;
+  /** Which character sheet to render Agents with. Changing it rebuilds the
+   *  Pixi application, which is why it belongs in the init effect's deps. */
+  characterSetId?: CharacterSetId;
 }
 
 export function WorldCanvas({
@@ -31,6 +36,7 @@ export function WorldCanvas({
   onFrame,
   paused = false,
   viewerOwnerId = null,
+  characterSetId = DEFAULT_CHARACTER_SET_ID,
 }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const agentsRef = useRef(agents);
@@ -45,6 +51,8 @@ export function WorldCanvas({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    const characterSet = CHARACTER_SETS[characterSetId];
 
     let disposed = false;
     let app: Application | null = null;
@@ -68,7 +76,7 @@ export function WorldCanvas({
         seen.add(agent.agentId);
         let sprite = spritesRef.current.get(agent.agentId);
         if (!sprite) {
-          sprite = new CharacterSprite(buildCharacterFrames(characterTexture!));
+          sprite = new CharacterSprite(buildCharacterFrames(characterTexture!, characterSet));
           renderer.getCharacterContainer().addChild(sprite.container);
           spritesRef.current.set(agent.agentId, sprite);
         }
@@ -94,7 +102,7 @@ export function WorldCanvas({
       try {
         const [loadedRenderer, loadedCharacterTexture] = await Promise.all([
           loadWorldMap(),
-          Assets.load("/world-assets/characters/default.png"),
+          Assets.load(characterSet.url),
         ]);
         if (disposed) return;
 
@@ -139,7 +147,7 @@ export function WorldCanvas({
       spritesRef.current.clear();
       app?.destroy();
     };
-  }, []);
+  }, [characterSetId]);
 
   return (
     <canvas

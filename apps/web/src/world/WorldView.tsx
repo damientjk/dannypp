@@ -11,6 +11,12 @@ import {
   revokeCapability,
 } from "./decision";
 import { WorldCanvas } from "./WorldCanvas";
+import {
+  CHARACTER_SET_LIST,
+  loadCharacterSetId,
+  saveCharacterSetId,
+} from "./characterSets";
+import type { CharacterSetId } from "./characterSets";
 import { loadWorldMap } from "./engineMap";
 import type { TiledMapRenderer } from "./engine/TiledMapRenderer";
 import type { AccessRequest } from "./requests";
@@ -67,6 +73,15 @@ export function WorldView() {
   const [mapRenderer, setMapRenderer] = useState<TiledMapRenderer | null>(null);
   const [, setRequestVersion] = useState(0);
   const [roaming, setRoaming] = useState(true);
+  // Lazy initialiser: the stored preference is read once on mount rather than
+  // on every render, and a browser that refuses localStorage still boots.
+  const [characterSetId, setCharacterSetId] = useState<CharacterSetId>(loadCharacterSetId);
+
+  const chooseCharacterSet = (id: CharacterSetId) => {
+    setCharacterSetId(id);
+    saveCharacterSetId(id);
+  };
+
   // A grant/deny is a permission change, so it takes two deliberate clicks:
   // the first only arms the decision, the second commits it.
   const [pendingDecision, setPendingDecision] = useState<
@@ -427,6 +442,7 @@ export function WorldView() {
           onFrame={setWorldAgents}
           paused={!roaming}
           viewerOwnerId={principal.id}
+          characterSetId={characterSetId}
         />
       </div>
       <aside className="world-panel">
@@ -434,6 +450,25 @@ export function WorldView() {
           <span className="panel-eyebrow">Signed in as</span>
           <h3>{principal.displayName}</h3>
         </header>
+
+        <section className="panel-block">
+          <div className="panel-head">
+            <h4>Characters</h4>
+          </div>
+          <div className="skin-toggle" role="group" aria-label="Character set">
+            {CHARACTER_SET_LIST.map((set) => (
+              <button
+                key={set.id}
+                type="button"
+                className={"skin-option " + (set.id === characterSetId ? "skin-on" : "")}
+                aria-pressed={set.id === characterSetId}
+                onClick={() => chooseCharacterSet(set.id)}
+              >
+                {set.label}
+              </button>
+            ))}
+          </div>
+        </section>
 
         <section className="panel-block">
           <div className="panel-head">

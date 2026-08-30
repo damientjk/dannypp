@@ -246,12 +246,18 @@ function buildRoomOverlay(
     const topY = (zone.y - 0.5) * renderer.tileSize;
     label.position.set(centreX, topY);
 
+    // Bottom edge is clamped to reach past the zone's own top edge -- the
+    // accent rectangle below draws its top stroke right there, and without
+    // this the plate falls a few px short of it, leaving a sliver of the
+    // colored outline peeking out under the label text.
+    const plateTop = topY - label.height / 2 - 3;
+    const plateBottom = Math.max(topY + label.height / 2 + 3, zone.y * tile + 2);
     const plate = new Graphics()
       .roundRect(
         centreX - label.width / 2 - 6,
-        topY - label.height / 2 - 3,
+        plateTop,
         label.width + 12,
-        label.height + 6,
+        plateBottom - plateTop,
         4,
       )
       .fill({ color: LABEL_PLATE, alpha: 0.85 });

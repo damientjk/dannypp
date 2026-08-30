@@ -131,13 +131,15 @@ EQUIPMENT = {
 # found via scripts/asset_contact_sheet.py, since the Theme_Sorter_Singles
 # folders carry no metadata beyond a sequential number.
 DECOR = {
-    # bookshelf-left/right and reading-desk-1/2 are cropped straight out of
-    # the category's full (non-Singles) composite sheet -- the
+    # Neither the bookshelf nor the desks are composite-sheet crops anymore
+    # (see task-7-report.md for why that was ever the fallback: the
     # Theme_Sorter_Singles_32x32/5_Classroom_and_Library_Singles_32x32/
-    # folder the design spec assumed turned out to be a band/music
-    # classroom set with no bookshelf, desk, or chair singles at all (see
-    # task-7-report.md). Both desk crops already include their integrated
-    # bench seat, so no separate chair item is needed here.
+    # folder the design spec assumed turned out to be a band/music classroom
+    # set with no bookshelf, desk, or chair singles at all). The bookshelf is
+    # now the user's own isolated custom crop (see its dict comment below);
+    # the desks are real "table with book" Singles files from Library/ (see
+    # their dict comment below) -- no separate chair item is needed since
+    # each table's own art already reads as a complete desk.
     "auth-module": [
         # User-isolated 2-piece crop (repo-root/bookshelf/, 48px-tier source,
         # scale=2/3 down to this game's 32px tiles) -- no bookshelf-with-books
@@ -154,12 +156,13 @@ DECOR = {
              src=REPO_ROOT / "bookshelf" / "Classroom_and_Library_Singles_48x48_74.png", scale=2/3),
         dict(col=7, row=-1, dest="bookshelf-right-b.png",
              src=REPO_ROOT / "bookshelf" / "Classroom_and_Library_Singles_48x48_75.png", scale=2/3),
-        dict(col=3, row=2, dest="reading-desk-1.png",
-             src="1_Interiors/32x32/Theme_Sorter_32x32/5_Classroom_and_library_32x32.png",
-             crop=(160, 32, 192, 96)),
-        dict(col=5, row=2, dest="reading-desk-2.png",
-             src="1_Interiors/32x32/Theme_Sorter_32x32/5_Classroom_and_library_32x32.png",
-             crop=(64, 32, 96, 96)),
+        # User-isolated "table with a book" Singles files (repo-root/Library/,
+        # native 32px scale -- no crop/scale needed), replacing the old
+        # composite-sheet desk crop per the user's mockup.
+        dict(col=3, row=2, dest="table-book-1.png",
+             src=REPO_ROOT / "Library" / "Classroom_and_Library_Singles_Shadowless_32x32_5.png"),
+        dict(col=5, row=2, dest="table-book-2.png",
+             src=REPO_ROOT / "Library" / "Classroom_and_Library_Singles_Shadowless_32x32_7.png"),
         dict(col=1, row=4, dest="plant.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_16.png"),
     ],

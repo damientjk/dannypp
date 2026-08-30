@@ -12,11 +12,11 @@ the 20-tall canvas exactly (8+4+8=20).
 """
 
 TILE = 32
-WIDTH, HEIGHT = 35, 22
+WIDTH, HEIGHT = 35, 26
 ROOM_W, ROOM_H = 11, 8    # outer footprint incl. 1-tile wall ring
 GAP = 1                    # cosmetic filler between same-row room columns (blocked, not a real path)
 HALLWAY_H = 4               # real walkable plaza between the two room rows
-CAP_H = 1                   # extra wall-cap row outside each room's back wall, for wall depth
+CAP_H = 3                   # extra wall-cap rows outside each room's back wall -- tall enough to hold a decorative gable/cornice overlay (see generate-room-decor.py's DECOR entries with negative/overflow row values)
 
 assert ROOM_W * 3 + GAP * 2 == WIDTH
 assert ROOM_H * 2 + HALLWAY_H + CAP_H * 2 == HEIGHT

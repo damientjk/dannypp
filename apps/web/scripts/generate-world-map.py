@@ -57,13 +57,18 @@ def exterior_rect(room):
     return x0, y0, x1, y1
 
 
-def cap_row(room):
-    """The extra wall-cap row just outside the room's back wall (the wall
-    opposite the door, where the window already sits) -- above the room for
-    a top-row room, below it for a bottom-row room."""
+def cap_rows(room):
+    """The CAP_H extra wall-cap rows just outside the room's back wall (the
+    wall opposite the door, where the window already sits) -- above the
+    room for a top-row room, below it for a bottom-row room. Returned
+    nearest-to-farthest from the room (cap_ys[0] is immediately adjacent to
+    the back wall)."""
     x0, y0, x1, y1 = exterior_rect(room)
-    cap_y = y0 - 1 if room["row"] == "top" else y1 + 1
-    return x0, cap_y, x1
+    if room["row"] == "top":
+        cap_ys = [y0 - 1 - i for i in range(CAP_H)]
+    else:
+        cap_ys = [y1 + 1 + i for i in range(CAP_H)]
+    return x0, cap_ys, x1
 
 
 def door_tile(room):
@@ -114,13 +119,15 @@ def main() -> None:
         walls_fill[(window_x0, window_y)] = WINDOW_LEFT_GID[room["id"]]
         walls_fill[(window_x0 + 1, window_y)] = WINDOW_RIGHT_GID[room["id"]]
 
-        # Wall-cap row: the room's back wall grown one tile taller, outside
-        # the room's own footprint, for visual depth.
-        cap_x0, cap_y, cap_x1 = cap_row(room)
+        # Wall-cap rows: the room's back wall grown CAP_H tiles taller,
+        # outside the room's own footprint, for visual depth (and, above
+        # this, room for Task 6's gable decor overlay).
+        cap_x0, cap_ys, cap_x1 = cap_rows(room)
         cap_gid = CAP_GID[room["id"]]
-        for x in range(cap_x0, cap_x1 + 1):
-            walls_fill[(x, cap_y)] = cap_gid
-            collision_fill[(x, cap_y)] = cap_gid
+        for cap_y in cap_ys:
+            for x in range(cap_x0, cap_x1 + 1):
+                walls_fill[(x, cap_y)] = cap_gid
+                collision_fill[(x, cap_y)] = cap_gid
 
     # Gaps between same-row rooms: floored (hallway texture) but blocked --
     # cosmetic filler only. Agents only ever cross between columns via the

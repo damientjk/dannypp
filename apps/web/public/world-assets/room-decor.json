@@ -3,162 +3,162 @@
     {
       "image": "decor/auth-module/bookshelf-left.png",
       "x": 32,
-      "y": 32
+      "y": 64
     },
     {
       "image": "decor/auth-module/bookshelf-right.png",
       "x": 224,
-      "y": 32
+      "y": 64
     },
     {
       "image": "decor/auth-module/reading-desk-1.png",
       "x": 128,
-      "y": 96
+      "y": 128
     },
     {
       "image": "decor/auth-module/reading-desk-2.png",
       "x": 192,
-      "y": 96
+      "y": 128
     },
     {
       "image": "decor/auth-module/plant.png",
       "x": 64,
-      "y": 160
+      "y": 192
     },
     {
       "image": "decor/analytics/trophy-left.png",
       "x": 448,
-      "y": 32
+      "y": 64
     },
     {
       "image": "decor/analytics/trophy-right.png",
       "x": 640,
-      "y": 32
+      "y": 64
     },
     {
       "image": "decor/analytics/ping-pong.png",
       "x": 512,
-      "y": 96
+      "y": 128
     },
     {
       "image": "decor/analytics/seat.png",
       "x": 448,
-      "y": 128
+      "y": 160
     },
     {
       "image": "decor/analytics/pennant.png",
       "x": 448,
-      "y": 160
+      "y": 192
     },
     {
       "image": "decor/analytics/plant.png",
       "x": 640,
-      "y": 160
+      "y": 192
     },
     {
       "image": "decor/database/shoji-left.png",
       "x": 832,
-      "y": 32
+      "y": 64
     },
     {
       "image": "decor/database/shoji-right.png",
       "x": 1024,
-      "y": 32
+      "y": 64
     },
     {
       "image": "decor/database/chabudai.png",
       "x": 896,
-      "y": 96
+      "y": 128
     },
     {
       "image": "decor/database/cushion-1.png",
       "x": 864,
-      "y": 128
+      "y": 160
     },
     {
       "image": "decor/database/cushion-2.png",
       "x": 960,
-      "y": 128
+      "y": 160
     },
     {
       "image": "decor/database/bonsai-left.png",
       "x": 832,
-      "y": 160
+      "y": 192
     },
     {
       "image": "decor/database/bonsai-right.png",
       "x": 1024,
-      "y": 160
+      "y": 192
     },
     {
       "image": "decor/billing/mirror-left.png",
       "x": 64,
-      "y": 544
+      "y": 576
     },
     {
       "image": "decor/billing/mirror-right.png",
       "x": 256,
-      "y": 544
+      "y": 576
     },
     {
       "image": "decor/billing/dumbbell-rack.png",
       "x": 64,
-      "y": 448
+      "y": 480
     },
     {
       "image": "decor/billing/yoga-mat.png",
       "x": 256,
-      "y": 448
+      "y": 480
     },
     {
       "image": "decor/living-room/rug.png",
       "x": 512,
-      "y": 512
+      "y": 544
     },
     {
       "image": "decor/living-room/sofa.png",
       "x": 448,
-      "y": 448
+      "y": 480
     },
     {
       "image": "decor/living-room/coffee-table.png",
       "x": 576,
-      "y": 480
+      "y": 512
     },
     {
       "image": "decor/living-room/tv.png",
       "x": 576,
-      "y": 544
+      "y": 576
     },
     {
       "image": "decor/living-room/plant-left.png",
       "x": 416,
-      "y": 448
+      "y": 480
     },
     {
       "image": "decor/living-room/plant-right.png",
       "x": 640,
-      "y": 448
+      "y": 480
     },
     {
       "image": "decor/deploy-config/crate-1.png",
       "x": 864,
-      "y": 480
+      "y": 512
     },
     {
       "image": "decor/deploy-config/crate-2.png",
       "x": 992,
-      "y": 448
+      "y": 480
     },
     {
       "image": "decor/deploy-config/plant-left.png",
       "x": 832,
-      "y": 544
+      "y": 576
     },
     {
       "image": "decor/deploy-config/plant-right.png",
       "x": 1024,
-      "y": 544
+      "y": 576
     }
   ],
   "equipment": [
@@ -166,49 +166,49 @@
       "image": "equipment/animated_TV_reportage_32x32.png",
       "frames": 72,
       "x": 608,
-      "y": 128,
+      "y": 160,
       "spawnPoint": "desk-analytics-2"
     },
     {
       "image": "equipment/animated_incense_burner_4_10_loop_32x32.png",
       "frames": 13,
       "x": 960,
-      "y": 96,
+      "y": 128,
       "spawnPoint": "desk-database-2"
     },
     {
       "image": "equipment/animated_punching_bag_left_32x32.png",
       "frames": 12,
       "x": 128,
-      "y": 512,
+      "y": 544,
       "spawnPoint": "desk-billing-1"
     },
     {
       "image": "equipment/animated_treadmill_32x32.png",
       "frames": 9,
       "x": 192,
-      "y": 512,
+      "y": 544,
       "spawnPoint": "desk-billing-2"
     },
     {
       "image": "equipment/animated_wall_piano_32x32.png",
       "frames": 16,
       "x": 864,
-      "y": 544,
+      "y": 576,
       "spawnPoint": "desk-deploy-config-1"
     },
     {
       "image": "equipment/animated_amplifier_32x32.png",
       "frames": 3,
       "x": 992,
-      "y": 512,
+      "y": 544,
       "spawnPoint": "desk-deploy-config-2"
     },
     {
       "image": "equipment/animated_wall_candle_32x32.png",
       "frames": 3,
       "x": 256,
-      "y": 192,
+      "y": 224,
       "spawnPoint": null
     }
   ]

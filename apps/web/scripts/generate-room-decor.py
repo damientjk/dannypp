@@ -15,7 +15,7 @@ from pathlib import Path
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from room_layout import TILE, HEIGHT, ROOM_H, ROOMS, DESKS, EQUIPMENT, DECOR, AMBIENT
+from room_layout import TILE, ROOMS, DESKS, EQUIPMENT, DECOR, AMBIENT, room_y0
 
 REPO_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "moderninteriors-win").is_dir())
 MODERNINTERIORS = REPO_ROOT / "moderninteriors-win"
@@ -27,11 +27,10 @@ ROOM_BY_ID = {r["id"]: r for r in ROOMS}
 
 def room_origin(room):
     """Interior (col 0, row 0) in absolute map tiles. Same footprint math as
-    generate-world-map.py's exterior_rect() -- kept in sync by both files
-    importing ROOM_H/HEIGHT from room_layout instead of hardcoding them."""
+    generate-world-map.py's exterior_rect() -- both call room_layout.room_y0
+    so the two can't drift apart."""
     x0 = room["x0"]
-    y0 = 0 if room["row"] == "top" else HEIGHT - ROOM_H
-    return x0 + 1, y0 + 1
+    return x0 + 1, room_y0(room) + 1
 
 
 def copy_asset(src_rel: str, dest_rel: str, crop: tuple[int, int, int, int] | None = None) -> None:

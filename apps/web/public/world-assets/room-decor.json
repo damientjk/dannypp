@@ -58,31 +58,21 @@
     {
       "image": "decor/analytics/trophy-left.png",
       "x": 448,
-      "y": 64
+      "y": 32
     },
     {
       "image": "decor/analytics/trophy-right.png",
       "x": 640,
-      "y": 64
+      "y": 32
     },
     {
-      "image": "decor/analytics/ping-pong.png",
-      "x": 512,
-      "y": 128
-    },
-    {
-      "image": "decor/analytics/seat.png",
-      "x": 448,
-      "y": 160
-    },
-    {
-      "image": "decor/analytics/pennant.png",
-      "x": 448,
-      "y": 192
+      "image": "decor/analytics/basketball-hoop.png",
+      "x": 544,
+      "y": 32
     },
     {
       "image": "decor/analytics/plant.png",
-      "x": 640,
+      "x": 448,
       "y": 192
     },
     {

@@ -177,28 +177,15 @@ DECOR = {
     # ping-pong table comes from 14_Basement_Singles_32x32, which has a
     # proper top-down table-tennis sprite with a net.
     "analytics": [
-        dict(col=1, row=0, dest="trophy-left.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_157.png"),
-        dict(col=7, row=0, dest="trophy-right.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_158.png"),
-        # Matches desk index 0 (desk-analytics-1) exactly -- this table IS
-        # that desk's visual reskin, same pattern as auth-module's reading
-        # desks. The Singles file is 80x128 (2.5x4 tiles, taller than the
-        # brief's "~2 tiles wide" guess), so it reaches down to row 5 (the
-        # interior's last row) and its left edge sits at col 3. The seat
-        # below was moved off col=3 to col=1 (brief draft had (3,3), which
-        # the table's real footprint -- cols 3-5, rows 2-5 -- would have
-        # swallowed; even col=2 clips the table's left edge by 2px since the
-        # 34px-wide seat crop rounds up to a 2-tile-wide footprint) so it
-        # sits clearly beside the table instead of under or clipping it.
-        dict(col=3, row=2, dest="ping-pong.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_242.png"),
-        dict(col=1, row=3, dest="seat.png",
-             src="1_Interiors/32x32/Theme_Sorter_32x32/6_Music_and_sport_32x32.png",
-             crop=(144, 142, 178, 168)),
-        dict(col=1, row=4, dest="pennant.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_79.png"),
-        dict(col=7, row=4, dest="plant.png",
+        # row=-1: analytics is a top-row room, so row 0 is its capped back
+        # wall -- see this plan's wall-covering note.
+        dict(col=1, row=-1, dest="trophy-left.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_147.png"),
+        dict(col=7, row=-1, dest="trophy-right.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_147.png"),
+        dict(col=4, row=-1, dest="basketball-hoop.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_76.png"),
+        dict(col=1, row=4, dest="plant.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_16.png"),
     ],
     # 20_Japanese_Interiors_Singles_32x32/ has a shoji screen, several

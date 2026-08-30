@@ -58,17 +58,16 @@ def exterior_rect(room):
 
 
 def cap_rows(room):
-    """The CAP_H extra wall-cap rows just outside the room's back wall (the
-    wall opposite the door, where the window already sits) -- above the
-    room for a top-row room, below it for a bottom-row room. Returned
+    """The CAP_H extra wall-cap rows just above a TOP-row room's back wall
+    (the wall opposite the door, where the window already sits), returned
     nearest-to-farthest from the room (cap_ys[0] is immediately adjacent to
-    the back wall)."""
+    the back wall). Bottom-row rooms get none -- their back wall is the map's
+    bottom edge, so a taller wall there would recede towards the viewer, not
+    away from them. They keep the plain single-row wall ring."""
     x0, y0, x1, y1 = exterior_rect(room)
-    if room["row"] == "top":
-        cap_ys = [y0 - 1 - i for i in range(CAP_H)]
-    else:
-        cap_ys = [y1 + 1 + i for i in range(CAP_H)]
-    return x0, cap_ys, x1
+    if room["row"] != "top":
+        return x0, [], x1
+    return x0, [y0 - 1 - i for i in range(CAP_H)], x1
 
 
 def door_tile(room):
@@ -119,9 +118,10 @@ def main() -> None:
         walls_fill[(window_x0, window_y)] = WINDOW_LEFT_GID[room["id"]]
         walls_fill[(window_x0 + 1, window_y)] = WINDOW_RIGHT_GID[room["id"]]
 
-        # Wall-cap rows: the room's back wall grown CAP_H tiles taller,
-        # outside the room's own footprint, for visual depth (and, above
-        # this, room for Task 6's gable decor overlay).
+        # Wall-cap rows: a top-row room's back wall grown CAP_H tiles taller,
+        # outside the room's own footprint, for visual depth (and, above this,
+        # room for the shadow/corner-bevel overlay generate-room-decor.py
+        # paints over it). Empty for bottom-row rooms.
         cap_x0, cap_ys, cap_x1 = cap_rows(room)
         cap_gid = CAP_GID[room["id"]]
         for cap_y in cap_ys:
@@ -132,7 +132,10 @@ def main() -> None:
     # Gaps between same-row rooms: floored (hallway texture) but blocked --
     # cosmetic filler only. Agents only ever cross between columns via the
     # hallway strip below/above, never through these gaps.
-    for row_y0, row_y1 in ((0, CAP_H + ROOM_H - 1), (HEIGHT - CAP_H - ROOM_H, HEIGHT - 1)):
+    # Row bands, matching room_layout.room_y0's asymmetry: the top band is the
+    # CAP_H cap rows plus the room (rows 0 .. CAP_H+ROOM_H-1), the bottom band
+    # is just the room (rows HEIGHT-ROOM_H .. HEIGHT-1).
+    for row_y0, row_y1 in ((0, CAP_H + ROOM_H - 1), (HEIGHT - ROOM_H, HEIGHT - 1)):
         gap_x0 = ROOM_W
         for _ in range(2):
             for x in range(gap_x0, gap_x0 + GAP):
@@ -142,7 +145,7 @@ def main() -> None:
             gap_x0 += GAP + ROOM_W
 
     # Hallway: fully open floor, full width, no walls.
-    hallway_y0, hallway_y1 = CAP_H + ROOM_H, HEIGHT - CAP_H - ROOM_H - 1
+    hallway_y0, hallway_y1 = CAP_H + ROOM_H, HEIGHT - ROOM_H - 1
     for x, y in rect_cells(0, hallway_y0, WIDTH - 1, hallway_y1):
         floor_fill[(x, y)] = GID_HALLWAY
 
@@ -159,7 +162,10 @@ def main() -> None:
             "height": (ROOM_H - 2) * TILE,
         }
 
-    spawn_objects = [tile_obj("common", WIDTH // 2, ROOM_H + HALLWAY_H // 2)]
+    # Derived from hallway_y0, not from ROOM_H: the cap rows push the hallway
+    # down, and agentSim spawns every agent on this tile, so it has to land on
+    # real walkable hallway floor rather than a room's wall ring.
+    spawn_objects = [tile_obj("common", WIDTH // 2, hallway_y0 + HALLWAY_H // 2)]
     for room in ROOMS:
         door_x, door_y = door_tile(room)
         spawn_objects.append(tile_obj(f"{room['id']}-door", door_x, door_y))

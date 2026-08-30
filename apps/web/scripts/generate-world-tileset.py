@@ -52,8 +52,13 @@ def main() -> None:
     # (cap, base, base+window-left, base+window-right) -- generate-world-map.py's
     # CAP_GID/BASE_GID/WINDOW_LEFT_GID/WINDOW_RIGHT_GID assume this exact order.
     for room in ROOMS:
-        cap_tile = crop_tile(cache, WALLS_SHEET, 0, room["wall"] * 2)
+        # Cap and base are now the SAME crop (row 2*wall+1, the plain wall
+        # body -- not row 2*wall, which carries a pale decorative trim
+        # stripe in its top ~12px meant for an interior wall segment, not
+        # the outermost edge of this game's wall stack; see this file's
+        # own history / the plan's Amendment 4 for how that was found).
         base_tile = crop_tile(cache, WALLS_SHEET, 0, room["wall"] * 2 + 1)
+        cap_tile = base_tile.copy()
         tiles.append(cap_tile)
         tiles.append(base_tile)
         tiles.append(Image.alpha_composite(base_tile.copy(), crop_tile(cache, *WINDOW_LEFT_TILE)))

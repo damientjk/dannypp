@@ -23,11 +23,19 @@ WORLD_ASSETS = Path(__file__).resolve().parents[1] / "public" / "world-assets"
 EQUIPMENT_SRC_DIR = "3_Animated_objects/32x32/spritesheets"
 
 # Shading strength for build_wall_shade()'s corner wedge, as a black-overlay
-# alpha. Comes from sampling moderninteriors-win/6_Home_Designs/
-# Shooting_Range_Designs/32x32/Shooting_Range_Design_layer_1_32x32.png, whose
-# side wall reads (119,109,105) against a (138,133,129) back wall (~0.84x).
-# Compositing black at alpha a scales a pixel by (1 - a/255), so 40 -> 0.843x.
-WALL_SHADE = 40
+# alpha. Originally 40 (~0.84x), sourced from sampling moderninteriors-win/
+# 6_Home_Designs/Shooting_Range_Designs/32x32/
+# Shooting_Range_Design_layer_1_32x32.png, whose side wall reads
+# (119,109,105) against a (138,133,129) back wall. That value was tuned
+# against a background that was partly the pale trim stripe Task 9 removed
+# from the cap tile (see the plan's Amendment 4) -- at this game's actual
+# on-screen scale, against the now-uniform mid-tone wall, 40 read as a barely
+# perceptible gradient rather than a legible corner cut (confirmed by
+# pixel-sampling a live screenshot). Bumped to 80 (~0.69x -- compositing
+# black at alpha a scales a pixel by (1 - a/255)), re-verified the same way:
+# the wedge reads as a clearly darker diagonal against the plain wall at
+# normal viewing scale.
+WALL_SHADE = 80
 
 ROOM_BY_ID = {r["id"]: r for r in ROOMS}
 

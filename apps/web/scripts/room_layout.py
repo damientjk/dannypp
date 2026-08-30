@@ -11,6 +11,10 @@ exactly (11+1+11+1+11=35); the vertical stack is symmetric -- both room rows
 get their own CAP_H cap row -- see CAP_H.
 """
 
+from pathlib import Path
+
+REPO_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "moderninteriors-win").is_dir())
+
 TILE = 32
 WIDTH, HEIGHT = 35, 22
 ROOM_W, ROOM_H = 11, 8    # outer footprint incl. 1-tile wall ring

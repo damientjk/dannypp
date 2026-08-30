@@ -21,29 +21,49 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from room_layout import WIDTH, HEIGHT, TILE, ROOM_W, ROOM_H, GAP, HALLWAY_H, ROOMS, DESKS
+from room_layout import WIDTH, HEIGHT, TILE, ROOM_W, ROOM_H, GAP, HALLWAY_H, CAP_H, ROOMS, DESKS, room_y0
 
 WORLD_ASSETS = Path(__file__).resolve().parents[1] / "public" / "world-assets"
 
 GID_BLANK = 0
 GID_HALLWAY = 1
-GID_WALL = 8
-GID_WINDOW_LEFT = 9
-GID_WINDOW_RIGHT = 10
 # Room floor GIDs: ROOMS[0]'s floor is gid 2, ROOMS[1]'s is gid 3, etc.
 # generate-world-tileset.py builds its tile strip in this exact same ROOMS
 # order, so the two files can't drift apart.
 FLOOR_GID = {room["id"]: i + 2 for i, room in enumerate(ROOMS)}
 
+# Wall GIDs: 4 consecutive tiles per room (cap, base, base+window-left,
+# base+window-right), starting right after the floor tiles, in the same
+# ROOMS order as FLOOR_GID above. generate-world-tileset.py appends tiles in
+# this exact order so the two files can't drift apart.
+_WALL_GID_BASE = 2 + len(ROOMS)
+CAP_GID = {room["id"]: _WALL_GID_BASE + 4 * i for i, room in enumerate(ROOMS)}
+BASE_GID = {room["id"]: _WALL_GID_BASE + 4 * i + 1 for i, room in enumerate(ROOMS)}
+WINDOW_LEFT_GID = {room["id"]: _WALL_GID_BASE + 4 * i + 2 for i, room in enumerate(ROOMS)}
+WINDOW_RIGHT_GID = {room["id"]: _WALL_GID_BASE + 4 * i + 3 for i, room in enumerate(ROOMS)}
+TILE_COUNT = _WALL_GID_BASE + 4 * len(ROOMS)
+# The collision layer only checks "nonzero == blocked" (see engineMap.test.ts
+# / agentSim.test.ts, which use arbitrary nonzero values for the same
+# reason) -- this marks the cosmetic between-room gap columns as blocked
+# without needing a real per-room wall GID there.
+GID_BLOCKED = 1
+
 
 def exterior_rect(room):
     x0 = room["x0"]
     x1 = x0 + ROOM_W - 1
-    if room["row"] == "top":
-        y0, y1 = 0, ROOM_H - 1
-    else:
-        y0, y1 = HEIGHT - ROOM_H, HEIGHT - 1
+    y0 = room_y0(room)
+    y1 = y0 + ROOM_H - 1
     return x0, y0, x1, y1
+
+
+def cap_row(room):
+    """The extra wall-cap row just outside the room's back wall (the wall
+    opposite the door, where the window already sits) -- above the room for
+    a top-row room, below it for a bottom-row room."""
+    x0, y0, x1, y1 = exterior_rect(room)
+    cap_y = y0 - 1 if room["row"] == "top" else y1 + 1
+    return x0, cap_y, x1
 
 
 def door_tile(room):
@@ -77,32 +97,41 @@ def main() -> None:
         x0, y0, x1, y1 = exterior_rect(room)
         door = door_tile(room)
         floor_gid = FLOOR_GID[room["id"]]
+        base_gid = BASE_GID[room["id"]]
         for x, y in rect_cells(x0, y0, x1, y1):
             if (x, y) == door:
                 floor_fill[(x, y)] = floor_gid
                 continue
             if is_ring(x, y, x0, y0, x1, y1):
-                walls_fill[(x, y)] = GID_WALL
-                collision_fill[(x, y)] = GID_WALL
+                walls_fill[(x, y)] = base_gid
+                collision_fill[(x, y)] = base_gid
             else:
                 floor_fill[(x, y)] = floor_gid
 
         # Window pair on the wall opposite the door.
         window_y = y1 if room["row"] == "bottom" else y0
         window_x0 = x0 + ROOM_W // 2 - 1
-        walls_fill[(window_x0, window_y)] = GID_WINDOW_LEFT
-        walls_fill[(window_x0 + 1, window_y)] = GID_WINDOW_RIGHT
+        walls_fill[(window_x0, window_y)] = WINDOW_LEFT_GID[room["id"]]
+        walls_fill[(window_x0 + 1, window_y)] = WINDOW_RIGHT_GID[room["id"]]
+
+        # Wall-cap row: the room's back wall grown one tile taller, outside
+        # the room's own footprint, for visual depth.
+        cap_x0, cap_y, cap_x1 = cap_row(room)
+        cap_gid = CAP_GID[room["id"]]
+        for x in range(cap_x0, cap_x1 + 1):
+            walls_fill[(x, cap_y)] = cap_gid
+            collision_fill[(x, cap_y)] = cap_gid
 
     # Gaps between same-row rooms: floored (hallway texture) but blocked --
     # cosmetic filler only. Agents only ever cross between columns via the
     # hallway strip below/above, never through these gaps.
-    for row_y0, row_y1 in ((0, ROOM_H - 1), (HEIGHT - ROOM_H, HEIGHT - 1)):
+    for row_y0, row_y1 in ((0, CAP_H + ROOM_H - 1), (HEIGHT - CAP_H - ROOM_H, HEIGHT - 1)):
         gap_x0 = ROOM_W
         for _ in range(2):
             for x in range(gap_x0, gap_x0 + GAP):
                 for y in range(row_y0, row_y1 + 1):
                     floor_fill[(x, y)] = GID_HALLWAY
-                    collision_fill[(x, y)] = GID_WALL
+                    collision_fill[(x, y)] = GID_BLOCKED
             gap_x0 += GAP + ROOM_W
 
     # Hallway: fully open floor, full width, no walls.
@@ -140,10 +169,10 @@ def main() -> None:
             {
                 "firstgid": 0,
                 "image": "tileset.png",
-                "columns": 11,
+                "columns": TILE_COUNT,
                 "tilewidth": TILE,
                 "tileheight": TILE,
-                "tilecount": 11,
+                "tilecount": TILE_COUNT,
             }
         ],
         "layers": [

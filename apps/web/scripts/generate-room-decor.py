@@ -12,7 +12,7 @@ import json
 import shutil
 import sys
 from pathlib import Path
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageStat
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from room_layout import TILE, ROOM_W, ROOM_H, CAP_H, ROOMS, DESKS, EQUIPMENT, DECOR, AMBIENT, room_y0
@@ -26,6 +26,10 @@ EQUIPMENT_SRC_DIR = "3_Animated_objects/32x32/spritesheets"
 # pixel-identical to the real floor layer underneath it.
 FLOORS_SHEET = MODERNINTERIORS / "1_Interiors" / "32x32" / "Room_Bulder_subfiles_32x32" / "Room_Builder_Floors_32x32.png"
 ROOM_BUILDER = MODERNINTERIORS / "1_Interiors" / "32x32" / "Room_Builder_32x32.png"
+# Same sheet generate-world-tileset.py crops for each room's real wall GID --
+# reused here (read-only) so build_wall_border_overlay()'s flat side-wall
+# color is sampled from each room's own wall body rather than hand-picked.
+WALLS_SHEET = MODERNINTERIORS / "1_Interiors" / "32x32" / "Room_Bulder_subfiles_32x32" / "Room_Builder_Walls_32x32.png"
 
 # Shading strength for build_wall_shade()'s corner wedge, as a black-overlay
 # alpha. Originally 40 (~0.84x), sourced from sampling moderninteriors-win/
@@ -64,36 +68,56 @@ def floor_crop_for(room):
     return sheet.crop((col * TILE, row * TILE, col * TILE + TILE, row * TILE + TILE))
 
 
-# Width (px) of real wall texture left visible as a thin border at each
-# non-back wall's true outer edge once build_wall_border_overlay()'s floor
-# tiling covers the rest of the wall ring. A judgment call per the task
-# brief -- started at 6, confirmed by eye against a live screenshot (see
-# task-10-report.md) to read clearly as "thin border" without swallowing
-# the wall texture down to an imperceptible sliver.
-BORDER_STRIP = 6
+# Width (px) of the flat-color band left visible at each side wall's true
+# outer edge once build_wall_border_overlay()'s floor tiling covers the
+# rest of the wall ring. 16, not Task 10's 6 -- three independent
+# pixel-measurements against the actual reference art (Gym/Shooting Range/
+# Museum, see task-11-brief.md) all found the reference's side wall is
+# exactly half its 32px wall tile, constant along the whole wall. The front
+# wall gets no band at all (see build_wall_border_overlay's docstring), so
+# this constant is side-wall-only -- no separate front constant needed.
+SIDE_STRIP = 16
+
+
+def wall_body_color(room):
+    """Average RGB of the room's own base wall tile: Room_Builder_Walls_32x32.png,
+    column 1 (Task 10's fix for the sheet's dark seam column), row
+    room["wall"] * 2 + 1 -- the exact crop generate-world-tileset.py already
+    uses for this room's real wall GID. Sampled programmatically
+    (ImageStat mean over the RGB channels) rather than 6 hand-picked colors,
+    per the task brief -- the reference's side walls read as one flat,
+    solid, single color, so a per-room average of that room's own wall
+    texture is the natural stand-in."""
+    sheet = Image.open(WALLS_SHEET).convert("RGB")
+    row = room["wall"] * 2 + 1
+    tile = sheet.crop((TILE, row * TILE, TILE * 2, row * TILE + TILE))
+    r, g, b = ImageStat.Stat(tile).mean
+    return (round(r), round(g), round(b), 255)
 
 
 def build_wall_border_overlay(room, floor_crop):
-    """Per-room decor overlay that makes the wall ring read as a thin
-    BORDER_STRIP-px border instead of a solid 32px block: floor_crop tiled
-    across the room's full ROOM_W x ROOM_H outer footprint, alpha-masked
-    opaque everywhere except a BORDER_STRIP-px band at the canvas's true
-    outer edge -- that band stays transparent so the real wall texture
-    underneath keeps showing through as a thin border instead of the whole
-    32px-wide wall ring reading as a solid block.
+    """Per-room decor overlay that makes the wall ring read as a thin,
+    flat-colored side-wall border plus a wall-free front (door) wall,
+    matching the reference art's own treatment (see task-11-brief.md):
+    floor_crop tiled across the room's full ROOM_W x ROOM_H outer footprint
+    (this covers the wall ring's own busy per-theme texture everywhere,
+    including the front wall -- floor now runs to the true outer edge
+    there, same as the reference's near-absent front wall), with a
+    SIDE_STRIP-px flat solid-color band painted back in at the true left
+    and right edges, sampled per-room from wall_body_color().
 
-    Two exceptions carved out of the mask:
-      - The door's own tile column, on the door's wall side: forced fully
-        opaque all the way to the outer edge, so no transparent-border
-        sliver crosses the door opening (which is already plain floor with
-        no wall GID at all -- see generate-world-map.py's door handling).
-      - The back wall -- the wall opposite the door, which carries the
-        window pair and, for top-row rooms, the cap + corner-wedge
-        treatment Tasks 7-9 already built and the user confirmed looks
-        right: excluded entirely (its whole row left fully transparent).
-        This task must not touch that wall for any room -- painting floor
-        texture over the window art would look broken regardless of row,
-        never mind the wedge.
+    That side band deliberately runs the room's *full* height, front row
+    included -- not just the interior rows -- so the bottom corners (side
+    meets front) come out as a plain square overlap of two rectangles, no
+    diagonal or special-casing needed, matching the reference's plain
+    bottom corners (contrast the back wall's own separate mitered top
+    corners from Tasks 7-9, untouched here).
+
+    One exception carved out of the mask: the back wall -- the wall
+    opposite the door, which carries the window pair and, for top-row
+    rooms, the cap + corner-wedge treatment Tasks 7-9 already built and the
+    user confirmed looks right -- is excluded entirely (its whole row left
+    fully transparent). This task must not touch that wall for any room.
     """
     w, h = ROOM_W * TILE, ROOM_H * TILE
     img = Image.new("RGBA", (w, h))
@@ -101,25 +125,26 @@ def build_wall_border_overlay(room, floor_crop):
         for x in range(0, w, TILE):
             img.paste(floor_crop, (x, y))
 
-    mask = Image.new("L", (w, h), 0)
-    d = ImageDraw.Draw(mask)
-    d.rectangle([BORDER_STRIP, BORDER_STRIP, w - 1 - BORDER_STRIP, h - 1 - BORDER_STRIP], fill=255)
+    d_img = ImageDraw.Draw(img)
+    color = wall_body_color(room)
+    d_img.rectangle([0, 0, SIDE_STRIP - 1, h - 1], fill=color)
+    d_img.rectangle([w - SIDE_STRIP, 0, w - 1, h - 1], fill=color)
+
+    mask = Image.new("L", (w, h), 255)
+    d_mask = ImageDraw.Draw(mask)
 
     # Back wall: top row for a top-row room (farthest from the hallway,
     # where the door isn't), bottom row for a bottom-row room -- mirrors
     # door_tile()'s own door_y = y1 if top else y0 in generate-world-map.py.
+    # This wins over the side-color paint above regardless of what's under
+    # it: the mask is applied last, so the back wall row stays fully
+    # transparent (real wall + cap/wedge shows through) even through the
+    # small overlap where the side bands cross it.
     back_on_top = room["row"] == "top"
     if back_on_top:
-        d.rectangle([0, 0, w - 1, TILE - 1], fill=0)
+        d_mask.rectangle([0, 0, w - 1, TILE - 1], fill=0)
     else:
-        d.rectangle([0, h - TILE, w - 1, h - 1], fill=0)
-
-    door_col = ROOM_W // 2
-    door_x0, door_x1 = door_col * TILE, door_col * TILE + TILE - 1
-    if back_on_top:
-        d.rectangle([door_x0, h - BORDER_STRIP, door_x1, h - 1], fill=255)
-    else:
-        d.rectangle([door_x0, 0, door_x1, BORDER_STRIP - 1], fill=255)
+        d_mask.rectangle([0, h - TILE, w - 1, h - 1], fill=0)
 
     img.putalpha(mask)
     return img

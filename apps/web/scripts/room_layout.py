@@ -263,55 +263,44 @@ DECOR = {
         dict(col=7, row=1, dest="bike-2.png",
              src=REPO_ROOT / "gym bicycle" / "Gym_Singles_48x48_94.png", scale=2/3),
     ],
-    # 2_Living_Room_Singles_32x32/ (122 files, all individually eyeballed via
-    # asset_contact_sheet.py plus a numeric-dimension scan) turned out to be
-    # a Victorian bedroom/parlor set -- wardrobes, vanities, nightstands,
-    # lamps, mirrors, a grandfather clock -- with zero TV, zero coffee
-    # table, and zero rug. The category's composite sheet
-    # (Theme_Sorter_32x32/2_LivingRoom_32x32.png) was checked in full next
-    # (same lesson as Tasks 7/8/9) and does have real 3-seat/2-seat sofas in
-    # four colorways (its own back-cushion + seat-cushion tile pair, ~110px
-    # tall) but still no coffee table, no TV, and no rug. Per the task's
-    # explicit fallback rule (no clean match after checking both Singles and
-    # the composite -- pick the closest reasonable alternative from a nearby
-    # category), three of the six items come from elsewhere:
-    #   - tv.png: 3_Animated_objects' animated_old_tv_32x32.png, frame 0 of
-    #     its 6-frame static/noise loop (a retro CRT set, not a flatscreen,
-    #     but unambiguously "a TV" -- cropped to one still frame since this
-    #     room has no EQUIPMENT/animation).
-    #   - coffee-table.png: reuses the Singles folder's cream tufted
-    #     bench/ottoman (_33) as an ottoman-style coffee table -- a real
-    #     furniture convention, not just a placeholder swap.
-    #   - rug.png: a real bordered area-rug sprite from
-    #     Theme_Sorter_32x32/26_Condominium_32x32.png (tan colorway, of 3
-    #     available), the exact "reuse a floor-pattern piece" case the brief
-    #     called out.
-    # Layout: the sofa (96x110, ~3x3.4 tiles) is far taller than any other
-    # room's decor, so it gets its own column lane (1-3) with nothing else
-    # sharing those columns/rows; the coffee table sits stacked directly
-    # above the TV in a second lane (5-6) against the back wall, out of the
-    # sofa's way entirely. rug.png is listed first so it renders underneath
-    # the sofa's front edge (they deliberately overlap a few px -- a rug
-    # peeking from under a couch) while stopping just short of the table.
-    # Plants flank the door at col=0/col=7 per every other room's
-    # convention; row=0 (the door's own row) is left empty like every prior
-    # room's DECOR list already does.
+    # Re-themed per the user's new mockup: plain living room (sofa, TV,
+    # coffee table, rug) -> game room (arcade machines, TV+console, a
+    # 3-seat sofa facing the screen). No pool table exists anywhere in the
+    # pack (checked 2_Living_Room_Singles_32x32, 26_Condominium_Singles_32x32,
+    # 14_Basement_Singles_32x32, 13_Conference_Hall_Singles_32x32,
+    # 23_Television_and_Film_Studio_SIngles_32x32, 6_Music_and_Sport_32x32)
+    # -- a 3rd arcade machine fills that spot instead. No true multi-seat
+    # sofa/couch exists anywhere either (same folders, plus a
+    # dimension-based scan of every multi-tile file in Basement) -- the
+    # user isolated their own 3-piece modular sofa crop (left arm / middle /
+    # right arm) from the pack's 48px-per-tile sheet (repo-root/sofa/,
+    # scale=2/3 down to this game's 32px tiles).
+    #
+    # living-room is a bottom-row room, so row 0 is its capped DOOR-facing
+    # wall (not the back wall) -- see room_y0()'s comment. Arcade machines
+    # line that entrance wall at row=-1 (wall-covering, same convention as
+    # every other room's row=-1/row=0 items). The three machines are placed
+    # edge-to-edge (col 1/3/5, each 64px = 2 tiles wide) reading as one
+    # arcade row; tv-console sits at row=1/col=7, flush against the right
+    # wall. The sofa's three 32x64 (post-scale) segments sit at row=4,
+    # col 6/7/8 -- edge-to-edge like the arcades, flush against the right
+    # wall and the room's plain south wall (opposite the door), facing
+    # north toward the TV.
     "living-room": [
-        dict(col=3, row=3, dest="rug.png",
-             src="1_Interiors/32x32/Theme_Sorter_32x32/26_Condominium_32x32.png",
-             crop=(450, 192, 508, 222)),
-        dict(col=1, row=1, dest="sofa.png",
-             src="1_Interiors/32x32/Theme_Sorter_32x32/2_LivingRoom_32x32.png",
-             crop=(128, 906, 224, 1016)),
-        dict(col=5, row=2, dest="coffee-table.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_33.png"),
-        dict(col=5, row=4, dest="tv.png",
-             src="3_Animated_objects/32x32/spritesheets/animated_old_tv_32x32.png",
-             crop=(0, 0, 64, 64)),
-        dict(col=0, row=1, dest="plant-left.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_15.png"),
-        dict(col=7, row=1, dest="plant-right.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_17.png"),
+        dict(col=1, row=-1, dest="arcade-1.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_208.png"),
+        dict(col=3, row=-1, dest="arcade-2.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_209.png"),
+        dict(col=5, row=-1, dest="arcade-3.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_208.png"),
+        dict(col=7, row=1, dest="tv-console.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_194.png"),
+        dict(col=6, row=4, dest="sofa-left.png",
+             src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_51.png", scale=2/3),
+        dict(col=7, row=4, dest="sofa-mid.png",
+             src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_52.png", scale=2/3),
+        dict(col=8, row=4, dest="sofa-right.png",
+             src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_53.png", scale=2/3),
     ],
     # 6_Music_and_Sport_Singles_32x32/ (same folder Task 8 searched) has no
     # standalone stool/crate Singles file either -- it's the same

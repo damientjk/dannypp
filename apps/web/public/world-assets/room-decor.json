@@ -161,34 +161,39 @@
       "y": 416
     },
     {
-      "image": "decor/living-room/rug.png",
-      "x": 512,
-      "y": 576
+      "image": "decor/living-room/arcade-1.png",
+      "x": 448,
+      "y": 448
     },
     {
-      "image": "decor/living-room/sofa.png",
-      "x": 448,
+      "image": "decor/living-room/arcade-2.png",
+      "x": 512,
+      "y": 448
+    },
+    {
+      "image": "decor/living-room/arcade-3.png",
+      "x": 576,
+      "y": 448
+    },
+    {
+      "image": "decor/living-room/tv-console.png",
+      "x": 640,
       "y": 512
     },
     {
-      "image": "decor/living-room/coffee-table.png",
-      "x": 576,
-      "y": 544
-    },
-    {
-      "image": "decor/living-room/tv.png",
-      "x": 576,
+      "image": "decor/living-room/sofa-left.png",
+      "x": 608,
       "y": 608
     },
     {
-      "image": "decor/living-room/plant-left.png",
-      "x": 416,
-      "y": 512
+      "image": "decor/living-room/sofa-mid.png",
+      "x": 640,
+      "y": 608
     },
     {
-      "image": "decor/living-room/plant-right.png",
-      "x": 640,
-      "y": 512
+      "image": "decor/living-room/sofa-right.png",
+      "x": 672,
+      "y": 608
     },
     {
       "image": "decor/deploy-config/wall-shade.png",

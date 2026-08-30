@@ -142,7 +142,7 @@ def main() -> None:
             gap_x0 += GAP + ROOM_W
 
     # Hallway: fully open floor, full width, no walls.
-    hallway_y0, hallway_y1 = ROOM_H, HEIGHT - ROOM_H - 1
+    hallway_y0, hallway_y1 = CAP_H + ROOM_H, HEIGHT - CAP_H - ROOM_H - 1
     for x, y in rect_cells(0, hallway_y0, WIDTH - 1, hallway_y1):
         floor_fill[(x, y)] = GID_HALLWAY
 

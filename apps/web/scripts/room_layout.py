@@ -7,7 +7,8 @@ Room footprint is uniform: every room is ROOM_W x ROOM_H tiles including its
 1-tile wall ring, giving a (ROOM_W-2) x (ROOM_H-2) walkable interior. Verified
 math (apps/web/scripts/room_layout.py's own constants, see the design spec
 §3): 3 room columns + 2 GAP-wide cosmetic gaps span the 35-wide canvas
-exactly (11+1+11+1+11=35); the vertical stack is asymmetric -- see CAP_H.
+exactly (11+1+11+1+11=35); the vertical stack is symmetric -- both room rows
+get their own CAP_H cap row -- see CAP_H.
 """
 
 TILE = 32
@@ -33,11 +34,28 @@ def room_y0(room):
     """Absolute y of the room's exterior rect's top-left corner. Shared by
     generate-world-map.py's exterior_rect() and generate-room-decor.py's
     room_origin() so the two can't drift on where the cap rows shifted rooms
-    to. Asymmetric: top-row rooms sit CAP_H rows down from the map's top edge,
-    freeing those rows above them for their wall cap; bottom-row rooms sit
-    flush against the map's bottom edge (their own cap rows go above them too,
-    inside the hallway-facing gap, so this formula is unchanged for them)."""
+    to. Symmetric: both row's rooms get a dedicated CAP_H-row cap carved out
+    of HEIGHT, immediately above the room's own footprint -- there is no
+    gap. Top-row rooms sit CAP_H rows down from the map's top edge, with
+    their cap row(s) filling that space above them. Bottom-row rooms sit
+    flush against the map's bottom edge, with their cap row(s) sitting
+    between the hallway and the room (row 13 in the current 22-row layout) --
+    the same structure as the top row's cap, just mirrored. (A prior,
+    asymmetric version of this function shipped a real bug -- see Task 5 --
+    so keep this description precise if the geometry changes again.)"""
     return CAP_H if room["row"] == "top" else HEIGHT - ROOM_H
+
+
+def wall_crop_box(room, tile=TILE):
+    """Crop box (left, top, right, bottom) for a room's wall tile in
+    Room_Builder_Walls_32x32.png: column 1 (not 0 -- column 0 carries a 2px
+    dark seam baked into its left edge), row room["wall"]*2+1 (the plain
+    wall body, not the decorative-trim row above it at 2*wall). Shared by
+    generate-world-tileset.py's per-room wall build and
+    generate-room-decor.py's wall_body_color() so the two crops can't drift
+    apart."""
+    row = room["wall"] * 2 + 1
+    return (tile, row * tile, tile * 2, row * tile + tile)
 
 # id, owner (None = unprotected/common), row ("top"/"bottom"), x0 (left
 # column of the outer footprint), theme (used only for decor-file naming),
@@ -58,6 +76,12 @@ ROOMS = [
     dict(id="deploy-config", owner="user-b", row="bottom", x0=24, theme="music",
          floor=("Room_Builder_Floors", 6, 23), wall=12),   # dusty rose-brown, matches warm floor
 ]
+
+# Catches a room silently placed out of bounds -- build_layer() in
+# generate-world-map.py has no bounds check and would otherwise silently
+# wrap a too-far room's cells into the next map row instead of erroring.
+assert len(ROOMS) == 6
+assert all(r["x0"] + ROOM_W <= WIDTH for r in ROOMS)
 
 # Interior-relative (col 0-8, row 0-5) desk spawn positions, in
 # desk-<id>-1/-2/... order. living-room has none -- it's the one

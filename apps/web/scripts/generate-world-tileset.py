@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Composite the world's tileset: 1 hallway floor + 6 themed room floors +
-1 wall block (3D-shaded) + a 2-tile window pair -- all cropped from
-moderninteriors-win. Room furniture no longer lives here; see
-generate-room-decor.py for the freeform decor/equipment sprites this
-tileset used to carry as GIDs (desk, rug, plant).
+"""Composite the world's tileset: 1 hallway floor tile + 6 themed room floor
+tiles + per-room wall tiles (cap and base are the same crop, one texture) --
+all cropped from moderninteriors-win. Each room's wall block still gets two
+window-composited frames baked in after its cap/base pair (see the comment
+above the wall loop below) purely to hold generate-world-map.py's fixed
+4-tile-per-room GID stride steady; Task 13 stopped painting those frames
+onto the map, so they go unused in the finished tileset. Room furniture no
+longer lives here; see generate-room-decor.py for the freeform decor/
+equipment sprites this tileset used to carry as GIDs (desk, rug, plant).
 
 Usage: python3 generate-world-tileset.py
 """
@@ -12,7 +16,7 @@ from pathlib import Path
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from room_layout import ROOMS
+from room_layout import ROOMS, wall_crop_box
 
 REPO_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "moderninteriors-win").is_dir())
 MODERNINTERIORS = REPO_ROOT / "moderninteriors-win"
@@ -37,6 +41,12 @@ def crop_tile(cache, path, col, row):
     return sheet.crop((col * TILE, row * TILE, col * TILE + TILE, row * TILE + TILE))
 
 
+def crop_box(cache, path, box):
+    if path not in cache:
+        cache[path] = Image.open(path).convert("RGBA")
+    return cache[path].crop(box)
+
+
 def main() -> None:
     cache = {}
     tiles = [Image.new("RGBA", (TILE, TILE), (0, 0, 0, 0))]  # gid 0: blank
@@ -45,26 +55,14 @@ def main() -> None:
         sheet_name, col, row = room["floor"]
         sheet_path = FLOORS_SHEET if sheet_name == "Room_Builder_Floors" else ROOM_BUILDER
         tiles.append(crop_tile(cache, sheet_path, col, row))
-    # Per-room wall: cap + base cropped from a real 2-row wall block in
-    # Room_Builder_Walls_32x32.png (column 0, rows 2*wall/2*wall+1 -- see
-    # room_layout.ROOMS' "wall" field), replacing the old single shared
-    # tile + synthetic gradient. Appended in ROOMS order, 4 tiles per room
-    # (cap, base, base+window-left, base+window-right) -- generate-world-map.py's
-    # CAP_GID/BASE_GID/WINDOW_LEFT_GID/WINDOW_RIGHT_GID assume this exact order.
+    # Per-room wall: cap and base are the SAME crop (see room_layout.wall_crop_box
+    # for the exact box and why), not two separate ones. Replaces the old
+    # single shared tile + synthetic gradient. Appended in ROOMS order, 4
+    # tiles per room (cap, base, base+window-left, base+window-right) --
+    # generate-world-map.py's CAP_GID/BASE_GID/WINDOW_LEFT_GID/WINDOW_RIGHT_GID
+    # assume this exact order.
     for room in ROOMS:
-        # Cap and base are now the SAME crop (row 2*wall+1, the plain wall
-        # body -- not row 2*wall, which carries a pale decorative trim
-        # stripe in its top ~12px meant for an interior wall segment, not
-        # the outermost edge of this game's wall stack; see this file's
-        # own history / the plan's Amendment 4 for how that was found).
-        # Column 1, not column 0: column 0 carries a 2px dark seam baked
-        # into its left edge (part of the sheet's own per-block border
-        # art), which repeats every 32px as a "picket fence" line across
-        # any wall run. Column 1 is the same body color with no dark left
-        # edge, while still keeping the dark top edge (cap tile) / dark
-        # bottom edge (base tile) intact -- verified for all 6 wall
-        # indices this game uses (Task 10's own verification).
-        base_tile = crop_tile(cache, WALLS_SHEET, 1, room["wall"] * 2 + 1)
+        base_tile = crop_box(cache, WALLS_SHEET, wall_crop_box(room))
         cap_tile = base_tile.copy()
         tiles.append(cap_tile)
         tiles.append(base_tile)

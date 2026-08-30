@@ -39,6 +39,12 @@ FLOOR_GID = {room["id"]: i + 2 for i, room in enumerate(ROOMS)}
 _WALL_GID_BASE = 2 + len(ROOMS)
 CAP_GID = {room["id"]: _WALL_GID_BASE + 4 * i for i, room in enumerate(ROOMS)}
 BASE_GID = {room["id"]: _WALL_GID_BASE + 4 * i + 1 for i, room in enumerate(ROOMS)}
+# WINDOW_LEFT_GID/WINDOW_RIGHT_GID: unused since Task 13 removed windows from
+# the map (nothing below reads these two dicts). Kept, not deleted, so the
+# 4-tile-per-room stride above stays stable -- renumbering to drop them would
+# only reclaim ~3KB of tileset space and isn't worth the GID churn.
+# generate-world-tileset.py still crops and bakes these two frames per room
+# to match this stride, even though they go unused in the finished tileset.
 WINDOW_LEFT_GID = {room["id"]: _WALL_GID_BASE + 4 * i + 2 for i, room in enumerate(ROOMS)}
 WINDOW_RIGHT_GID = {room["id"]: _WALL_GID_BASE + 4 * i + 3 for i, room in enumerate(ROOMS)}
 TILE_COUNT = _WALL_GID_BASE + 4 * len(ROOMS)
@@ -59,10 +65,10 @@ def exterior_rect(room):
 
 def cap_rows(room):
     """The CAP_H extra wall-cap rows just above every room's own room_y0 row
-    -- for top-row rooms that's their back wall (opposite the door, where the
-    window sits); for bottom-row rooms it's their door wall (facing the
-    hallway). Returned nearest-to-farthest from the room (cap_ys[0] is
-    immediately adjacent to room_y0)."""
+    -- for top-row rooms that's their back wall (opposite the door); for
+    bottom-row rooms it's their door wall (facing the hallway). Returned
+    nearest-to-farthest from the room (cap_ys[0] is immediately adjacent to
+    room_y0)."""
     x0, y0, x1, y1 = exterior_rect(room)
     return x0, [y0 - 1 - i for i in range(CAP_H)], x1
 

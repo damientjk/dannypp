@@ -4,7 +4,9 @@ decor + animated equipment, consumed by src/world/roomDecor.ts) and copy
 every source PNG it references from moderninteriors-win into
 public/world-assets/{decor,equipment}/.
 
-Re-run any time room_layout.py's DESKS/EQUIPMENT/DECOR/AMBIENT change.
+Re-run any time room_layout.py's DESKS/EQUIPMENT/DECOR/AMBIENT change, or its
+ROOMS[].floor, ROOMS[].wall, CAP_H, or room_y0() -- this script also derives
+the wall-border/wall-shade overlays from those.
 
 Usage: python3 generate-room-decor.py
 """
@@ -15,7 +17,10 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageStat
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from room_layout import TILE, ROOM_W, ROOM_H, CAP_H, ROOMS, DESKS, EQUIPMENT, DECOR, AMBIENT, room_y0
+from room_layout import (
+    TILE, ROOM_W, ROOM_H, CAP_H, ROOMS, DESKS, EQUIPMENT, DECOR, AMBIENT,
+    room_y0, wall_crop_box,
+)
 
 REPO_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "moderninteriors-win").is_dir())
 MODERNINTERIORS = REPO_ROOT / "moderninteriors-win"
@@ -32,18 +37,10 @@ ROOM_BUILDER = MODERNINTERIORS / "1_Interiors" / "32x32" / "Room_Builder_32x32.p
 WALLS_SHEET = MODERNINTERIORS / "1_Interiors" / "32x32" / "Room_Bulder_subfiles_32x32" / "Room_Builder_Walls_32x32.png"
 
 # Shading strength for build_wall_shade()'s corner wedge, as a black-overlay
-# alpha. Originally 40 (~0.84x), sourced from sampling moderninteriors-win/
-# 6_Home_Designs/Shooting_Range_Designs/32x32/
-# Shooting_Range_Design_layer_1_32x32.png, whose side wall reads
-# (119,109,105) against a (138,133,129) back wall. That value was tuned
-# against a background that was partly the pale trim stripe Task 9 removed
-# from the cap tile (see the plan's Amendment 4) -- at this game's actual
-# on-screen scale, against the now-uniform mid-tone wall, 40 read as a barely
-# perceptible gradient rather than a legible corner cut (confirmed by
-# pixel-sampling a live screenshot). Bumped to 80 (~0.69x -- compositing
-# black at alpha a scales a pixel by (1 - a/255)), re-verified the same way:
-# the wedge reads as a clearly darker diagonal against the plain wall at
-# normal viewing scale.
+# alpha (compositing black at alpha a scales a pixel by (1 - a/255)). 80
+# (~0.69x) reads as a clearly darker diagonal against the plain wall at
+# normal viewing scale -- tuned by pixel-sampling a live screenshot; see git
+# log / the plan doc for how earlier values were ruled out.
 WALL_SHADE = 80
 
 # Task 13 polish, applied to build_wall_border_overlay()'s side bands only:
@@ -102,17 +99,15 @@ SIDE_STRIP = 16
 
 
 def wall_body_color(room):
-    """Average RGB of the room's own base wall tile: Room_Builder_Walls_32x32.png,
-    column 1 (Task 10's fix for the sheet's dark seam column), row
-    room["wall"] * 2 + 1 -- the exact crop generate-world-tileset.py already
-    uses for this room's real wall GID. Sampled programmatically
-    (ImageStat mean over the RGB channels) rather than 6 hand-picked colors,
-    per the task brief -- the reference's side walls read as one flat,
-    solid, single color, so a per-room average of that room's own wall
-    texture is the natural stand-in."""
+    """Average RGB of the room's own base wall tile -- room_layout.wall_crop_box
+    owns the exact crop (the same box generate-world-tileset.py uses for this
+    room's real wall GID). Sampled programmatically (ImageStat mean over the
+    RGB channels) rather than 6 hand-picked colors, per the task brief -- the
+    reference's side walls read as one flat, solid, single color, so a
+    per-room average of that room's own wall texture is the natural
+    stand-in."""
     sheet = Image.open(WALLS_SHEET).convert("RGB")
-    row = room["wall"] * 2 + 1
-    tile = sheet.crop((TILE, row * TILE, TILE * 2, row * TILE + TILE))
+    tile = sheet.crop(wall_crop_box(room))
     r, g, b = ImageStat.Stat(tile).mean
     return (round(r), round(g), round(b), 255)
 
@@ -201,35 +196,22 @@ def build_wall_shade() -> Image.Image:
     """A plain mitered corner cut at the two top corners of the wall that
     sits above a room's own room_y0 row (a top-row room's back wall; a
     bottom-row room's door wall) -- the only 3D cue this room gets. No
-    side-wall darkening, no floor shadow: those were tried in an earlier
-    pass and read as too much
-    (the target is the restraint of moderninteriors-win/6_Home_Designs/
-    Gym_Designs/32x32/Gym_layer_1_32x32.png, not a full lighting pass).
+    side-wall darkening, no floor shadow -- the target is the restraint of
+    moderninteriors-win/6_Home_Designs/Gym_Designs/32x32/
+    Gym_layer_1_32x32.png, not a full lighting pass.
 
-    Measured directly off that Gym reference (confirmed by sampling pixels,
-    not re-derived from the plan's secondhand description): the room's own
-    content starts at image pixel (14,12); its corner wedge is 2px wide at
-    the very top and widens by 2px roughly every 6px of height, reaching 18px
-    (~56% of its 32px tile) right at the wall/floor seam 50px down. A
-    mid-wall column (x=200) hits that same wall/floor seam at the same row,
-    so the wedge is a flat color swap within the wall's existing footprint,
-    not a resize -- the reference just fills it with the side wall's own
-    flat (119,109,105) vs. the back wall's textured (138,133,129).
-
-    This game has no separate flat-vs-textured material to swap in (Task 3
-    gives every side of a room the same texture), so the swap is approximated
-    with a flat WALL_SHADE darken instead -- same technique and same alpha
-    Task 7 used, just now confined to this small wedge instead of the whole
-    side wall and floor. The 18px/32px-tile ratio carries over unchanged
-    (this game's tiles are also 32px); the height is stretched from the
-    reference's ~50px (1.6 tiles) to this game's whole CAP_H+1 = 2-tile back
-    wall (64px), so the slope is closer to 1:4 here than the reference's
-    ~1:3, which is expected -- the reference's back wall isn't a whole
-    number of tiles tall to begin with, ours is.
+    Wedge shape measured directly off that Gym reference by pixel-sampling:
+    2px wide at the top, widening by 2px roughly every 6px of height, to 18px
+    (~56% of a 32px tile) at the wall/floor seam 50px down. That ratio
+    carries over unchanged (this game's tiles are also 32px); the height is
+    stretched from the reference's ~50px to this game's whole CAP_H+1 =
+    2-tile back wall (64px). Approximated here as a flat WALL_SHADE darken,
+    since this game's walls are one texture throughout rather than the
+    reference's separate flat-vs-textured materials.
 
     Room-independent (it is pure black at a fixed alpha, not a texture), so
-    every top-row room reuses the identical image -- callers still write one
-    copy per room to keep decor/<room-id>/ self-contained."""
+    every room reuses the identical image -- callers still write one copy
+    per room to keep decor/<room-id>/ self-contained."""
     w = ROOM_W * TILE
     back_h = (CAP_H + 1) * TILE   # cap rows + the room's own back-wall row
     max_w = round(TILE * 18 / 32)  # ~56% of a tile, measured off the Gym reference

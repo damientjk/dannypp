@@ -186,7 +186,9 @@ export function WorldCanvas({
       className="world-canvas"
       data-testid="world-canvas"
       width={1120}
-      height={672}
+      // 704 = 22 rows * 32px/tile. Source of truth for the row count is
+      // room_layout.py's HEIGHT -- keep this in sync if that ever changes.
+      height={704}
     />
   );
 }

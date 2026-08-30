@@ -11,6 +11,11 @@ import { authenticate, findUser } from "./auth/users.js";
 import { issueSession, resolveSession } from "./auth/session.js";
 import type { CallerContext } from "./policy/pep.js";
 import type { HumanPrincipal } from "./types.js";
+import { capabilityRoutes } from "./capability/routes.js";
+import { resourceRoutes } from "./resources/routes.js";
+import type { CapabilityStore } from "./capability/store.js";
+import type { ResourceStore } from "./resources/store.js";
+import type { ResourceAccessGate } from "./resources/access.js";
 
 declare module "fastify" {
   interface FastifyRequest { principal?: HumanPrincipal | undefined; }
@@ -42,9 +47,23 @@ const loginBody = z.object({
   password: z.string().min(1),
 });
 
+/**
+ * Identity & Authorization middleware dependencies (Person 3).
+ *
+ * Optional so that Person 1's existing HTTP tests keep constructing an app with
+ * two arguments and are not disturbed. `index.ts` always supplies it, so the
+ * running server always has the middleware routes.
+ */
+export interface MiddlewareDependencies {
+  capabilities: CapabilityStore;
+  resources: ResourceStore;
+  gate: ResourceAccessGate;
+}
+
 export async function createApp(
   config: AppConfig,
   service: AgentService,
+  middleware?: MiddlewareDependencies,
 ): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
@@ -225,6 +244,16 @@ export async function createApp(
       ...(validationError ? { details: error.issues } : {}),
     });
   });
+
+  // Registered AFTER setErrorHandler: these routes live in an encapsulated
+  // plugin context, and a child context only inherits the error handler that
+  // exists at registration time. Registering earlier makes them fall back to
+  // Fastify's default error body, so their failures would have a different
+  // shape from every other endpoint.
+  if (middleware) {
+    await app.register(capabilityRoutes({ capabilities: middleware.capabilities }));
+    await app.register(resourceRoutes(middleware));
+  }
 
   return app;
 }

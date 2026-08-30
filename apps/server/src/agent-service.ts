@@ -4,13 +4,16 @@ import { AuditLog } from "./audit/log.js";
 import type { AppConfig } from "./config.js";
 import { isArkConfigured } from "./config.js";
 import { HttpError, RunCancelledError } from "./errors.js";
-import { buildPlaceholderAgentAuth } from "./policy/placeholder-capability.js";
+import { issueCapabilityForRun } from "./capability/store.js";
+import type { ResourceAccessGate } from "./resources/access.js";
+import type { ResourceStore } from "./resources/store.js";
 import type { CallerContext } from "./policy/pep.js";
 import { AgentAction, PolicyDeniedError, checkAgentAccess } from "./policy/pep.js";
 import { buildAgentResource } from "./policy/resource.js";
 import { JsonStore } from "./store.js";
 import type {
   Agent,
+  AgentPrincipal,
   AgentRun,
   AgentRunner,
   Capability,
@@ -20,6 +23,7 @@ import type {
   UpdateAgentInput,
 } from "./types.js";
 import { WorkspaceManager } from "./workspace.js";
+import { processSecrets, redact } from "./secrets/redact.js";
 
 const now = () => new Date().toISOString();
 
@@ -27,12 +31,30 @@ export class AgentService {
   private readonly activeExecutions = new Map<string, Promise<void>>();
   private readonly cancellationRequests = new Set<string>();
 
+  /**
+   * Credentials that must never reach persisted output (Person 3).
+   * AGENTS.md asks the model not to print them; this makes sure it cannot.
+   * Computed per call because `config` is a constructor parameter property.
+   */
+  private secrets(): string[] {
+    return processSecrets(this.config);
+  }
+
   constructor(
     private readonly config: AppConfig,
     private readonly store: JsonStore,
     private readonly workspaces: WorkspaceManager,
     private readonly runner: AgentRunner,
     private readonly audit: AuditLog,
+    /**
+     * Capability-gated resource materialisation (Person 3). Optional so the
+     * baseline and Person 2's existing tests can construct a service without
+     * it; index.ts always supplies it.
+     */
+    private readonly resourceAccess?: {
+      gate: ResourceAccessGate;
+      resources: ResourceStore;
+    },
   ) {}
 
   private findAgentRecord(id: string): Agent {
@@ -301,7 +323,7 @@ export class AgentService {
       }
     });
     try {
-      const { principal, capability } = buildPlaceholderAgentAuth(agentAtStart);
+      const { principal, capability } = issueCapabilityForRun(agentAtStart, run.id);
       const decision = await this.decideAndAudit(
         principal,
         AgentAction.Execute,
@@ -315,6 +337,13 @@ export class AgentService {
       if (this.cancellationRequests.has(agentAtStart.id)) {
         throw new RunCancelledError();
       }
+
+      // Materialise exactly the resources this keycard opens. Each one is a
+      // separate PDP decision, so the Agent's workspace ends up containing
+      // what it is allowed to see and nothing else -- and after a revocation
+      // it never gets this far, so it sees nothing at all.
+      await this.stagePermittedResources(agentAtStart, principal, capability.id, run.id);
+
       const result = await this.runner.run({
         agentId: agentAtStart.id,
         workspacePath: agentAtStart.workspacePath,
@@ -322,12 +351,13 @@ export class AgentService {
         threadId: agentAtStart.codexThreadId,
       });
       const completedAt = now();
+      const safeOutput = redact(result.output, this.secrets());
       await this.store.mutate((database) => {
         const storedRun = database.runs.find((item) => item.id === run.id);
         const agent = database.agents.find((item) => item.id === agentAtStart.id);
         if (!storedRun || !agent) return;
         storedRun.status = "completed";
-        storedRun.output = result.output;
+        storedRun.output = safeOutput;
         storedRun.usage = result.usage;
         storedRun.completedAt = completedAt;
         database.messages.push({
@@ -335,7 +365,7 @@ export class AgentService {
           agentId: agent.id,
           runId: run.id,
           role: "assistant",
-          content: result.output,
+          content: safeOutput,
           createdAt: completedAt,
         });
         agent.status = "ready";
@@ -346,7 +376,9 @@ export class AgentService {
     } catch (error) {
       const completedAt = now();
       const cancelled = error instanceof RunCancelledError;
-      const message = error instanceof Error ? error.message : String(error);
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      // A failing runner often echoes its environment back in the error.
+      const message = redact(rawMessage, this.secrets());
       await this.store.mutate((database) => {
         const storedRun = database.runs.find((item) => item.id === run.id);
         const agent = database.agents.find((item) => item.id === agentAtStart.id);
@@ -362,6 +394,44 @@ export class AgentService {
           agent.lastError = cancelled ? null : message;
           agent.updatedAt = completedAt;
         }
+      });
+    } finally {
+      // Always wipe the inbox, including on the denied and cancelled paths.
+      // Clearing only at run start is not enough: a run denied before staging
+      // never reaches that point, so the PREVIOUS run's files would still be
+      // sitting in the workspace for the next one to read.
+      await this.resourceAccess?.gate.clear(agentAtStart.workspacePath);
+    }
+  }
+
+  /**
+   * Copies every resource the run's capability permits into the Agent's
+   * workspace inbox. Denials are silent here by design: they are already
+   * recorded as PolicyDecisions by the gate, and a run should still proceed
+   * with the subset it is entitled to.
+   */
+  private async stagePermittedResources(
+    agent: Agent,
+    principal: AgentPrincipal,
+    capabilityId: string,
+    requestId: string,
+  ): Promise<void> {
+    if (!this.resourceAccess) return;
+    const { gate, resources } = this.resourceAccess;
+
+    // Always start from a clean inbox. Without this, a file staged by an
+    // earlier permitted run would still be sitting there, and the run after a
+    // revocation would read it and appear to succeed.
+    await gate.clear(agent.workspacePath);
+
+    for (const ref of await resources.list(agent.ownerId)) {
+      await gate.access({
+        principal,
+        action: "read",
+        resourceUri: ref.uri,
+        requestId,
+        capabilityId,
+        workspacePath: agent.workspacePath,
       });
     }
   }

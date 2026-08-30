@@ -1,4 +1,10 @@
-import type { Agent, AgentRun, Message, SystemInfo } from "./types";
+import type {
+  Agent,
+  AgentRun,
+  HumanPrincipal,
+  Message,
+  SystemInfo,
+} from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -10,15 +16,21 @@ export class ApiError extends Error {
 }
 
 let authToken = "";
+let sessionToken = "";
 
 export function setAuthToken(token: string): void {
   authToken = token.trim();
+}
+
+export function setSessionToken(token: string): void {
+  sessionToken = token.trim();
 }
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const headers = {
     ...(options?.body ? { "Content-Type": "application/json" } : {}),
     ...(authToken ? { Authorization: "Bearer " + authToken } : {}),
+    ...(sessionToken ? { "x-session-token": sessionToken } : {}),
     ...options?.headers,
   };
   const response = await fetch(url, {
@@ -34,6 +46,12 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   auth: () => request<{ required: boolean }>("/api/auth"),
+  login: (userId: string, password: string) =>
+    request<{ sessionToken: string; principal: HumanPrincipal }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ userId, password }),
+    }),
+  me: () => request<{ principal: HumanPrincipal }>("/api/auth/me"),
   system: () => request<SystemInfo>("/api/system"),
   listAgents: () => request<{ agents: Agent[] }>("/api/agents"),
   createAgent: (body: {

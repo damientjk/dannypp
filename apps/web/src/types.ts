@@ -3,6 +3,7 @@ export type RunStatus = "queued" | "running" | "completed" | "failed" | "cancell
 
 export interface Agent {
   id: string;
+  ownerId: string;
   name: string;
   description: string;
   instructions: string;
@@ -47,4 +48,43 @@ export interface SystemInfo {
   runtimeProvider: "local-process" | "container";
   containerEngine: string | null;
   runtime: string;
+}
+
+export interface HumanPrincipal {
+  kind: "human";
+  id: string;
+  displayName: string;
+}
+
+export interface AgentPrincipal {
+  kind: "agent";
+  id: string;
+  agentId: string;
+  ownerId: string;
+}
+
+export type Principal = HumanPrincipal | AgentPrincipal;
+
+export interface Capability {
+  id: string;
+  scope: string;
+  expiresAt: string;
+  revokedAt: string | null;
+}
+
+export type PolicyEffect = "permit" | "deny";
+
+export interface PolicyRequestLike {
+  principal: Principal;
+  action: string;
+  resource: string;
+  capability: Capability | undefined;
+  requestId: string;
+}
+
+export interface PolicyDecision {
+  effect: PolicyEffect;
+  reason: string;
+  requestId: string;
+  decidedAt: string;
 }

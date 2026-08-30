@@ -12,13 +12,23 @@ the 20-tall canvas exactly (8+4+8=20).
 """
 
 TILE = 32
-WIDTH, HEIGHT = 35, 20
+WIDTH, HEIGHT = 35, 22
 ROOM_W, ROOM_H = 11, 8    # outer footprint incl. 1-tile wall ring
 GAP = 1                    # cosmetic filler between same-row room columns (blocked, not a real path)
 HALLWAY_H = 4               # real walkable plaza between the two room rows
+CAP_H = 1                   # extra wall-cap row outside each room's back wall, for wall depth
 
 assert ROOM_W * 3 + GAP * 2 == WIDTH
-assert ROOM_H * 2 + HALLWAY_H == HEIGHT
+assert ROOM_H * 2 + HALLWAY_H + CAP_H * 2 == HEIGHT
+
+def room_y0(room):
+    """Absolute y of the room's exterior rect's top-left corner. Shared by
+    generate-world-map.py's exterior_rect() and generate-room-decor.py's
+    room_origin() so the two can't drift on where the cap row shifted rooms
+    to -- top-row rooms sit CAP_H rows down from the map's top edge, freeing
+    that top row for their wall cap; bottom-row rooms mirror this from the
+    bottom edge."""
+    return CAP_H if room["row"] == "top" else HEIGHT - CAP_H - ROOM_H
 
 # id, owner (None = unprotected/common), row ("top"/"bottom"), x0 (left
 # column of the outer footprint), theme (used only for decor-file naming),
@@ -27,17 +37,17 @@ assert ROOM_H * 2 + HALLWAY_H == HEIGHT
 # (see the implementation plan's Task 2 for the verification transcript).
 ROOMS = [
     dict(id="auth-module", owner="user-a", row="top", x0=0, theme="library",
-         floor=("Room_Builder_Floors", 0, 13)),   # warm honey-gold wood plank
+         floor=("Room_Builder_Floors", 0, 13), wall=13),   # tan vertical wood-plank paneling
     dict(id="analytics", owner="user-a", row="top", x0=12, theme="sports",
-         floor=("Room_Builder_Floors", 5, 12)),   # light cream-tan wood, court-like
+         floor=("Room_Builder_Floors", 5, 12), wall=2),    # flat painted grey, gymnasium wall
     dict(id="database", owner="user-b", row="top", x0=24, theme="japanese",
-         floor=("Room_Builder_Floors", 1, 15)),   # muted sage-grey woven mat texture
+         floor=("Room_Builder_Floors", 1, 15), wall=16),   # muted mauve-grey, washi-paper-adjacent
     dict(id="billing", owner="user-a", row="bottom", x0=0, theme="gym",
-         floor=("Room_Builder_Floors", 13, 17)),  # grey stone/rubber-flooring texture
+         floor=("Room_Builder_Floors", 13, 17), wall=15),  # grey stone/concrete texture
     dict(id="living-room", owner=None, row="bottom", x0=12, theme="living-room",
-         floor=("Room_Builder_Floors", 5, 13)),   # warm tan-brown wood
+         floor=("Room_Builder_Floors", 5, 13), wall=14),   # horizontal warm-tan wood plank
     dict(id="deploy-config", owner="user-b", row="bottom", x0=24, theme="music",
-         floor=("Room_Builder_Floors", 6, 23)),   # reddish-brown varied wood plank
+         floor=("Room_Builder_Floors", 6, 23), wall=12),   # dusty rose-brown, matches warm floor
 ]
 
 # Interior-relative (col 0-8, row 0-5) desk spawn positions, in

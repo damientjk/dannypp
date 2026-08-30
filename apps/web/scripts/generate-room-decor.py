@@ -15,7 +15,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from room_layout import TILE, ROOM_W, ROOM_H, CAP_H, ROOMS, DESKS, EQUIPMENT, DECOR, AMBIENT, room_y0
+from room_layout import TILE, ROOM_W, CAP_H, ROOMS, DESKS, EQUIPMENT, DECOR, AMBIENT, room_y0
 
 REPO_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "moderninteriors-win").is_dir())
 MODERNINTERIORS = REPO_ROOT / "moderninteriors-win"

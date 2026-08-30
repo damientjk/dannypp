@@ -22,19 +22,12 @@ MODERNINTERIORS = REPO_ROOT / "moderninteriors-win"
 WORLD_ASSETS = Path(__file__).resolve().parents[1] / "public" / "world-assets"
 EQUIPMENT_SRC_DIR = "3_Animated_objects/32x32/spritesheets"
 
-# Shading strengths for build_wall_shade(), as black-overlay alphas. Both come
-# from sampling moderninteriors-win/6_Home_Designs/Shooting_Range_Designs/32x32/
-# Shooting_Range_Design_layer_1_32x32.png, whose back wall/side walls/floor are
-# flat-shaded exactly this way: its side wall reads (119,109,105) against a
-# (138,133,129) back wall (~0.84x), and the floor band hugging the top and left
-# walls reads ~141 mean against ~155 further in (~0.91x). Compositing black at
-# alpha a scales a pixel by (1 - a/255), so 40 -> 0.843x and 36 -> 0.859x.
-# FLOOR_SHADE is a little past the reference's own 0.91x: these rooms' floor
-# textures are much busier than the shooting range's near-flat tile, and at
-# 0.91x the band disappeared into the plank grain entirely.
+# Shading strength for build_wall_shade()'s corner wedge, as a black-overlay
+# alpha. Comes from sampling moderninteriors-win/6_Home_Designs/
+# Shooting_Range_Designs/32x32/Shooting_Range_Design_layer_1_32x32.png, whose
+# side wall reads (119,109,105) against a (138,133,129) back wall (~0.84x).
+# Compositing black at alpha a scales a pixel by (1 - a/255), so 40 -> 0.843x.
 WALL_SHADE = 40
-FLOOR_SHADE = 36
-FLOOR_SHADE_PX = 12   # reference band is 12-14px deep
 
 ROOM_BY_ID = {r["id"]: r for r in ROOMS}
 
@@ -58,50 +51,50 @@ def copy_asset(src_rel: str, dest_rel: str, crop: tuple[int, int, int, int] | No
 
 
 def build_wall_shade() -> Image.Image:
-    """A translucent black overlay covering one top-row room's cap rows plus
-    its whole footprint, giving the room the flat 3D read the Shooting_Range
-    reference design has: darkened side-wall columns, a diagonal corner bevel
-    where the back wall's face meets them, and a shadow the top/left/right
-    walls cast onto the floor.
+    """A plain mitered corner cut at the two top corners of a top-row room's
+    back wall -- the only 3D cue this room gets. No side-wall darkening, no
+    floor shadow: those were tried in an earlier pass and read as too much
+    (the target is the restraint of moderninteriors-win/6_Home_Designs/
+    Gym_Designs/32x32/Gym_layer_1_32x32.png, not a full lighting pass).
 
-    All three come from the same observation: the back wall is the only wall
-    the camera sees face-on, so it stays at full brightness and everything
-    turning away from the camera loses ~16%. The bevel is that boundary drawn
-    honestly -- across the CAP_H+1 tiles of back wall the side wall is seen
-    increasingly edge-on, so its darkened face widens from 2px at the very top
-    to the full column width at the wall's foot, then just continues at that
-    width down the room. Nothing is masked out, so the room's silhouette stays
-    a clean rectangle and the bevel meets the side wall below it seamlessly.
+    Measured directly off that Gym reference (confirmed by sampling pixels,
+    not re-derived from the plan's secondhand description): the room's own
+    content starts at image pixel (14,12); its corner wedge is 2px wide at
+    the very top and widens by 2px roughly every 6px of height, reaching 18px
+    (~56% of its 32px tile) right at the wall/floor seam 50px down. A
+    mid-wall column (x=200) hits that same wall/floor seam at the same row,
+    so the wedge is a flat color swap within the wall's existing footprint,
+    not a resize -- the reference just fills it with the side wall's own
+    flat (119,109,105) vs. the back wall's textured (138,133,129).
 
-    Room-independent (it is pure black at fixed alphas, not a texture), so
+    This game has no separate flat-vs-textured material to swap in (Task 3
+    gives every side of a room the same texture), so the swap is approximated
+    with a flat WALL_SHADE darken instead -- same technique and same alpha
+    Task 7 used, just now confined to this small wedge instead of the whole
+    side wall and floor. The 18px/32px-tile ratio carries over unchanged
+    (this game's tiles are also 32px); the height is stretched from the
+    reference's ~50px (1.6 tiles) to this game's whole CAP_H+1 = 2-tile back
+    wall (64px), so the slope is closer to 1:4 here than the reference's
+    ~1:3, which is expected -- the reference's back wall isn't a whole
+    number of tiles tall to begin with, ours is.
+
+    Room-independent (it is pure black at a fixed alpha, not a texture), so
     every top-row room reuses the identical image -- callers still write one
     copy per room to keep decor/<room-id>/ self-contained."""
-    w, h = ROOM_W * TILE, (CAP_H + ROOM_H) * TILE
+    w = ROOM_W * TILE
     back_h = (CAP_H + 1) * TILE   # cap rows + the room's own back-wall row
-    mask = Image.new("L", (w, h), 0)
+    max_w = round(TILE * 18 / 32)  # ~56% of a tile, measured off the Gym reference
+    mask = Image.new("L", (w, back_h), 0)
     d = ImageDraw.Draw(mask)
 
-    # Side-wall columns, below the back wall: seen fully edge-on.
-    d.rectangle([0, back_h, TILE - 1, h - 1], fill=WALL_SHADE)
-    d.rectangle([w - TILE, back_h, w - 1, h - 1], fill=WALL_SHADE)
-    # The corner bevel: same columns, ramped in over the back wall's height.
     # Widths are kept even so the diagonal steps in 2px units like the pack's
     # own art rather than as a 1px staircase.
     for y in range(back_h):
-        ww = 2 + 2 * round((TILE - 2) * y / (back_h - 1) / 2)
+        ww = 2 + 2 * round((max_w - 2) * y / (back_h - 1) / 2)
         d.rectangle([0, y, ww - 1, y], fill=WALL_SHADE)
         d.rectangle([w - ww, y, w - 1, y], fill=WALL_SHADE)
 
-    # Floor shadow along the interior's top/left/right edges. No bottom edge:
-    # that wall faces the camera, so it casts towards the viewer, not into the
-    # room (the "red" edge in the user's annotated cave reference).
-    ix0, iy0 = TILE, back_h
-    ix1, iy1 = w - TILE - 1, h - TILE - 1
-    d.rectangle([ix0, iy0, ix1, iy0 + FLOOR_SHADE_PX - 1], fill=FLOOR_SHADE)
-    d.rectangle([ix0, iy0, ix0 + FLOOR_SHADE_PX - 1, iy1], fill=FLOOR_SHADE)
-    d.rectangle([ix1 - FLOOR_SHADE_PX + 1, iy0, ix1, iy1], fill=FLOOR_SHADE)
-
-    out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    out = Image.new("RGBA", (w, back_h), (0, 0, 0, 0))
     out.putalpha(mask)
     return out
 
@@ -114,12 +107,13 @@ def main() -> None:
         ox, oy = room_origin(room)
         room_id = room["id"]
 
-        # Shadow + corner-bevel overlay, top-row rooms only. Anchored on the
-        # room's own left wall column and its topmost cap row, so it spans the
-        # footprint plus the cap. Emitted first so every other decor item in
-        # this room draws on top of it -- furniture sits in the room, not
-        # under its shadows. Bottom-row rooms get nothing: no cap rows to
-        # cover and no wall facing away from the camera.
+        # Corner-cut overlay, top-row rooms only. Anchored on the room's own
+        # left wall column and its topmost cap row, and only as tall as the
+        # cap row(s) plus the back-wall ring row it draws over -- side walls
+        # and the floor below are untouched. Emitted first so every other
+        # decor item in this room draws on top of it. Bottom-row rooms get
+        # nothing: no cap rows to cover and no wall facing away from the
+        # camera.
         if room["row"] == "top":
             shade_rel = f"decor/{room_id}/wall-shade.png"
             (WORLD_ASSETS / shade_rel).parent.mkdir(parents=True, exist_ok=True)

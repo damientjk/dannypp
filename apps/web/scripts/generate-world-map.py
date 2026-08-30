@@ -109,12 +109,6 @@ def main() -> None:
             else:
                 floor_fill[(x, y)] = floor_gid
 
-        # Window pair on the wall opposite the door.
-        window_y = y1 if room["row"] == "bottom" else y0
-        window_x0 = x0 + ROOM_W // 2 - 1
-        walls_fill[(window_x0, window_y)] = WINDOW_LEFT_GID[room["id"]]
-        walls_fill[(window_x0 + 1, window_y)] = WINDOW_RIGHT_GID[room["id"]]
-
         # Wall-cap rows: the wall above this room's own room_y0 row grown
         # CAP_H tiles taller, outside the room's own footprint, for visual
         # depth (and, above this, room for the shadow/corner-bevel overlay

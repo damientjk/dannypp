@@ -46,7 +46,29 @@ WALLS_SHEET = MODERNINTERIORS / "1_Interiors" / "32x32" / "Room_Bulder_subfiles_
 # normal viewing scale.
 WALL_SHADE = 80
 
+# Task 13 polish, applied to build_wall_border_overlay()'s side bands only:
+# a subtle vertical gradient across the band's fill (GRADIENT_SHADE, top to
+# bottom) plus a thin dark outline at the band's inner edge (OUTLINE_SHADE,
+# OUTLINE_PX wide). Same black-composite technique as WALL_SHADE above
+# (compositing black at alpha a scales a pixel by (1 - a/255)), but the
+# gradient's alpha is kept far below WALL_SHADE's 80 -- this is meant to
+# read as a soft hint of depth, not a visible stripe (checked against a live
+# screenshot; this plan has twice had to walk back an effect shipped too
+# strong, see Amendment 8). The outline can afford to be stronger since it's
+# only OUTLINE_PX wide rather than spanning the whole band.
+GRADIENT_SHADE = 20
+OUTLINE_SHADE = 110
+OUTLINE_PX = 2
+
 ROOM_BY_ID = {r["id"]: r for r in ROOMS}
+
+
+def _darken(color, alpha):
+    """Darken an RGB(A) 4-tuple by compositing black at the given alpha --
+    same math WALL_SHADE relies on elsewhere in this file."""
+    r, g, b = color[:3]
+    scale = 1 - alpha / 255
+    return (round(r * scale), round(g * scale), round(b * scale), 255)
 
 
 def room_origin(room):
@@ -104,7 +126,12 @@ def build_wall_border_overlay(room, floor_crop):
     including the front wall -- floor now runs to the true outer edge
     there, same as the reference's near-absent front wall), with a
     SIDE_STRIP-px flat solid-color band painted back in at the true left
-    and right edges, sampled per-room from wall_body_color().
+    and right edges, sampled per-room from wall_body_color(). Task 13 layers
+    two more effects onto that band's fill: a subtle vertical gradient
+    (GRADIENT_SHADE, lighter at the top and darkening toward the floor) and,
+    on top of it, a thin dark outline at the band's inner edge
+    (OUTLINE_SHADE/OUTLINE_PX) so the band reads as a defined wall shape
+    rather than a flat color blending into the tiled floor.
 
     That side band deliberately runs the room's *full* height, front row
     included -- not just the interior rows -- so the bottom corners (side
@@ -118,12 +145,6 @@ def build_wall_border_overlay(room, floor_crop):
     12 extends this to every room, not just top-row rooms; see
     build_wall_shade()) -- is excluded entirely (its whole row left fully
     transparent). This task must not touch that wall for any room.
-
-    A second, narrower exception: whichever room now has its window on a row
-    THIS overlay covers (bottom-row rooms -- their window moved from the
-    excluded row to the now-included row when the exclusion flipped) gets a
-    window-shaped gap punched in the mask so the window art isn't painted
-    over.
     """
     w, h = ROOM_W * TILE, ROOM_H * TILE
     img = Image.new("RGBA", (w, h))
@@ -133,8 +154,22 @@ def build_wall_border_overlay(room, floor_crop):
 
     d_img = ImageDraw.Draw(img)
     color = wall_body_color(room)
-    d_img.rectangle([0, 0, SIDE_STRIP - 1, h - 1], fill=color)
-    d_img.rectangle([w - SIDE_STRIP, 0, w - 1, h - 1], fill=color)
+
+    # Vertical gradient across each side band: lighter (true wall_body_color,
+    # no darkening) at the top, darkening toward the bottom as a subtle hint
+    # of the wall meeting the floor. Drawn one row at a time since PIL has no
+    # built-in linear-gradient fill.
+    for y in range(h):
+        shade = round(GRADIENT_SHADE * y / (h - 1))
+        row_color = _darken(color, shade)
+        d_img.rectangle([0, y, SIDE_STRIP - 1, y], fill=row_color)
+        d_img.rectangle([w - SIDE_STRIP, y, w - 1, y], fill=row_color)
+
+    # Thin dark outline at each band's inner edge (where the flat band meets
+    # the tiled floor), painted over the gradient above.
+    outline_color = _darken(color, OUTLINE_SHADE)
+    d_img.rectangle([SIDE_STRIP - OUTLINE_PX, 0, SIDE_STRIP - 1, h - 1], fill=outline_color)
+    d_img.rectangle([w - SIDE_STRIP, 0, w - SIDE_STRIP + OUTLINE_PX - 1, h - 1], fill=outline_color)
 
     mask = Image.new("L", (w, h), 255)
     d_mask = ImageDraw.Draw(mask)
@@ -147,20 +182,6 @@ def build_wall_border_overlay(room, floor_crop):
     # cap/wedge shows through) even through the small overlap where the side
     # bands cross it.
     d_mask.rectangle([0, 0, w - 1, TILE - 1], fill=0)
-
-    # Window gap: matches generate-world-map.py's own
-    # `window_y = y1 if room["row"] == "bottom" else y0` exactly (translated
-    # to this image's room-relative rows, where relative row 0 == y0 and
-    # ROOM_H-1 == y1) and its window_x0 = x0 + ROOM_W//2 - 1, so the two
-    # files can't drift apart. No-op for top-row rooms: their window sits on
-    # relative row 0, which the rectangle above already excludes in full.
-    window_row = (ROOM_H - 1) if room["row"] == "bottom" else 0
-    if window_row != 0:
-        window_x0 = ROOM_W // 2 - 1
-        d_mask.rectangle([
-            window_x0 * TILE, window_row * TILE,
-            (window_x0 + 2) * TILE - 1, (window_row + 1) * TILE - 1,
-        ], fill=0)
 
     img.putalpha(mask)
     return img

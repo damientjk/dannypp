@@ -21,11 +21,11 @@ WORLD_ASSETS = Path(__file__).resolve().parents[1] / "public" / "world-assets"
 TILE = 32
 ROOM_BUILDER = MODERNINTERIORS / "1_Interiors" / "32x32" / "Room_Builder_32x32.png"
 FLOORS_SHEET = MODERNINTERIORS / "1_Interiors" / "32x32" / "Room_Bulder_subfiles_32x32" / "Room_Builder_Floors_32x32.png"
+WALLS_SHEET = MODERNINTERIORS / "1_Interiors" / "32x32" / "Room_Bulder_subfiles_32x32" / "Room_Builder_Walls_32x32.png"
 GENERIC = MODERNINTERIORS / "1_Interiors" / "32x32" / "Theme_Sorter_32x32" / "1_Generic_32x32.png"
 
 # Unchanged from the original tileset -- same verified-working crops.
 HALLWAY_TILE = (ROOM_BUILDER, 16, 26)
-WALL_TILE = (ROOM_BUILDER, 7, 2)
 WINDOW_LEFT_TILE = (GENERIC, 5, 8)
 WINDOW_RIGHT_TILE = (GENERIC, 6, 8)
 
@@ -37,30 +37,6 @@ def crop_tile(cache, path, col, row):
     return sheet.crop((col * TILE, row * TILE, col * TILE + TILE, row * TILE + TILE))
 
 
-def shade_wall(tile):
-    """Synthesized highlight/shadow coping band so the flat Room_Builder
-    wall block reads as a wall with height. Unchanged from the original
-    script -- see its docstring for why this is synthesized rather than
-    found (no 32x32 pre-shaded wall set exists in the pack)."""
-    shaded = tile.copy()
-    px = shaded.load()
-    w, h = shaded.size
-    top_band, bottom_band = 7, 5
-    for y in range(h):
-        if y < top_band:
-            factor = 1.18
-        elif y >= h - bottom_band:
-            factor = 0.72
-        else:
-            continue
-        for x in range(w):
-            r, g, b, a = px[x, y]
-            if a == 0:
-                continue
-            px[x, y] = (min(255, int(r * factor)), min(255, int(g * factor)), min(255, int(b * factor)), a)
-    return shaded
-
-
 def main() -> None:
     cache = {}
     tiles = [Image.new("RGBA", (TILE, TILE), (0, 0, 0, 0))]  # gid 0: blank
@@ -69,10 +45,19 @@ def main() -> None:
         sheet_name, col, row = room["floor"]
         sheet_path = FLOORS_SHEET if sheet_name == "Room_Builder_Floors" else ROOM_BUILDER
         tiles.append(crop_tile(cache, sheet_path, col, row))
-    wall_tile = shade_wall(crop_tile(cache, *WALL_TILE))
-    tiles.append(wall_tile)                                    # gid 8
-    tiles.append(Image.alpha_composite(wall_tile.copy(), crop_tile(cache, *WINDOW_LEFT_TILE)))   # gid 9
-    tiles.append(Image.alpha_composite(wall_tile.copy(), crop_tile(cache, *WINDOW_RIGHT_TILE)))  # gid 10
+    # Per-room wall: cap + base cropped from a real 2-row wall block in
+    # Room_Builder_Walls_32x32.png (column 0, rows 2*wall/2*wall+1 -- see
+    # room_layout.ROOMS' "wall" field), replacing the old single shared
+    # tile + synthetic gradient. Appended in ROOMS order, 4 tiles per room
+    # (cap, base, base+window-left, base+window-right) -- generate-world-map.py's
+    # CAP_GID/BASE_GID/WINDOW_LEFT_GID/WINDOW_RIGHT_GID assume this exact order.
+    for room in ROOMS:
+        cap_tile = crop_tile(cache, WALLS_SHEET, 0, room["wall"] * 2)
+        base_tile = crop_tile(cache, WALLS_SHEET, 0, room["wall"] * 2 + 1)
+        tiles.append(cap_tile)
+        tiles.append(base_tile)
+        tiles.append(Image.alpha_composite(base_tile.copy(), crop_tile(cache, *WINDOW_LEFT_TILE)))
+        tiles.append(Image.alpha_composite(base_tile.copy(), crop_tile(cache, *WINDOW_RIGHT_TILE)))
 
     sheet = Image.new("RGBA", (TILE * len(tiles), TILE), (0, 0, 0, 0))
     for i, tile in enumerate(tiles):

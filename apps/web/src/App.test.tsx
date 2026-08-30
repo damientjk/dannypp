@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 import { resetCapabilities } from "./world/decision";
 
 vi.mock("./api", () => ({
@@ -16,7 +16,12 @@ vi.mock("./api", () => ({
   setAuthToken: vi.fn(),
   setSessionToken: vi.fn(),
   ApiError: class ApiError extends Error {
-    status = 0;
+    constructor(
+      message: string,
+      public status = 0,
+    ) {
+      super(message);
+    }
   },
 }));
 
@@ -113,5 +118,31 @@ describe("App view toggle", () => {
 
     fireEvent.click(screen.getByText("← Dashboard"));
     await screen.findByText("Create Agent");
+  });
+
+  // Signing in happens inside the World, and the session token lives in the API
+  // client rather than in React state, so returning to the dashboard has to
+  // refetch. Without that, the dashboard keeps the empty list from the
+  // unauthenticated fetch on mount until the user happens to create an Agent.
+  it("points an unauthenticated visitor at the World, then reloads on return", async () => {
+    vi.mocked(api.listAgents)
+      .mockRejectedValueOnce(new ApiError("Sign in required", 401))
+      .mockResolvedValue({ agents: [AGENT_A] });
+
+    render(<App />);
+
+    // The raw API message is unactionable on its own, so the dashboard names
+    // the way in instead of repeating it.
+    await screen.findByText("You are not signed in");
+    expect(screen.queryByText("Sign in required")).toBeNull();
+    expect(screen.queryAllByText(AGENT_A.name)).toHaveLength(0);
+
+    fireEvent.click(screen.getByText("Go to the World"));
+    await screen.findByText("Enter the world");
+
+    fireEvent.click(screen.getByText("← Dashboard"));
+    // The name renders in both the sidebar row and the detail heading.
+    await screen.findAllByText(AGENT_A.name);
+    expect(screen.queryByText("You are not signed in")).toBeNull();
   });
 });

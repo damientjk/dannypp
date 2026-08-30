@@ -377,6 +377,25 @@ button {
   border: 1px solid #5c4a1e;
 }
 
+/* The sign-in prompt reuses the config banner, but its message pushes the
+   action to the trailing edge instead of running to the full width. */
+.signin-banner > div {
+  flex: 1;
+}
+
+/* Black on the banner's own amber: the button would otherwise inherit the
+   banner's amber text on a transparent ground and all but disappear. */
+.signin-banner > button {
+  flex: none;
+  white-space: nowrap;
+  color: #000;
+  background: #e8c979;
+}
+
+.signin-banner > button:hover {
+  background: #f2d68e;
+}
+
 .config-banner > span {
   width: 22px;
   height: 22px;

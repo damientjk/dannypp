@@ -139,18 +139,21 @@ DECOR = {
     # task-7-report.md). Both desk crops already include their integrated
     # bench seat, so no separate chair item is needed here.
     "auth-module": [
-        # col=0/col=6, not the original col=1/col=7: this bookshelf is a
-        # 3x3-tile object (the Singles-folder substitute it replaces was
-        # only 1x2), so the old columns either overlapped
-        # reading-desk-1 at (3,2) or ran past the interior's right edge
-        # (col 8 max) into the wall. Corner placement flanking the desks
-        # avoids both and reads as a reading nook between two shelves.
-        dict(col=0, row=0, dest="bookshelf-left.png",
-             src="1_Interiors/32x32/Theme_Sorter_32x32/5_Classroom_and_library_32x32.png",
-             crop=(0, 416, 96, 512)),
-        dict(col=6, row=0, dest="bookshelf-right.png",
-             src="1_Interiors/32x32/Theme_Sorter_32x32/5_Classroom_and_library_32x32.png",
-             crop=(0, 416, 96, 512)),
+        # User-isolated 2-piece crop (repo-root/bookshelf/, 48px-tier source,
+        # scale=2/3 down to this game's 32px tiles) -- no bookshelf-with-books
+        # sprite exists anywhere in moderninteriors-win itself (8 folders
+        # checked during design). row=-1 (not 0) so the shelf's top overlaps
+        # this room's tall back wall (row 0 is auth-module's capped wall,
+        # since it's a top-row room) instead of sitting flush below it -- see
+        # this plan's "wall-covering effect" note.
+        dict(col=1, row=-1, dest="bookshelf-left-a.png",
+             src=REPO_ROOT / "bookshelf" / "Classroom_and_Library_Singles_48x48_74.png", scale=2/3),
+        dict(col=3, row=-1, dest="bookshelf-left-b.png",
+             src=REPO_ROOT / "bookshelf" / "Classroom_and_Library_Singles_48x48_75.png", scale=2/3),
+        dict(col=5, row=-1, dest="bookshelf-right-a.png",
+             src=REPO_ROOT / "bookshelf" / "Classroom_and_Library_Singles_48x48_74.png", scale=2/3),
+        dict(col=7, row=-1, dest="bookshelf-right-b.png",
+             src=REPO_ROOT / "bookshelf" / "Classroom_and_Library_Singles_48x48_75.png", scale=2/3),
         dict(col=3, row=2, dest="reading-desk-1.png",
              src="1_Interiors/32x32/Theme_Sorter_32x32/5_Classroom_and_library_32x32.png",
              crop=(160, 32, 192, 96)),

@@ -1,14 +1,28 @@
-import type { Texture } from "pixi.js";
+import { Rectangle, Texture } from "pixi.js";
 
-/** Only one real character frame exists today (an idle-down crop). Build the
- *  3-row (down/up/right — CharacterSprite treats "left" as "right", flipped)
- *  x 3-col frame grid CharacterSprite indexes into, filling every cell with
- *  that single texture. Direction-flip is real; frame-cycling is a no-op
- *  until real walk-cycle art lands (see spec §8, still deferred). */
+/** Columns (animation frames) and rows (facings) in the character sheet. */
+const COLS = 3;
+const ROWS = 3;
+
+/** Slice the character sheet into the [row][col] grid `CharacterSprite`
+ *  indexes into: rows are down/up/right — "left" is the right row mirrored via
+ *  `scale.x = -1`, so the sheet carries no left row — and columns are the
+ *  neutral stance (used alone for idle) plus two walk steps.
+ *
+ *  The sheet is built by `scripts/generate-crewmate-sprite.py`; its grid must
+ *  stay 3x3 to match `DIRECTION_ROW` and `ANIM_FRAMES` in CharacterSprite. */
 export function buildCharacterFrames(texture: Texture): Texture[][] {
-  return [
-    [texture, texture, texture], // down
-    [texture, texture, texture], // up
-    [texture, texture, texture], // right (left = this row, flipped)
-  ];
+  const frameW = texture.width / COLS;
+  const frameH = texture.height / ROWS;
+
+  return Array.from({ length: ROWS }, (_row, row) =>
+    Array.from(
+      { length: COLS },
+      (_col, col) =>
+        new Texture({
+          source: texture.source,
+          frame: new Rectangle(col * frameW, row * frameH, frameW, frameH),
+        }),
+    ),
+  );
 }

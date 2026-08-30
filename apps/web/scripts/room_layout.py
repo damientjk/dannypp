@@ -11,29 +11,32 @@ exactly (11+1+11+1+11=35); the vertical stack is asymmetric -- see CAP_H.
 """
 
 TILE = 32
-WIDTH, HEIGHT = 35, 21
+WIDTH, HEIGHT = 35, 22
 ROOM_W, ROOM_H = 11, 8    # outer footprint incl. 1-tile wall ring
 GAP = 1                    # cosmetic filler between same-row room columns (blocked, not a real path)
 HALLWAY_H = 4               # real walkable plaza between the two room rows
-# Extra wall-cap rows outside a TOP-row room's back wall, giving those rooms a
-# CAP_H+1 = 2-tile-tall back wall stack (measured off
+# Extra wall-cap rows immediately above whichever wall sits above a room's own
+# floor -- the wall that faces away from that room's own interior, giving a
+# CAP_H+1 = 2-tile-tall wall stack there (measured off
 # moderninteriors-win/6_Home_Designs/Shooting_Range_Designs -- its back wall is
-# 50px ~= 1.6 tiles). Bottom-row rooms get none: their back wall is the map's
-# bottom edge, where a "wall receding away from the camera" reads as a mistake,
-# not as depth.
+# 50px ~= 1.6 tiles). For top-row rooms that's their back wall (opposite the
+# door); for bottom-row rooms it's their door wall (facing the hallway) --
+# both happen to be the room's own room_y0 row, which is what cap_rows() in
+# generate-world-map.py actually keys off.
 CAP_H = 1
 
 assert ROOM_W * 3 + GAP * 2 == WIDTH
-# Vertical stack, top to bottom: [cap + top room] + [hallway] + [bottom room].
-assert CAP_H + ROOM_H + HALLWAY_H + ROOM_H == HEIGHT
+# Vertical stack, top to bottom: [cap + top room] + [hallway] + [cap + bottom room].
+assert CAP_H + ROOM_H + HALLWAY_H + CAP_H + ROOM_H == HEIGHT
 
 def room_y0(room):
     """Absolute y of the room's exterior rect's top-left corner. Shared by
     generate-world-map.py's exterior_rect() and generate-room-decor.py's
     room_origin() so the two can't drift on where the cap rows shifted rooms
     to. Asymmetric: top-row rooms sit CAP_H rows down from the map's top edge,
-    freeing those rows for their wall cap; bottom-row rooms get no cap, so they
-    sit flush against the bottom edge."""
+    freeing those rows above them for their wall cap; bottom-row rooms sit
+    flush against the map's bottom edge (their own cap rows go above them too,
+    inside the hallway-facing gap, so this formula is unchanged for them)."""
     return CAP_H if room["row"] == "top" else HEIGHT - ROOM_H
 
 # id, owner (None = unprotected/common), row ("top"/"bottom"), x0 (left

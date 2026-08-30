@@ -121,89 +121,104 @@
       "y": 192
     },
     {
-      "image": "decor/billing/wall-border.png",
+      "image": "decor/billing/wall-shade.png",
       "x": 0,
       "y": 416
     },
     {
+      "image": "decor/billing/wall-border.png",
+      "x": 0,
+      "y": 448
+    },
+    {
       "image": "decor/billing/mirror-left.png",
       "x": 64,
-      "y": 576
+      "y": 608
     },
     {
       "image": "decor/billing/mirror-right.png",
       "x": 256,
-      "y": 576
+      "y": 608
     },
     {
       "image": "decor/billing/dumbbell-rack.png",
       "x": 64,
-      "y": 480
+      "y": 512
     },
     {
       "image": "decor/billing/yoga-mat.png",
       "x": 256,
-      "y": 480
+      "y": 512
     },
     {
-      "image": "decor/living-room/wall-border.png",
+      "image": "decor/living-room/wall-shade.png",
       "x": 384,
       "y": 416
     },
     {
+      "image": "decor/living-room/wall-border.png",
+      "x": 384,
+      "y": 448
+    },
+    {
       "image": "decor/living-room/rug.png",
       "x": 512,
-      "y": 544
+      "y": 576
     },
     {
       "image": "decor/living-room/sofa.png",
       "x": 448,
-      "y": 480
+      "y": 512
     },
     {
       "image": "decor/living-room/coffee-table.png",
       "x": 576,
-      "y": 512
+      "y": 544
     },
     {
       "image": "decor/living-room/tv.png",
       "x": 576,
-      "y": 576
+      "y": 608
     },
     {
       "image": "decor/living-room/plant-left.png",
       "x": 416,
-      "y": 480
+      "y": 512
     },
     {
       "image": "decor/living-room/plant-right.png",
       "x": 640,
-      "y": 480
+      "y": 512
     },
     {
-      "image": "decor/deploy-config/wall-border.png",
+      "image": "decor/deploy-config/wall-shade.png",
       "x": 768,
       "y": 416
     },
     {
+      "image": "decor/deploy-config/wall-border.png",
+      "x": 768,
+      "y": 448
+    },
+    {
       "image": "decor/deploy-config/crate-1.png",
       "x": 864,
-      "y": 512
+      "y": 544
     },
     {
       "image": "decor/deploy-config/crate-2.png",
       "x": 992,
-      "y": 480
+      "y": 512
     },
     {
       "image": "decor/deploy-config/plant-left.png",
       "x": 832,
-      "y": 576
+      "y": 608
     },
     {
       "image": "decor/deploy-config/plant-right.png",
       "x": 1024,
-      "y": 576
+      "y": 608
     }
   ],
   "equipment": [
@@ -225,28 +240,28 @@
       "image": "equipment/animated_punching_bag_left_32x32.png",
       "frames": 12,
       "x": 128,
-      "y": 544,
+      "y": 576,
       "spawnPoint": "desk-billing-1"
     },
     {
       "image": "equipment/animated_treadmill_32x32.png",
       "frames": 9,
       "x": 192,
-      "y": 544,
+      "y": 576,
       "spawnPoint": "desk-billing-2"
     },
     {
       "image": "equipment/animated_wall_piano_32x32.png",
       "frames": 16,
       "x": 864,
-      "y": 576,
+      "y": 608,
       "spawnPoint": "desk-deploy-config-1"
     },
     {
       "image": "equipment/animated_amplifier_32x32.png",
       "frames": 3,
       "x": 992,
-      "y": 544,
+      "y": 576,
       "spawnPoint": "desk-deploy-config-2"
     },
     {

@@ -58,15 +58,12 @@ def exterior_rect(room):
 
 
 def cap_rows(room):
-    """The CAP_H extra wall-cap rows just above a TOP-row room's back wall
-    (the wall opposite the door, where the window already sits), returned
-    nearest-to-farthest from the room (cap_ys[0] is immediately adjacent to
-    the back wall). Bottom-row rooms get none -- their back wall is the map's
-    bottom edge, so a taller wall there would recede towards the viewer, not
-    away from them. They keep the plain single-row wall ring."""
+    """The CAP_H extra wall-cap rows just above every room's own room_y0 row
+    -- for top-row rooms that's their back wall (opposite the door, where the
+    window sits); for bottom-row rooms it's their door wall (facing the
+    hallway). Returned nearest-to-farthest from the room (cap_ys[0] is
+    immediately adjacent to room_y0)."""
     x0, y0, x1, y1 = exterior_rect(room)
-    if room["row"] != "top":
-        return x0, [], x1
     return x0, [y0 - 1 - i for i in range(CAP_H)], x1
 
 
@@ -118,24 +115,38 @@ def main() -> None:
         walls_fill[(window_x0, window_y)] = WINDOW_LEFT_GID[room["id"]]
         walls_fill[(window_x0 + 1, window_y)] = WINDOW_RIGHT_GID[room["id"]]
 
-        # Wall-cap rows: a top-row room's back wall grown CAP_H tiles taller,
-        # outside the room's own footprint, for visual depth (and, above this,
-        # room for the shadow/corner-bevel overlay generate-room-decor.py
-        # paints over it). Empty for bottom-row rooms.
+        # Wall-cap rows: the wall above this room's own room_y0 row grown
+        # CAP_H tiles taller, outside the room's own footprint, for visual
+        # depth (and, above this, room for the shadow/corner-bevel overlay
+        # generate-room-decor.py paints over it). For bottom-row rooms this
+        # cap sits on the SAME side as the door (door_y == room_y0(room)),
+        # unlike top-row rooms where the two are on opposite sides -- so the
+        # door's own x-column is left as floor through every cap row too,
+        # mirroring exactly how the room's own wall ring already skips
+        # walls_fill/collision_fill at the door cell, so agents can walk
+        # hallway -> cap-row gap -> door -> room interior uninterrupted.
         cap_x0, cap_ys, cap_x1 = cap_rows(room)
         cap_gid = CAP_GID[room["id"]]
+        door_x, door_y = door
+        door_on_cap_side = door_y == y0
         for cap_y in cap_ys:
             for x in range(cap_x0, cap_x1 + 1):
+                if door_on_cap_side and x == door_x:
+                    floor_fill[(x, cap_y)] = floor_gid
+                    continue
                 walls_fill[(x, cap_y)] = cap_gid
                 collision_fill[(x, cap_y)] = cap_gid
 
     # Gaps between same-row rooms: floored (hallway texture) but blocked --
     # cosmetic filler only. Agents only ever cross between columns via the
     # hallway strip below/above, never through these gaps.
-    # Row bands, matching room_layout.room_y0's asymmetry: the top band is the
-    # CAP_H cap rows plus the room (rows 0 .. CAP_H+ROOM_H-1), the bottom band
-    # is just the room (rows HEIGHT-ROOM_H .. HEIGHT-1).
-    for row_y0, row_y1 in ((0, CAP_H + ROOM_H - 1), (HEIGHT - ROOM_H, HEIGHT - 1)):
+    # Row bands, matching room_layout.room_y0's now-symmetric structure: the
+    # top band is the CAP_H cap rows plus the top room (rows
+    # 0 .. CAP_H+ROOM_H-1 == 0..8), the bottom band is the bottom room's own
+    # CAP_H cap rows plus the room (rows HEIGHT-CAP_H-ROOM_H .. HEIGHT-1 ==
+    # 13..21). Hand-verified against HEIGHT=22: both bands are CAP_H+ROOM_H=9
+    # rows, and neither overlaps the hallway band below.
+    for row_y0, row_y1 in ((0, CAP_H + ROOM_H - 1), (HEIGHT - CAP_H - ROOM_H, HEIGHT - 1)):
         gap_x0 = ROOM_W
         for _ in range(2):
             for x in range(gap_x0, gap_x0 + GAP):
@@ -144,8 +155,14 @@ def main() -> None:
                     collision_fill[(x, y)] = GID_BLOCKED
             gap_x0 += GAP + ROOM_W
 
-    # Hallway: fully open floor, full width, no walls.
-    hallway_y0, hallway_y1 = CAP_H + ROOM_H, HEIGHT - ROOM_H - 1
+    # Hallway: fully open floor, full width, no walls. Both the top and
+    # bottom room rows now push the hallway in from their own cap row, so
+    # hallway_y1 must back off by CAP_H too (not just ROOM_H) -- otherwise
+    # this loop's floor_fill would paint straight over the bottom room's new
+    # cap row (row 13) with hallway texture, corrupting it. Hand-verified
+    # against HEIGHT=22: hallway_y0=9, hallway_y1=22-1-8-1=12 (4 rows,
+    # matching HALLWAY_H), landing exactly between the two cap rows (0, 13).
+    hallway_y0, hallway_y1 = CAP_H + ROOM_H, HEIGHT - CAP_H - ROOM_H - 1
     for x, y in rect_cells(0, hallway_y0, WIDTH - 1, hallway_y1):
         floor_fill[(x, y)] = GID_HALLWAY
 

@@ -113,11 +113,17 @@ def build_wall_border_overlay(room, floor_crop):
     bottom corners (contrast the back wall's own separate mitered top
     corners from Tasks 7-9, untouched here).
 
-    One exception carved out of the mask: the back wall -- the wall
-    opposite the door, which carries the window pair and, for top-row
-    rooms, the cap + corner-wedge treatment Tasks 7-9 already built and the
-    user confirmed looks right -- is excluded entirely (its whole row left
-    fully transparent). This task must not touch that wall for any room.
+    One exception carved out of the mask: the room's own room_y0 row -- the
+    row that now always carries the wall-cap + corner-wedge treatment (Task
+    12 extends this to every room, not just top-row rooms; see
+    build_wall_shade()) -- is excluded entirely (its whole row left fully
+    transparent). This task must not touch that wall for any room.
+
+    A second, narrower exception: whichever room now has its window on a row
+    THIS overlay covers (bottom-row rooms -- their window moved from the
+    excluded row to the now-included row when the exclusion flipped) gets a
+    window-shaped gap punched in the mask so the window art isn't painted
+    over.
     """
     w, h = ROOM_W * TILE, ROOM_H * TILE
     img = Image.new("RGBA", (w, h))
@@ -133,18 +139,28 @@ def build_wall_border_overlay(room, floor_crop):
     mask = Image.new("L", (w, h), 255)
     d_mask = ImageDraw.Draw(mask)
 
-    # Back wall: top row for a top-row room (farthest from the hallway,
-    # where the door isn't), bottom row for a bottom-row room -- mirrors
-    # door_tile()'s own door_y = y1 if top else y0 in generate-world-map.py.
-    # This wins over the side-color paint above regardless of what's under
-    # it: the mask is applied last, so the back wall row stays fully
-    # transparent (real wall + cap/wedge shows through) even through the
-    # small overlap where the side bands cross it.
-    back_on_top = room["row"] == "top"
-    if back_on_top:
-        d_mask.rectangle([0, 0, w - 1, TILE - 1], fill=0)
-    else:
-        d_mask.rectangle([0, h - TILE, w - 1, h - 1], fill=0)
+    # room_y0(room)'s own row is always image row 0 (room_y0 is defined as
+    # the exterior rect's top-left corner -- see room_layout.room_y0's
+    # docstring), for every room, top or bottom. This wins over the
+    # side-color paint above regardless of what's under it: the mask is
+    # applied last, so this row stays fully transparent (real wall +
+    # cap/wedge shows through) even through the small overlap where the side
+    # bands cross it.
+    d_mask.rectangle([0, 0, w - 1, TILE - 1], fill=0)
+
+    # Window gap: matches generate-world-map.py's own
+    # `window_y = y1 if room["row"] == "bottom" else y0` exactly (translated
+    # to this image's room-relative rows, where relative row 0 == y0 and
+    # ROOM_H-1 == y1) and its window_x0 = x0 + ROOM_W//2 - 1, so the two
+    # files can't drift apart. No-op for top-row rooms: their window sits on
+    # relative row 0, which the rectangle above already excludes in full.
+    window_row = (ROOM_H - 1) if room["row"] == "bottom" else 0
+    if window_row != 0:
+        window_x0 = ROOM_W // 2 - 1
+        d_mask.rectangle([
+            window_x0 * TILE, window_row * TILE,
+            (window_x0 + 2) * TILE - 1, (window_row + 1) * TILE - 1,
+        ], fill=0)
 
     img.putalpha(mask)
     return img
@@ -161,9 +177,11 @@ def copy_asset(src_rel: str, dest_rel: str, crop: tuple[int, int, int, int] | No
 
 
 def build_wall_shade() -> Image.Image:
-    """A plain mitered corner cut at the two top corners of a top-row room's
-    back wall -- the only 3D cue this room gets. No side-wall darkening, no
-    floor shadow: those were tried in an earlier pass and read as too much
+    """A plain mitered corner cut at the two top corners of the wall that
+    sits above a room's own room_y0 row (a top-row room's back wall; a
+    bottom-row room's door wall) -- the only 3D cue this room gets. No
+    side-wall darkening, no floor shadow: those were tried in an earlier
+    pass and read as too much
     (the target is the restraint of moderninteriors-win/6_Home_Designs/
     Gym_Designs/32x32/Gym_layer_1_32x32.png, not a full lighting pass).
 
@@ -217,28 +235,28 @@ def main() -> None:
         ox, oy = room_origin(room)
         room_id = room["id"]
 
-        # Corner-cut overlay, top-row rooms only. Anchored on the room's own
-        # left wall column and its topmost cap row, and only as tall as the
-        # cap row(s) plus the back-wall ring row it draws over -- side walls
-        # and the floor below are untouched. Emitted first so every other
-        # decor item in this room draws on top of it. Bottom-row rooms get
-        # nothing: no cap rows to cover and no wall facing away from the
-        # camera.
-        if room["row"] == "top":
-            shade_rel = f"decor/{room_id}/wall-shade.png"
-            (WORLD_ASSETS / shade_rel).parent.mkdir(parents=True, exist_ok=True)
-            build_wall_shade().save(WORLD_ASSETS / shade_rel)
-            decor_entries.append({
-                "image": shade_rel,
-                "x": (ox - 1) * TILE,
-                "y": (room_y0(room) - CAP_H) * TILE,
-            })
+        # Corner-cut overlay, every room. Anchored on the room's own left
+        # wall column and its topmost cap row, and only as tall as the cap
+        # row(s) plus the room_y0 ring row it draws over -- side walls and
+        # the floor below are untouched. Emitted first so every other decor
+        # item in this room draws on top of it. Same wedge image for every
+        # room (build_wall_shade() is room-independent); only its placement
+        # (keyed off room_y0(room), which is already asymmetric per room)
+        # differs.
+        shade_rel = f"decor/{room_id}/wall-shade.png"
+        (WORLD_ASSETS / shade_rel).parent.mkdir(parents=True, exist_ok=True)
+        build_wall_shade().save(WORLD_ASSETS / shade_rel)
+        decor_entries.append({
+            "image": shade_rel,
+            "x": (ox - 1) * TILE,
+            "y": (room_y0(room) - CAP_H) * TILE,
+        })
 
         # Thin-border wall overlay, every room. Covers the room's ordinary
         # ROOM_W x ROOM_H exterior footprint (wall ring included) -- it
         # doesn't extend into the cap rows above, so it can't touch or
         # overlap the wall-shade corner wedge just emitted above (that
-        # wedge's own footprint is the cap row(s) plus this room's back-wall
+        # wedge's own footprint is the cap row(s) plus this room's room_y0
         # ring row, which this overlay excludes -- see
         # build_wall_border_overlay's docstring).
         border_rel = f"decor/{room_id}/wall-border.png"

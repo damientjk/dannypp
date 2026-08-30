@@ -131,23 +131,23 @@
       "y": 416
     },
     {
-      "image": "decor/billing/mirror-left.png",
-      "x": 64,
-      "y": 608
-    },
-    {
-      "image": "decor/billing/mirror-right.png",
-      "x": 256,
-      "y": 608
-    },
-    {
       "image": "decor/billing/dumbbell-rack.png",
       "x": 64,
       "y": 512
     },
     {
-      "image": "decor/billing/yoga-mat.png",
-      "x": 256,
+      "image": "decor/billing/black-mat.png",
+      "x": 64,
+      "y": 640
+    },
+    {
+      "image": "decor/billing/bike-1.png",
+      "x": 224,
+      "y": 512
+    },
+    {
+      "image": "decor/billing/bike-2.png",
+      "x": 288,
       "y": 512
     },
     {
@@ -269,6 +269,13 @@
       "frames": 3,
       "x": 256,
       "y": 224,
+      "spawnPoint": null
+    },
+    {
+      "image": "equipment/animated_treadmill_2_32x32.png",
+      "frames": 3,
+      "x": 128,
+      "y": 512,
       "spawnPoint": null
     }
   ]

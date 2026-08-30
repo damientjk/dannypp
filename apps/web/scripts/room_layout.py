@@ -229,37 +229,39 @@ DECOR = {
         dict(col=7, row=4, dest="bonsai-right.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/20_Japanese_Interiors_Singles_32x32/Japanese_Interiors_Singles_32x32_57.png"),
     ],
-    # 8_Gym_Singles_32x32/ has clean Singles files for all three items --
-    # no composite-sheet crop fallback needed here (contrast Tasks 7-9).
-    # _117 is a standalone 64x64 framed wall mirror (checked its neighbours
-    # _118/_119 too; those are single segments of a wider multi-tile mirror
-    # bank with the frame cut off on 2-3 sides, not standalone). _167 is a
-    # shelf rack lined with individual dumbbells (_166, right next to it, is
-    # a barbell-storage rack instead -- smooth bars, no dumbbell heads).
-    # _195 is a 64x32 checkered foam mat tile, the flat-mat look a yoga mat
-    # actually has (the neighbouring _196/_197 are the same shape in a
-    # woven-rug texture, read as a doormat, not gym flooring).
+    # Redesign per the user's mockup: mirrors and the yoga mat are dropped
+    # (not part of the ask); dumbbell rack and a mat-flooring stand-in stay,
+    # plus the user's own 2-piece bicycle-machine crop. _167 is a shelf rack
+    # lined with individual dumbbells (_166, right next to it, is a
+    # barbell-storage rack instead -- smooth bars, no dumbbell heads). _195
+    # is a 64x32 checkered foam mat tile -- the flattest/darkest mat-like
+    # item in the folder (neighbours _196/_197 are the same shape in a
+    # woven-rug texture, read as a doormat) -- reused here as a "black
+    # flooring" stand-in since no true solid-black floor crop exists
+    # anywhere in the pack. The bikes (repo-root/gym bicycle/, 48px-tier
+    # source, scale=2/3 down to this game's 32px tiles) are the user's own
+    # isolated 2-piece pick -- no bicycle-machine sprite exists in the pack
+    # itself (confirmed against the full 209-file Singles folder and the
+    # animated-spritesheet list).
     #
-    # Billing is a "bottom" row room (row="bottom" in ROOMS), so its back
-    # wall is interior row 5, not row 0 -- room_origin()'s y0 = HEIGHT -
-    # ROOM_H for bottom rooms plus door_tile()'s door_y = y0 for them
-    # (generate-world-map.py) puts the door at row 0 and the solid back
-    # wall at row 5. The mirror art is 64x64 (2x2 tiles); a back-wall-flush
-    # placement anchors its top-left at row=4, not row=5 as the plan's
-    # draft literally wrote -- row=5 would push the sprite's bottom row
-    # past the interior's last row (5) and into/over the wall. Dumbbell
-    # rack and yoga mat sit at row=1, near the door and two rows clear of
+    # Billing is a "bottom" row room (row="bottom" in ROOMS), so its capped
+    # tall wall is on the door side (row 0) and its plain back wall is row 5
+    # (room_origin()'s y0 = HEIGHT - ROOM_H for bottom rooms plus
+    # door_tile()'s door_y = y0 for them, in generate-world-map.py). None of
+    # this room's items sit at row=0, so no wall-covering row offset
+    # applies. black-mat sits at row=5 against the plain back wall; the
+    # dumbbell rack and both bikes sit at row=1, near the door and clear of
     # the punching bag/treadmill equipment occupying desks (3,3)/(5,3)
     # (Task 6) at row 3.
     "billing": [
-        dict(col=1, row=4, dest="mirror-left.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/8_Gym_Singles_32x32/Gym_Singles_32x32_117.png"),
-        dict(col=7, row=4, dest="mirror-right.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/8_Gym_Singles_32x32/Gym_Singles_32x32_117.png"),
         dict(col=1, row=1, dest="dumbbell-rack.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/8_Gym_Singles_32x32/Gym_Singles_32x32_167.png"),
-        dict(col=7, row=1, dest="yoga-mat.png",
+        dict(col=1, row=5, dest="black-mat.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/8_Gym_Singles_32x32/Gym_Singles_32x32_195.png"),
+        dict(col=6, row=1, dest="bike-1.png",
+             src=REPO_ROOT / "gym bicycle" / "Gym_Singles_48x48_93.png", scale=2/3),
+        dict(col=8, row=1, dest="bike-2.png",
+             src=REPO_ROOT / "gym bicycle" / "Gym_Singles_48x48_94.png", scale=2/3),
     ],
     # 2_Living_Room_Singles_32x32/ (122 files, all individually eyeballed via
     # asset_contact_sheet.py plus a numeric-dimension scan) turned out to be
@@ -351,4 +353,6 @@ DECOR = {
 AMBIENT = [
     dict(room_id="auth-module", col=7, row=5, dest="animated_wall_candle_32x32.png",
          src="3_Animated_objects/32x32/spritesheets/animated_wall_candle_32x32.png", frames=3),
+    dict(room_id="billing", col=3, row=1, dest="animated_treadmill_2_32x32.png",
+         src="3_Animated_objects/32x32/spritesheets/animated_treadmill_32x32.png", frames=3),
 ]

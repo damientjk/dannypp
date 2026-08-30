@@ -5,8 +5,8 @@ every source PNG it references from moderninteriors-win into
 public/world-assets/{decor,equipment}/.
 
 Re-run any time room_layout.py's DESKS/EQUIPMENT/DECOR/AMBIENT change, or its
-ROOMS[].floor, ROOMS[].wall, CAP_H, or room_y0() -- this script also derives
-the wall-border/wall-shade overlays from those.
+ROOMS[].floor, ROOMS[].wall, CAP_H, DOOR_COL, or room_y0() -- this script also
+derives the wall-border/wall-shade overlays from those.
 
 Usage: python3 generate-room-decor.py
 """
@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw, ImageStat
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from room_layout import (
-    TILE, ROOM_W, ROOM_H, CAP_H, ROOMS, DESKS, EQUIPMENT, DECOR, AMBIENT,
+    TILE, ROOM_W, ROOM_H, CAP_H, DOOR_COL, ROOMS, DESKS, EQUIPMENT, DECOR, AMBIENT,
     room_y0, wall_crop_box,
 )
 
@@ -36,33 +36,49 @@ ROOM_BUILDER = MODERNINTERIORS / "1_Interiors" / "32x32" / "Room_Builder_32x32.p
 # color is sampled from each room's own wall body rather than hand-picked.
 WALLS_SHEET = MODERNINTERIORS / "1_Interiors" / "32x32" / "Room_Bulder_subfiles_32x32" / "Room_Builder_Walls_32x32.png"
 
-# Shading strength for build_wall_shade()'s corner wedge, as a black-overlay
-# alpha (compositing black at alpha a scales a pixel by (1 - a/255)). 80
-# (~0.69x) reads as a clearly darker diagonal against the plain wall at
-# normal viewing scale -- tuned by pixel-sampling a live screenshot; see git
-# log / the plan doc for how earlier values were ruled out.
-WALL_SHADE = 80
+# Wall frame, measured off the two reference designs the user pointed at
+# (6_Home_Designs/Gym_Designs/48x48/Gym_2_layer_1_48x48.png for the bottom
+# row, TV_Studio_Designs/48x48/Tv_Studio_Design_layer_1_48x48.png for the
+# top row -- both 3x upscales of the pack's 16px art, so every run below was
+# read at 48px and scaled by 2/3 to this game's 32px tiles). Every wall shows
+# its top face as a WHITE band inside a LINE-px NAVY outline -- FACE_SIDE
+# wide along the side walls, FACE_END along the back and front walls -- with
+# a second LINE-px outline where that face meets the wall body. The side
+# walls' body is a flat SIDE_STRIP band; the front wall has no body at all
+# (its top face is the whole wall, FRONT_H tall); the back wall's body is
+# whatever is left of the (CAP_H + 1)-tile stack after the top face and the
+# floor-seam outline (50px, matching the reference's 25 native px).
+NAVY = (58, 58, 80, 255)
+WHITE = (248, 248, 248, 255)
+LINE = 2
+FACE_SIDE = 10
+FACE_END = 8
+SIDE_STRIP = 16
+FRONT_H = LINE + FACE_END + LINE
+# The side wall (face + body + all three outlines) must fill its ring tile
+# exactly -- the floor layer underneath starts at the next tile.
+assert LINE + FACE_SIDE + LINE + SIDE_STRIP + LINE == TILE
 
-# Task 13 polish, applied to build_wall_border_overlay()'s side bands only:
-# a subtle vertical gradient across the band's fill (GRADIENT_SHADE, top to
-# bottom) plus a thin dark outline at the band's inner edge (OUTLINE_SHADE,
-# OUTLINE_PX wide). Same black-composite technique as WALL_SHADE above
-# (compositing black at alpha a scales a pixel by (1 - a/255)), but the
-# gradient's alpha is kept far below WALL_SHADE's 80 -- this is meant to
-# read as a soft hint of depth, not a visible stripe (checked against a live
-# screenshot; this plan has twice had to walk back an effect shipped too
-# strong, see Amendment 8). The outline can afford to be stronger since it's
-# only OUTLINE_PX wide rather than spanning the whole band.
+# Side walls sit ~15% darker than the back wall in both references (Gym_2:
+# (119,109,105) against (140,135,131); TV studio: (141,146,163) against
+# (169,172,188)) -- compositing black at alpha a scales a pixel by
+# (1 - a/255), so 40 is that ratio. This is also what makes the corner wedge
+# visible at all on a flat wall like analytics's, where an undarkened
+# average would be the wall's own color.
+SIDE_SHADE = 40
+# Subtle vertical gradient down the side walls' body (Task 13, a polish the
+# user asked for on top of the reference's genuinely flat band), ramping
+# from 0 at the floor seam to GRADIENT_SHADE at the front wall. Kept far
+# below anything that reads as a stripe -- this plan has twice had to walk
+# back an effect shipped too strong, see Amendment 8.
 GRADIENT_SHADE = 20
-OUTLINE_SHADE = 110
-OUTLINE_PX = 2
 
 ROOM_BY_ID = {r["id"]: r for r in ROOMS}
 
 
 def _darken(color, alpha):
     """Darken an RGB(A) 4-tuple by compositing black at the given alpha --
-    same math WALL_SHADE relies on elsewhere in this file."""
+    the math SIDE_SHADE and GRADIENT_SHADE are expressed in."""
     r, g, b = color[:3]
     scale = 1 - alpha / 255
     return (round(r * scale), round(g * scale), round(b * scale), 255)
@@ -87,17 +103,6 @@ def floor_crop_for(room):
     return sheet.crop((col * TILE, row * TILE, col * TILE + TILE, row * TILE + TILE))
 
 
-# Width (px) of the flat-color band left visible at each side wall's true
-# outer edge once build_wall_border_overlay()'s floor tiling covers the
-# rest of the wall ring. 16, not Task 10's 6 -- three independent
-# pixel-measurements against the actual reference art (Gym/Shooting Range/
-# Museum, see task-11-brief.md) all found the reference's side wall is
-# exactly half its 32px wall tile, constant along the whole wall. The front
-# wall gets no band at all (see build_wall_border_overlay's docstring), so
-# this constant is side-wall-only -- no separate front constant needed.
-SIDE_STRIP = 16
-
-
 def wall_body_color(room):
     """Average RGB of the room's own base wall tile -- room_layout.wall_crop_box
     owns the exact crop (the same box generate-world-tileset.py uses for this
@@ -112,73 +117,94 @@ def wall_body_color(room):
     return (round(r), round(g), round(b), 255)
 
 
+def side_wall_color(room):
+    """The flat color of a room's side walls (and of the corner wedges,
+    which are those walls turning the corner): wall_body_color darkened by
+    SIDE_SHADE."""
+    return _darken(wall_body_color(room), SIDE_SHADE)
+
+
 def build_wall_border_overlay(room, floor_crop):
-    """Per-room decor overlay that makes the wall ring read as a thin,
-    flat-colored side-wall border plus a wall-free front (door) wall,
-    matching the reference art's own treatment (see task-11-brief.md):
-    floor_crop tiled across the room's full ROOM_W x ROOM_H outer footprint
-    (this covers the wall ring's own busy per-theme texture everywhere,
-    including the front wall -- floor now runs to the true outer edge
-    there, same as the reference's near-absent front wall), with a
-    SIDE_STRIP-px flat solid-color band painted back in at the true left
-    and right edges, sampled per-room from wall_body_color(). Task 13 layers
-    two more effects onto that band's fill: a subtle vertical gradient
-    (GRADIENT_SHADE, lighter at the top and darkening toward the floor) and,
-    on top of it, a thin dark outline at the band's inner edge
-    (OUTLINE_SHADE/OUTLINE_PX) so the band reads as a defined wall shape
-    rather than a flat color blending into the tiled floor.
+    """Per-room overlay covering the room's cap row(s) plus its ROOM_W x
+    ROOM_H footprint, drawing the reference's wall frame over the map's
+    plain wall-ring tiles (measurements: the NAVY/WHITE/... constants):
 
-    That side band deliberately runs the room's *full* height, front row
-    included -- not just the interior rows -- so the bottom corners (side
-    meets front) come out as a plain square overlap of two rectangles, no
-    diagonal or special-casing needed, matching the reference's plain
-    bottom corners (contrast the back wall's own separate mitered top
-    corners from Tasks 7-9, untouched here).
-
-    One exception carved out of the mask: the room's own room_y0 row -- the
-    row that now always carries the wall-cap + corner-wedge treatment (Task
-    12 extends this to every room, not just top-row rooms; see
-    build_wall_shade()) -- is excluded entirely (its whole row left fully
-    transparent). This task must not touch that wall for any room.
+    - every wall's top face (NAVY | WHITE | NAVY) around all four sides,
+      the inner outlines running full-length so they cross at the corners
+      the way the pack's own corners do;
+    - the side walls' flat SIDE_STRIP body (side_wall_color, with the Task
+      13 gradient) from the floor seam down to the front wall, edged with a
+      NAVY line where it meets the floor;
+    - the back wall's body left transparent so the real textured wall tiles
+      (and build_wall_shade()'s corner wedges) show through, with a NAVY
+      floor-seam line under it;
+    - floor_crop tiled over the front ring row above its top face, since the
+      reference's front wall is nothing but that face;
+    - the doorway: a one-tile opening at DOOR_COL cut clean through
+      whichever wall the door is in (the front face for top-row rooms, the
+      whole tall wall for bottom-row rooms -- the same rule as
+      generate-world-map.door_tile), edged with NAVY jambs, the room's own
+      floor running out through it.
     """
-    w, h = ROOM_W * TILE, ROOM_H * TILE
+    w, h = ROOM_W * TILE, (CAP_H + ROOM_H) * TILE
+    back_h = (CAP_H + 1) * TILE
+    face_end = LINE + FACE_END              # inner edge of the back/front top face
+    face_side = LINE + FACE_SIDE            # inner edge of a side top face
+    body_x = face_side + LINE               # where a side wall's body starts
+    edge_x = body_x + SIDE_STRIP            # NAVY line where that body meets the floor
+    seam = back_h - LINE                    # NAVY line under the back wall's body
+    front = h - FRONT_H                     # top of the front wall's face
+    color = side_wall_color(room)
+
     img = Image.new("RGBA", (w, h))
     for y in range(0, h, TILE):
         for x in range(0, w, TILE):
             img.paste(floor_crop, (x, y))
+    d = ImageDraw.Draw(img)
 
-    d_img = ImageDraw.Draw(img)
-    color = wall_body_color(room)
+    # Side wall bodies, one row at a time for the gradient (PIL has no
+    # linear-gradient fill).
+    for y in range(seam, front):
+        row_color = _darken(color, round(GRADIENT_SHADE * (y - seam) / (front - 1 - seam)))
+        d.rectangle([body_x, y, edge_x - 1, y], fill=row_color)
+        d.rectangle([w - edge_x, y, w - body_x - 1, y], fill=row_color)
 
-    # Vertical gradient across each side band: lighter (true wall_body_color,
-    # no darkening) at the top, darkening toward the bottom as a subtle hint
-    # of the wall meeting the floor. Drawn one row at a time since PIL has no
-    # built-in linear-gradient fill.
-    for y in range(h):
-        shade = round(GRADIENT_SHADE * y / (h - 1))
-        row_color = _darken(color, shade)
-        d_img.rectangle([0, y, SIDE_STRIP - 1, y], fill=row_color)
-        d_img.rectangle([w - SIDE_STRIP, y, w - 1, y], fill=row_color)
+    # Top faces: WHITE bands, the outer NAVY outline, then the inner
+    # outlines (full-length, so they cross at the corners).
+    d.rectangle([0, 0, w - 1, face_end - 1], fill=WHITE)
+    d.rectangle([0, h - face_end, w - 1, h - 1], fill=WHITE)
+    d.rectangle([0, 0, face_side - 1, h - 1], fill=WHITE)
+    d.rectangle([w - face_side, 0, w - 1, h - 1], fill=WHITE)
+    d.rectangle([0, 0, w - 1, h - 1], outline=NAVY, width=LINE)
+    d.rectangle([face_side, 0, body_x - 1, h - 1], fill=NAVY)
+    d.rectangle([w - body_x, 0, w - face_side - 1, h - 1], fill=NAVY)
+    d.rectangle([0, face_end, w - 1, face_end + LINE - 1], fill=NAVY)
+    d.rectangle([0, front, w - 1, front + LINE - 1], fill=NAVY)
 
-    # Thin dark outline at each band's inner edge (where the flat band meets
-    # the tiled floor), painted over the gradient above.
-    outline_color = _darken(color, OUTLINE_SHADE)
-    d_img.rectangle([SIDE_STRIP - OUTLINE_PX, 0, SIDE_STRIP - 1, h - 1], fill=outline_color)
-    d_img.rectangle([w - SIDE_STRIP, 0, w - SIDE_STRIP + OUTLINE_PX - 1, h - 1], fill=outline_color)
+    # Floor outline: the seam under the back wall's body, and the side
+    # bodies' inner edges down to the front wall.
+    d.rectangle([edge_x, seam, w - edge_x - 1, seam + LINE - 1], fill=NAVY)
+    d.rectangle([edge_x, seam, edge_x + LINE - 1, front - 1], fill=NAVY)
+    d.rectangle([w - edge_x - LINE, seam, w - edge_x - 1, front - 1], fill=NAVY)
 
-    mask = Image.new("L", (w, h), 255)
-    d_mask = ImageDraw.Draw(mask)
+    # Back wall body: transparent, the map's own wall tiles show through.
+    d.rectangle([body_x, face_end + LINE, w - body_x - 1, seam - 1], fill=(0, 0, 0, 0))
 
-    # room_y0(room)'s own row is always image row 0 (room_y0 is defined as
-    # the exterior rect's top-left corner -- see room_layout.room_y0's
-    # docstring), for every room, top or bottom. This wins over the
-    # side-color paint above regardless of what's under it: the mask is
-    # applied last, so this row stays fully transparent (real wall +
-    # cap/wedge shows through) even through the small overlap where the side
-    # bands cross it.
-    d_mask.rectangle([0, 0, w - 1, TILE - 1], fill=0)
+    # Doorway.
+    dx0, dx1 = DOOR_COL * TILE, (DOOR_COL + 1) * TILE
+    if room["row"] == "bottom":
+        # Through the tall wall: the map already floors this column (see
+        # generate-world-map.py's cap-row loop), so open it up and add the
+        # jambs, which run the wall's full height down to the seam.
+        d.rectangle([dx0, 0, dx1 - 1, seam + LINE - 1], fill=(0, 0, 0, 0))
+        d.rectangle([dx0 - LINE, 0, dx0 - 1, seam + LINE - 1], fill=NAVY)
+        d.rectangle([dx1, 0, dx1 + LINE - 1, seam + LINE - 1], fill=NAVY)
+    else:
+        # Through the front face: floor runs out over it, jambs either side.
+        img.paste(floor_crop, (dx0, h - TILE))
+        d.rectangle([dx0 - LINE, front, dx0 - 1, h - 1], fill=NAVY)
+        d.rectangle([dx1, front, dx1 + LINE - 1, h - 1], fill=NAVY)
 
-    img.putalpha(mask)
     return img
 
 
@@ -192,41 +218,32 @@ def copy_asset(src_rel: str, dest_rel: str, crop: tuple[int, int, int, int] | No
         Image.open(src).convert("RGBA").crop(crop).save(dest)
 
 
-def build_wall_shade() -> Image.Image:
-    """A plain mitered corner cut at the two top corners of the wall that
-    sits above a room's own room_y0 row (a top-row room's back wall; a
-    bottom-row room's door wall) -- the only 3D cue this room gets. No
-    side-wall darkening, no floor shadow -- the target is the restraint of
-    moderninteriors-win/6_Home_Designs/Gym_Designs/32x32/
-    Gym_layer_1_32x32.png, not a full lighting pass.
+def build_wall_shade(room) -> Image.Image:
+    """The tall wall's two mitered top corners: the flat side wall carrying
+    on up as a wedge that tapers from LINE px wide at the wall's top face to
+    the full SIDE_STRIP at the floor seam, in the side wall's own color with
+    no outline on the diagonal -- exactly how both references draw their
+    corners (Gym_2: 1 native px at the top widening to the side wall's full
+    8, in 1px steps -- 2px here). Replaces the earlier black-alpha
+    darkening, which read as shading on the back wall rather than as the
+    side wall turning the corner.
 
-    Wedge shape measured directly off that Gym reference by pixel-sampling:
-    2px wide at the top, widening by 2px roughly every 6px of height, to 18px
-    (~56% of a 32px tile) at the wall/floor seam 50px down. That ratio
-    carries over unchanged (this game's tiles are also 32px); the height is
-    stretched from the reference's ~50px to this game's whole CAP_H+1 =
-    2-tile back wall (64px). Approximated here as a flat WALL_SHADE darken,
-    since this game's walls are one texture throughout rather than the
-    reference's separate flat-vs-textured materials.
-
-    Room-independent (it is pure black at a fixed alpha, not a texture), so
-    every room reuses the identical image -- callers still write one copy
-    per room to keep decor/<room-id>/ self-contained."""
+    Sized to the wall stack (cap row(s) + the room's own room_y0 row) and
+    anchored on the room's left wall column; build_wall_border_overlay()
+    leaves that wall's body transparent so this shows through it."""
     w = ROOM_W * TILE
-    back_h = (CAP_H + 1) * TILE   # cap rows + the room's own back-wall row
-    max_w = round(TILE * 18 / 32)  # ~56% of a tile, measured off the Gym reference
-    mask = Image.new("L", (w, back_h), 0)
-    d = ImageDraw.Draw(mask)
-
-    # Widths are kept even so the diagonal steps in 2px units like the pack's
-    # own art rather than as a 1px staircase.
-    for y in range(back_h):
-        ww = 2 + 2 * round((max_w - 2) * y / (back_h - 1) / 2)
-        d.rectangle([0, y, ww - 1, y], fill=WALL_SHADE)
-        d.rectangle([w - ww, y, w - 1, y], fill=WALL_SHADE)
-
+    back_h = (CAP_H + 1) * TILE
+    top = LINE + FACE_END + LINE            # first row of wall body, under the top face
+    bottom = back_h - LINE                  # floor-seam outline
+    body_x = LINE + FACE_SIDE + LINE
+    color = side_wall_color(room)
     out = Image.new("RGBA", (w, back_h), (0, 0, 0, 0))
-    out.putalpha(mask)
+    d = ImageDraw.Draw(out)
+    for y in range(top, bottom):
+        # Even widths, so the diagonal steps in 2px units like the pack's art.
+        ww = LINE + 2 * round((SIDE_STRIP - LINE) * (y - top) / (bottom - 1 - top) / 2)
+        d.rectangle([body_x, y, body_x + ww - 1, y], fill=color)
+        d.rectangle([w - body_x - ww, y, w - body_x - 1, y], fill=color)
     return out
 
 
@@ -238,37 +255,29 @@ def main() -> None:
         ox, oy = room_origin(room)
         room_id = room["id"]
 
-        # Corner-cut overlay, every room. Anchored on the room's own left
-        # wall column and its topmost cap row, and only as tall as the cap
-        # row(s) plus the room_y0 ring row it draws over -- side walls and
-        # the floor below are untouched. Emitted first so every other decor
-        # item in this room draws on top of it. Same wedge image for every
-        # room (build_wall_shade() is room-independent); only its placement
-        # (keyed off room_y0(room), which is already asymmetric per room)
-        # differs.
+        # Corner wedges on the tall wall (cap row(s) + the room's own
+        # room_y0 row), anchored on the room's left wall column. Emitted
+        # first so everything else in this room draws on top of it.
         shade_rel = f"decor/{room_id}/wall-shade.png"
         (WORLD_ASSETS / shade_rel).parent.mkdir(parents=True, exist_ok=True)
-        build_wall_shade().save(WORLD_ASSETS / shade_rel)
+        build_wall_shade(room).save(WORLD_ASSETS / shade_rel)
         decor_entries.append({
             "image": shade_rel,
             "x": (ox - 1) * TILE,
             "y": (room_y0(room) - CAP_H) * TILE,
         })
 
-        # Thin-border wall overlay, every room. Covers the room's ordinary
-        # ROOM_W x ROOM_H exterior footprint (wall ring included) -- it
-        # doesn't extend into the cap rows above, so it can't touch or
-        # overlap the wall-shade corner wedge just emitted above (that
-        # wedge's own footprint is the cap row(s) plus this room's room_y0
-        # ring row, which this overlay excludes -- see
-        # build_wall_border_overlay's docstring).
+        # Wall frame, every room: covers the cap row(s) plus the room's
+        # ROOM_W x ROOM_H footprint, i.e. the same top-left as the wedges
+        # above. Its tall-wall body is transparent, so the wedges (and the
+        # real wall tiles) show through.
         border_rel = f"decor/{room_id}/wall-border.png"
         (WORLD_ASSETS / border_rel).parent.mkdir(parents=True, exist_ok=True)
         build_wall_border_overlay(room, floor_crop_for(room)).save(WORLD_ASSETS / border_rel)
         decor_entries.append({
             "image": border_rel,
             "x": room["x0"] * TILE,
-            "y": room_y0(room) * TILE,
+            "y": (room_y0(room) - CAP_H) * TILE,
         })
 
         for item in DECOR.get(room_id, []):

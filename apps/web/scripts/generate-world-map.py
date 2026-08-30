@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from room_layout import WIDTH, HEIGHT, TILE, ROOM_W, ROOM_H, GAP, HALLWAY_H, CAP_H, ROOMS, DESKS, room_y0
+from room_layout import WIDTH, HEIGHT, TILE, ROOM_W, ROOM_H, GAP, HALLWAY_H, CAP_H, DOOR_COL, ROOMS, DESKS, room_y0
 
 WORLD_ASSETS = Path(__file__).resolve().parents[1] / "public" / "world-assets"
 
@@ -75,7 +75,7 @@ def cap_rows(room):
 
 def door_tile(room):
     x0, y0, x1, y1 = exterior_rect(room)
-    door_x = x0 + ROOM_W // 2
+    door_x = x0 + DOOR_COL
     door_y = y1 if room["row"] == "top" else y0
     return door_x, door_y
 

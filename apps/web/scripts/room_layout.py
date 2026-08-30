@@ -25,6 +25,11 @@ HALLWAY_H = 4               # real walkable plaza between the two room rows
 # both happen to be the room's own room_y0 row, which is what cap_rows() in
 # generate-world-map.py actually keys off.
 CAP_H = 1
+# Door column relative to a room's x0: the exact middle of the 11-wide
+# footprint. Shared by generate-world-map.py's door_tile() (which decides
+# which wall it punches through) and generate-room-decor.py's wall overlay
+# (which draws the opening) so the two can't drift apart.
+DOOR_COL = ROOM_W // 2
 
 assert ROOM_W * 3 + GAP * 2 == WIDTH
 # Vertical stack, top to bottom: [cap + top room] + [hallway] + [cap + bottom room].

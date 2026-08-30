@@ -35,19 +35,37 @@ def room_y0(room):
 # floor = (sheet_name, col, row) crop out of Room_Builder_Floors_32x32.png.
 # Every floor pick below was cropped, scaled up, and read back to confirm
 # (see the implementation plan's Task 2 for the verification transcript).
+#
+# gable = (x, y) pixel origin of one colorway block in
+# Room_Builder_3d_walls_32x32.png, the source for the cap rows' 3D cornice
+# (generate-room-decor.py's build_gable). That sheet is a 3-column x 8-row
+# grid of 256x224 blocks, each block one wall colorway; the origins below are
+# the block grid's own coordinates. Picked per room by matching the mean RGB
+# of the room's own "wall" tile above against each block's wall body, then
+# eyeballing the composited strip -- the two sheets don't share a colour
+# ordering, so index-matching them isn't possible. auth-module/living-room/
+# deploy-config genuinely all land on the same warm-tan block: their walls
+# (13/14/12) are within ~10 RGB of each other, and the next-nearest block is
+# 2-4x further off, so colour continuity beats variety here.
 ROOMS = [
     dict(id="auth-module", owner="user-a", row="top", x0=0, theme="library",
-         floor=("Room_Builder_Floors", 0, 13), wall=13),   # tan vertical wood-plank paneling
+         floor=("Room_Builder_Floors", 0, 13), wall=13,    # tan vertical wood-plank paneling
+         gable=(256, 672)),
     dict(id="analytics", owner="user-a", row="top", x0=12, theme="sports",
-         floor=("Room_Builder_Floors", 5, 12), wall=2),    # flat painted grey, gymnasium wall
+         floor=("Room_Builder_Floors", 5, 12), wall=2,     # flat painted grey, gymnasium wall
+         gable=(256, 0)),
     dict(id="database", owner="user-b", row="top", x0=24, theme="japanese",
-         floor=("Room_Builder_Floors", 1, 15), wall=16),   # muted mauve-grey, washi-paper-adjacent
+         floor=("Room_Builder_Floors", 1, 15), wall=16,    # muted mauve-grey, washi-paper-adjacent
+         gable=(512, 448)),
     dict(id="billing", owner="user-a", row="bottom", x0=0, theme="gym",
-         floor=("Room_Builder_Floors", 13, 17), wall=15),  # grey stone/concrete texture
+         floor=("Room_Builder_Floors", 13, 17), wall=15,   # grey stone/concrete texture
+         gable=(256, 896)),
     dict(id="living-room", owner=None, row="bottom", x0=12, theme="living-room",
-         floor=("Room_Builder_Floors", 5, 13), wall=14),   # horizontal warm-tan wood plank
+         floor=("Room_Builder_Floors", 5, 13), wall=14,    # horizontal warm-tan wood plank
+         gable=(256, 672)),
     dict(id="deploy-config", owner="user-b", row="bottom", x0=24, theme="music",
-         floor=("Room_Builder_Floors", 6, 23), wall=12),   # dusty rose-brown, matches warm floor
+         floor=("Room_Builder_Floors", 6, 23), wall=12,    # dusty rose-brown, matches warm floor
+         gable=(256, 672)),
 ]
 
 # Interior-relative (col 0-8, row 0-5) desk spawn positions, in

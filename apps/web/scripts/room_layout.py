@@ -258,9 +258,9 @@ DECOR = {
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/8_Gym_Singles_32x32/Gym_Singles_32x32_167.png"),
         dict(col=1, row=5, dest="black-mat.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/8_Gym_Singles_32x32/Gym_Singles_32x32_195.png"),
-        dict(col=6, row=1, dest="bike-1.png",
+        dict(col=5, row=1, dest="bike-1.png",
              src=REPO_ROOT / "gym bicycle" / "Gym_Singles_48x48_93.png", scale=2/3),
-        dict(col=8, row=1, dest="bike-2.png",
+        dict(col=7, row=1, dest="bike-2.png",
              src=REPO_ROOT / "gym bicycle" / "Gym_Singles_48x48_94.png", scale=2/3),
     ],
     # 2_Living_Room_Singles_32x32/ (122 files, all individually eyeballed via

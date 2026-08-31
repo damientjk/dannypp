@@ -3,6 +3,7 @@ import { api, setSessionToken } from "../api";
 import type {
   Agent,
   AgentRun,
+  CapabilityRecord,
   AuditEntry,
   HumanPrincipal,
   Message,
@@ -66,6 +67,8 @@ const LOG_BADGE_LABELS: Record<LogEntry["category"], string> = {
 export function WorldView() {
   const [principal, setPrincipal] = useState<HumanPrincipal | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
+  // The real capabilities from the backend store — not the in-browser mock.
+  const [capabilities, setCapabilities] = useState<CapabilityRecord[]>([]);
   const [worldAgents, setWorldAgents] = useState<WorldAgent[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
@@ -143,8 +146,13 @@ export function WorldView() {
     let cancelled = false;
     const poll = async () => {
       try {
-        const { agents: nextAgents } = await api.listAgents();
-        if (!cancelled) setAgents(nextAgents);
+        const [{ agents: nextAgents }, { capabilities: nextCapabilities }] = await Promise.all([
+          api.listAgents(),
+          api.capabilities(),
+        ]);
+        if (cancelled) return;
+        setAgents(nextAgents);
+        setCapabilities(nextCapabilities);
       } catch {
         // transient poll failure; try again next interval
       }
@@ -425,7 +433,27 @@ export function WorldView() {
   const selectedAgent = agents.find((agent) => agent.id === selectedId) ?? null;
   const selectedWorldAgent = worldAgents.find((wa) => wa.agentId === selectedId) ?? null;
   const selectedRoom = selectedWorldAgent?.assignedRoomId ? roomById(selectedWorldAgent.assignedRoomId) : null;
-  const selectedGrantedRooms = selectedAgent ? grantedRoomsFor(selectedAgent.id) : [];
+  /**
+   * The Agent's real keycard: the backend issues one scoped to its owner's
+   * whole namespace (`read:res://<ownerId>/*`) at run start, so a live record
+   * covers every room that owner owns. Expiry is checked here rather than
+   * trusted from the poll, since a capability can lapse between polls.
+   */
+  const liveCapability = selectedAgent
+    ? (capabilities.find(
+        (record) =>
+          record.agentId === selectedAgent.id &&
+          record.revokedAt === null &&
+          Date.parse(record.expiresAt) > Date.now(),
+      ) ?? null)
+    : null;
+
+  const selectedGrantedRooms =
+    selectedAgent && liveCapability
+      ? FILE_ROOMS.filter(
+          (room) => room.requiresPermission && room.ownerId === selectedAgent.ownerId,
+        ).map((room) => room.id)
+      : [];
   const activeRun = runs.find((run) => run.status === "running" || run.status === "queued") ?? null;
   const myRequests = pendingRequestsFor(principal.id);
   /** Name of an Agent as the roster knows it, for rendering an audit row. */
@@ -584,7 +612,7 @@ export function WorldView() {
                 );
               })}
             </ul>
-            <button className="revoke-button" onClick={shredKeycard} disabled={selectedGrantedRooms.length === 0}>
+            <button className="revoke-button" onClick={shredKeycard} disabled={!liveCapability}>
               Shred this agent&apos;s keycard
             </button>
           </section>

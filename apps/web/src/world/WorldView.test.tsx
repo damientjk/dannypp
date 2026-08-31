@@ -231,7 +231,24 @@ describe("WorldView", () => {
     });
     vi.mocked(api.runs).mockResolvedValue({ runs: [] });
     vi.mocked(api.messages).mockResolvedValue({ messages: [] });
+    // No backend keycard by default; tests that need one override this.
+    vi.mocked(api.capabilities).mockResolvedValue({ capabilities: [] });
   });
+
+  /** A live backend capability for `agentId`, scoped to its owner's namespace. */
+  function liveCapabilityFor(agentId: string, ownerId = "user-a") {
+    return {
+      id: "cap-" + agentId,
+      scope: `read:res://${ownerId}/*`,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      revokedAt: null,
+      agentId,
+      ownerId,
+      runId: null,
+      issuedAt: new Date().toISOString(),
+      revokedBy: null,
+    };
+  }
 
   async function login() {
     render(<WorldView />);
@@ -320,10 +337,16 @@ describe("WorldView", () => {
     await screen.findByText(new RegExp(`denied ${AGENT_A.name} access to ${room.displayName}`));
   });
 
+  // The wall reads the BACKEND capability store, not the in-browser mock: the
+  // real keycard is scoped to the owner's whole namespace, so a live record
+  // covers every room that owner owns.
   it("shows a keycard for every protected room, held or not (task 4)", async () => {
     const room = agentAssignedRoom(AGENT_A.id, AGENT_A.ownerId);
     await issueCapability(AGENT_A.id, room.id);
     vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    vi.mocked(api.capabilities).mockResolvedValue({
+      capabilities: [liveCapabilityFor(AGENT_A.id, AGENT_A.ownerId)],
+    });
     await login();
 
     fireEvent.click(screen.getByText("Robot A"));
@@ -332,10 +355,23 @@ describe("WorldView", () => {
     for (const candidate of gated) {
       expect(screen.getAllByText(candidate.displayName).length).toBeGreaterThan(0);
     }
-    // The granted room reads as held; a room owned by somebody else can never be.
-    expect(screen.getAllByText("keycard held").length).toBe(1);
+    const owned = gated.filter((candidate) => candidate.ownerId === "user-a");
     const foreign = gated.filter((candidate) => candidate.ownerId !== "user-a");
+    expect(await screen.findAllByText("keycard held")).toHaveLength(owned.length);
     expect(screen.getAllByText("another owner").length).toBe(foreign.length);
+  });
+
+  it("shows no keycard once the backend capability is revoked", async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    vi.mocked(api.capabilities).mockResolvedValue({
+      capabilities: [{ ...liveCapabilityFor(AGENT_A.id), revokedAt: new Date().toISOString() }],
+    });
+    await login();
+
+    fireEvent.click(screen.getByText("Robot A"));
+
+    expect(screen.queryAllByText("keycard held")).toHaveLength(0);
+    expect(screen.getAllByText("no keycard").length).toBeGreaterThan(0);
   });
 
   it("claims a different desk for each of two same-room agents busy in the same poll (finding 1)", async () => {

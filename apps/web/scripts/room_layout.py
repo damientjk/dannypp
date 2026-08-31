@@ -267,53 +267,45 @@ DECOR = {
     # bug) are now plain static DECOR at those same two desk spots instead.
     #
     # Billing is a "bottom" row room, so row 0 is the door-facing capped
-    # wall and row 5 is the plain back wall -- nothing here sits at row 0.
-    # Punching bag (32x96, 1x3 tiles) anchors at row=1 so its base (bottom
-    # tile) lands on row 3 -- desk-billing-1's row -- matching where the
-    # equipment sprite used to stand. Treadmill (64x96, 2x3 tiles) does the
-    # same for desk-billing-2 at row=1 -- also base-row-3.
+    # wall and row 5 is the plain back wall.
     #
     # The floor patch (6x 32x32 tiles, assembled 3-wide x 2-tall per the
     # user's own file names) anchors its top-left at col=0/row=4 and is
     # listed FIRST so everything else in this block draws on top of it.
     # Dumbbell rack (64x64, 2x2) sits at col=0/row=4 too, exactly covering
-    # the mat's left two columns (rows 4-5, flush with the back wall -- one
-    # row earlier than the wall itself, same "anchor at ROOM_H-2 not -1"
-    # rule Task 9's mirror comment already documented, so the rack's own
-    # bottom edge lands on row 5 instead of overshooting past it). Yoga
-    # ball (64x64, 2x2 -- also fix-round-verified size, not the icon-sized
-    # ball the name suggests) sits on the mat's exposed right corner at
-    # col=2/row=4: the fix request's own suggested row=5 was checked
-    # numerically and overflows the interior by a full tile (y ends at 224
-    # against a 192 bound) -- the same class of bug this file's own mirror
-    # comment already flagged once before -- so it's moved to row=4 to land
-    # flush instead, same fix as the rack.
+    # the mat's left two columns (rows 4-5, flush with the back wall). Yoga
+    # ball (64x64, 2x2) sits on the mat's exposed right corner at col=2/
+    # row=4, also flush with the back wall. All three unchanged by the
+    # second fix round below -- not part of that request.
     #
-    # Bench press (64x96, 2x3) at col=7/row=3 was checked against the
-    # fix request's own claimed "7+2=9, exactly flush" math: confirmed
-    # correct both horizontally (x ends at 288, the exact interior right
-    # edge) and vertically (y ends at 192, the exact back-wall edge) --
-    # zero overflow either axis.
+    # Second fix round (2026-08-31, third): the user reviewed a live
+    # screenshot and asked for a pure repositioning pass -- same 5 items
+    # (now 2 punching bags, so 6), same assets, new spots. Two punching
+    # bags (32x96, 1x3 tiles each, same source file reused for both) move
+    # to the top-left, and one treadmill (64x96, 2x3) to the top-right,
+    # both at row=-1 so their top overlaps the door-side wall -- the same
+    # wall-covering trick auth-module's bookshelf and analytics's trophies
+    # already use, just the first time it's used in a room where that same
+    # wall also carries the door. DOOR_COL is an absolute offset from a
+    # room's own x0 (col x0+DOOR_COL); billing's x0=0 so the door sits at
+    # absolute col 5, i.e. interior-relative col 4 (interior col 0 ==
+    # absolute x0+1). Every row=-1 item here was checked against that
+    # column: punching bags at col=1/col=2 and the treadmill at col=7 all
+    # clear it with room to spare.
     #
-    # Machine press (64x80, 2x2.5) had no prescribed slot -- the fix
-    # request asked for the numbers to be worked out from scratch. Checked
-    # every other item's actual pixel range first (col*32..+width,
-    # row*32..+height): the only genuinely free 2-tile-wide gap left in
-    # rows 1-5 is x:[128,192) starting at y=128 (row=4), i.e. col=4/row=4 --
-    # everywhere else in reach either collides with the treadmill's row 1-3
-    # footprint or the mat/rack/ball block. That slot's bottom edge (y=208)
-    # overhangs the back wall by 16px (half a tile), which is the same
-    # "small intended overlap into the wall" every >1-tile item here
-    # already does deliberately, just deeper because 80px doesn't divide
-    # evenly into 32px tiles. Verified this is the only viable placement --
-    # row=3 (which would give zero overflow) has no 64px-wide clear x-range
-    # at all, since it would clip the treadmill on one side and the
-    # mat/rack block on the other.
+    # Bench press (64x96, 2x3) takes over the treadmill's old mid-room slot
+    # at col=5/row=1 once the treadmill vacates it for the top-right wall
+    # spot. Machine press (64x80, 2x2.5) moves to col=7/row=3, directly
+    # below the new treadmill's column (7-8) but starting at y=96 -- the
+    # treadmill's row=-1 footprint ends at y=64, so there's a full 32px of
+    # clearance before machine press begins; also clear of bench press
+    # (adjacent columns, touching at x=224 but not overlapping).
     #
-    # All 12 entries checked pairwise for overlap (excluding the
-    # deliberate floor-under-rack and floor-under-ball stacking, both
-    # intentional -- floor is listed first specifically so those two
-    # render on top of it): none collide with each other, none touch row 0.
+    # All 13 entries (6 floor + rack + ball + 2 punching bags + treadmill +
+    # bench + machine) checked pairwise for overlap (excluding the
+    # deliberate floor-under-rack and floor-under-ball stacking): none
+    # collide with each other, none overlap the door column at row=-1,
+    # none run past the interior's right/back edges.
     "billing": [
         dict(col=0, row=4, dest="floor-top-left.png",
              src=REPO_ROOT / "Gym Room" / "floor top left.png"),
@@ -331,13 +323,15 @@ DECOR = {
              src=REPO_ROOT / "Gym Room" / "Dumbbell rack.png"),
         dict(col=2, row=4, dest="yoga-ball.png",
              src=REPO_ROOT / "Gym Room" / "Yoga ball, put this near the flooring.png"),
-        dict(col=3, row=1, dest="punching-bag.png",
+        dict(col=1, row=-1, dest="punching-bag-1.png",
              src=REPO_ROOT / "Gym Room" / "Punching bag.png"),
-        dict(col=5, row=1, dest="treadmill.png",
+        dict(col=2, row=-1, dest="punching-bag-2.png",
+             src=REPO_ROOT / "Gym Room" / "Punching bag.png"),
+        dict(col=7, row=-1, dest="treadmill.png",
              src=REPO_ROOT / "Gym Room" / "Threadmill.png"),
-        dict(col=7, row=3, dest="bench-press.png",
+        dict(col=5, row=1, dest="bench-press.png",
              src=REPO_ROOT / "Gym Room" / "Bench press (replace bicycles).png"),
-        dict(col=4, row=4, dest="machine-press.png",
+        dict(col=7, row=3, dest="machine-press.png",
              src=REPO_ROOT / "Gym Room" / "Machine Press(replace bicycles).png"),
     ],
     # Re-themed per the user's new mockup: plain living room (sofa, TV,

@@ -181,24 +181,29 @@
       "y": 608
     },
     {
-      "image": "decor/billing/punching-bag.png",
-      "x": 128,
-      "y": 512
+      "image": "decor/billing/punching-bag-1.png",
+      "x": 64,
+      "y": 448
+    },
+    {
+      "image": "decor/billing/punching-bag-2.png",
+      "x": 96,
+      "y": 448
     },
     {
       "image": "decor/billing/treadmill.png",
+      "x": 256,
+      "y": 448
+    },
+    {
+      "image": "decor/billing/bench-press.png",
       "x": 192,
       "y": 512
     },
     {
-      "image": "decor/billing/bench-press.png",
+      "image": "decor/billing/machine-press.png",
       "x": 256,
       "y": 576
-    },
-    {
-      "image": "decor/billing/machine-press.png",
-      "x": 160,
-      "y": 608
     },
     {
       "image": "decor/living-room/wall-shade.png",

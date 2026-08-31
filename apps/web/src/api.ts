@@ -1,6 +1,7 @@
 import type {
   Agent,
   AgentRun,
+  CapabilityRecord,
   HumanPrincipal,
   Message,
   SystemInfo,
@@ -81,6 +82,12 @@ export const api = {
     }),
   stopAgent: (id: string) =>
     request<{ agent: Agent }>("/api/agents/" + id + "/stop", {
+      method: "POST",
+    }),
+  capabilities: () =>
+    request<{ capabilities: CapabilityRecord[] }>("/api/capabilities"),
+  revokeCapability: (id: string) =>
+    request<{ capability: CapabilityRecord }>("/api/capabilities/" + id + "/revoke", {
       method: "POST",
     }),
   messages: (id: string) =>

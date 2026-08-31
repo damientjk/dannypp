@@ -72,6 +72,16 @@ export interface Capability {
   revokedAt: string | null;
 }
 
+/** A capability as the backend stores it, with the provenance the UI needs to
+ *  attribute it to an Agent. */
+export interface CapabilityRecord extends Capability {
+  agentId: string;
+  ownerId: string;
+  runId: string | null;
+  issuedAt: string;
+  revokedBy: string | null;
+}
+
 export type PolicyEffect = "permit" | "deny";
 
 export interface PolicyRequestLike {

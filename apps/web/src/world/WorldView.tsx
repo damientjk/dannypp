@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, setSessionToken } from "../api";
-import type { Agent, AgentRun, HumanPrincipal, Message, PolicyRequestLike } from "../types";
+import type {
+  Agent,
+  AgentRun,
+  CapabilityRecord,
+  HumanPrincipal,
+  Message,
+  PolicyRequestLike,
+} from "../types";
 import { beginHeadingToDesk, endWorking, spawnWorldAgents } from "./agentSim";
 import {
   decideRoomEntry,
@@ -58,6 +65,8 @@ const LOG_BADGE_LABELS: Record<LogEntry["category"], string> = {
 export function WorldView() {
   const [principal, setPrincipal] = useState<HumanPrincipal | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
+  // The real capabilities from the backend store — not the in-browser mock.
+  const [capabilities, setCapabilities] = useState<CapabilityRecord[]>([]);
   const [worldAgents, setWorldAgents] = useState<WorldAgent[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
@@ -117,8 +126,13 @@ export function WorldView() {
     let cancelled = false;
     const poll = async () => {
       try {
-        const { agents: nextAgents } = await api.listAgents();
-        if (!cancelled) setAgents(nextAgents);
+        const [{ agents: nextAgents }, { capabilities: nextCapabilities }] = await Promise.all([
+          api.listAgents(),
+          api.capabilities(),
+        ]);
+        if (cancelled) return;
+        setAgents(nextAgents);
+        setCapabilities(nextCapabilities);
       } catch {
         // transient poll failure; try again next interval
       }
@@ -393,7 +407,27 @@ export function WorldView() {
   const selectedAgent = agents.find((agent) => agent.id === selectedId) ?? null;
   const selectedWorldAgent = worldAgents.find((wa) => wa.agentId === selectedId) ?? null;
   const selectedRoom = selectedWorldAgent?.assignedRoomId ? roomById(selectedWorldAgent.assignedRoomId) : null;
-  const selectedGrantedRooms = selectedAgent ? grantedRoomsFor(selectedAgent.id) : [];
+  /**
+   * The Agent's real keycard: the backend issues one scoped to its owner's
+   * whole namespace (`read:res://<ownerId>/*`) at run start, so a live record
+   * covers every room that owner owns. Expiry is checked here rather than
+   * trusted from the poll, since a capability can lapse between polls.
+   */
+  const liveCapability = selectedAgent
+    ? (capabilities.find(
+        (record) =>
+          record.agentId === selectedAgent.id &&
+          record.revokedAt === null &&
+          Date.parse(record.expiresAt) > Date.now(),
+      ) ?? null)
+    : null;
+
+  const selectedGrantedRooms =
+    selectedAgent && liveCapability
+      ? FILE_ROOMS.filter(
+          (room) => room.requiresPermission && room.ownerId === selectedAgent.ownerId,
+        ).map((room) => room.id)
+      : [];
   const activeRun = runs.find((run) => run.status === "running" || run.status === "queued") ?? null;
   const myRequests = pendingRequestsFor(principal.id);
   // Attempts the policy engine refused, counted over the whole session. NOT a
@@ -403,20 +437,32 @@ export function WorldView() {
 
   // Revokes every room this agent currently holds, in one action — the
   // detail panel just lists what it has, it never offers a per-room undo.
-  const shredKeycard = () => {
-    if (!selectedAgent || selectedGrantedRooms.length === 0) return;
-    for (const roomId of selectedGrantedRooms) revokeCapability(selectedAgent.id, roomId);
-    setRequestVersion((v) => v + 1);
-    setEvents((current) => [
-      {
-        id: newId(),
-        agentId: selectedAgent.id,
-        category: "denied",
-        message: `${principal.displayName} shredded ${selectedAgent.name}'s keycard (${selectedGrantedRooms.length} room${selectedGrantedRooms.length === 1 ? "" : "s"} revoked)`,
-        timestamp: new Date().toISOString(),
-      },
-      ...current,
-    ]);
+  const shredKeycard = async () => {
+    if (!selectedAgent || !liveCapability) return;
+    const agent = selectedAgent;
+    try {
+      // The real revocation: the store marks the record revoked AND suspends
+      // the Agent, so the capability minted on its next run is already revoked.
+      // Revoking the in-browser rooms too keeps the map in step until room
+      // entry itself moves to the backend.
+      await api.revokeCapability(liveCapability.id);
+      for (const roomId of selectedGrantedRooms) revokeCapability(agent.id, roomId);
+      const { capabilities: next } = await api.capabilities();
+      setCapabilities(next);
+      setRequestVersion((v) => v + 1);
+      setEvents((current) => [
+        {
+          id: newId(),
+          agentId: agent.id,
+          category: "denied",
+          message: `${principal.displayName} shredded ${agent.name}'s keycard (${liveCapability.scope})`,
+          timestamp: new Date().toISOString(),
+        },
+        ...current,
+      ]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not revoke the keycard");
+    }
   };
 
   return (
@@ -519,7 +565,7 @@ export function WorldView() {
                 );
               })}
             </ul>
-            <button className="revoke-button" onClick={shredKeycard} disabled={selectedGrantedRooms.length === 0}>
+            <button className="revoke-button" onClick={shredKeycard} disabled={!liveCapability}>
               Shred this agent&apos;s keycard
             </button>
           </section>

@@ -56,12 +56,12 @@
       "y": 0
     },
     {
-      "image": "decor/analytics/trophy-left.png",
-      "x": 448,
+      "image": "decor/analytics/racquet-1.png",
+      "x": 608,
       "y": 32
     },
     {
-      "image": "decor/analytics/trophy-right.png",
+      "image": "decor/analytics/racquet-2.png",
       "x": 640,
       "y": 32
     },

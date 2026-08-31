@@ -186,13 +186,16 @@ DECOR = {
     # proper top-down table-tennis sprite with a net.
     "analytics": [
         # row=-1: analytics is a top-row room, so row 0 is its capped back
-        # wall -- see this plan's wall-covering note. Fix round: _147 (used
-        # here originally) turned out to be a dagger on a pedestal, not a
-        # trophy -- replaced with _67 from 14_Basement_Singles_32x32, a
-        # genuine red trophy/torch-cup, verified visually before use.
-        dict(col=1, row=-1, dest="trophy-left.png",
+        # wall -- see this plan's wall-covering note. Fix round 2: _67 (used
+        # as "trophy" in fix round 1) is actually a pair of crossed
+        # table-tennis paddles/racquets, confirmed against the real in-game
+        # render -- renamed and consolidated into one paired cluster on the
+        # right (col=6/7) instead of duplicated at both corners. col=1
+        # (top-left) is deliberately left empty -- real trophy + table
+        # assets are coming in a follow-up fix round once isolated.
+        dict(col=6, row=-1, dest="racquet-1.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_67.png"),
-        dict(col=7, row=-1, dest="trophy-right.png",
+        dict(col=7, row=-1, dest="racquet-2.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_67.png"),
         dict(col=4, row=-1, dest="basketball-hoop.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_76.png"),

@@ -19,7 +19,7 @@ import type {
   PolicyDecision,
   PolicyRequestLike,
 } from "../types";
-import { roomById, roomByScope, scopeForRoom } from "./resources";
+import { roomById, roomsForScope, scopeForRoom } from "./resources";
 
 /**
  * Presented when an Agent holds no keycard at all.
@@ -55,9 +55,13 @@ export async function refreshCapabilities(): Promise<void> {
   held.clear();
   for (const capability of capabilities) {
     if (!isLive(capability)) continue;
-    const room = roomByScope(capability.scope);
-    if (!room) continue;
-    held.set(capabilityKey(capability.agentId, room.id), capability);
+    // A grant may name one file or a whole namespace, and a Run's own keycard
+    // names no file at all -- roomsForScope answers all three. Matching on the
+    // scope string alone would drop every card that is not an exact per-room
+    // grant, which is how a held keycard ended up never being presented.
+    for (const room of roomsForScope(capability.scope)) {
+      held.set(capabilityKey(capability.agentId, room.id), capability);
+    }
   }
 }
 

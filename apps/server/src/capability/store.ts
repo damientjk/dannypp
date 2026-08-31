@@ -19,7 +19,8 @@
 import { randomUUID } from "node:crypto";
 import type { Agent, AgentPrincipal, Capability } from "../types.js";
 import { DENY_REASONS, type DenyReason } from "./reasons.js";
-import { defaultRunScope, parseScope } from "./scope.js";
+import { capabilityOwner, defaultRunScope } from "./scope.js";
+import { expectedScopeForOwner } from "../policy/resource.js";
 
 /** The stored record. Extends Person 1's frozen `Capability` with provenance. */
 export interface CapabilityRecord extends Capability {
@@ -119,14 +120,18 @@ export class CapabilityStore {
   }
 
   private mint(input: IssueInput): CapabilityRecord {
-    const parsed = parseScope(input.scope);
-    if (!parsed) {
+    // Both scope grammars are legitimate here -- `read:res://user-a/notes.md`
+    // for a data keycard, `owner:user-a` for the execution keycard a Run holds.
+    // capabilityOwner is the one function that understands both, so the
+    // ownership invariant below is checked once rather than per grammar.
+    const ownerId = capabilityOwner(input.scope);
+    if (ownerId === null) {
       throw new Error("Malformed capability scope: " + String(input.scope));
     }
-    if (parsed.ownerId !== input.agentPrincipal.ownerId) {
+    if (ownerId !== input.agentPrincipal.ownerId) {
       throw new Error(
         "Refusing to issue a capability scoped to " +
-          parsed.ownerId +
+          ownerId +
           " for an agent owned by " +
           input.agentPrincipal.ownerId,
       );
@@ -150,8 +155,15 @@ export class CapabilityStore {
   }
 
   /**
-   * The default capability for a Run: read-only over the owner's namespace.
-   * Person 2's PEP calls this at run start.
+   * The capability a Run holds: permission to EXECUTE, and nothing else.
+   *
+   * It deliberately carries no data scope. A run keycard scoped
+   * `read:res://<owner>/*` would open every file its owner has the moment the
+   * Agent starts, which makes an owner's explicit grant meaningless and leaves
+   * a live id that opens the whole namespace for anyone who can name it.
+   * Reading data requires a keycard the owner actually issued for that
+   * resource; this one only answers "may this Agent run at all", which is the
+   * question revocation suspends.
    */
   issueForRun(
     agentPrincipal: AgentPrincipal,
@@ -160,10 +172,38 @@ export class CapabilityStore {
   ): CapabilityRecord {
     return this.issue({
       agentPrincipal,
-      scope: defaultRunScope(agentPrincipal.ownerId),
+      scope: expectedScopeForOwner(agentPrincipal.ownerId),
       runId,
       ...(ttlMs === undefined ? {} : { ttlMs }),
     });
+  }
+
+  /**
+   * A read keycard over the owner's whole namespace -- what POST
+   * /api/capabilities mints when the caller names no narrower scope.
+   *
+   * Deliberately separate from issueForRun: this is an owner deciding to hand
+   * over broad access, not something a Run gets for free by starting.
+   */
+  issueNamespaceRead(
+    agentPrincipal: AgentPrincipal,
+    runId?: string,
+    ttlMs?: number,
+  ): CapabilityRecord {
+    return this.issue({
+      agentPrincipal,
+      scope: defaultRunScope(agentPrincipal.ownerId),
+      ...(runId === undefined ? {} : { runId }),
+      ...(ttlMs === undefined ? {} : { ttlMs }),
+    });
+  }
+
+  /** Live, non-revoked, unexpired keycards this Agent currently holds. */
+  liveFor(agentId: string, at: Date = now()): CapabilityRecord[] {
+    return this.list({ agentId }).filter(
+      (record) =>
+        record.revokedAt === null && Date.parse(record.expiresAt) > at.getTime(),
+    );
   }
 
   get(id: unknown): CapabilityRecord | null {
@@ -289,7 +329,8 @@ export function issueCapabilityForRun(
   };
   const input = {
     agentPrincipal: principal,
-    scope: defaultRunScope(agent.ownerId),
+    // Execution only -- see CapabilityStore.issueForRun.
+    scope: expectedScopeForOwner(agent.ownerId),
     runId: runId ?? null,
   };
 

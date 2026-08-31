@@ -36,6 +36,13 @@ export interface AgentRun {
     cachedInputTokens?: number;
     outputTokens?: number;
   } | null;
+  /** Held at the authorization gate, waiting for the owner to grant a keycard. */
+  awaitingCapability: boolean;
+  /** How many resources the gate evaluated and withheld. A count, not a list:
+   *  the withheld set is "everything you did not grant". */
+  withheldCount: number;
+  /** Resources the gate placed in the workspace, by name. */
+  stagedResources: string[];
   createdAt: string;
 }
 

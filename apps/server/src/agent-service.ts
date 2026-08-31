@@ -4,7 +4,9 @@ import { AuditLog } from "./audit/log.js";
 import type { AppConfig } from "./config.js";
 import { isArkConfigured } from "./config.js";
 import { HttpError, RunCancelledError } from "./errors.js";
-import { issueCapabilityForRun } from "./capability/store.js";
+import type { CapabilityRecord } from "./capability/store.js";
+import { capabilityStore, issueCapabilityForRun } from "./capability/store.js";
+import { scopeAllows, scopeAllowsAction } from "./capability/scope.js";
 import type { ResourceAccessGate } from "./resources/access.js";
 import type { ResourceStore } from "./resources/store.js";
 import type { CallerContext } from "./policy/pep.js";
@@ -25,11 +27,16 @@ import type {
 import { WorkspaceManager } from "./workspace.js";
 import { processSecrets, redact } from "./secrets/redact.js";
 
+/** How often the staging wait re-checks for a freshly granted keycard. */
+const GRANT_POLL_MS = 500;
+
 const now = () => new Date().toISOString();
 
 export class AgentService {
   private readonly activeExecutions = new Map<string, Promise<void>>();
   private readonly cancellationRequests = new Set<string>();
+  /** Agents whose owner has refused the keycard their Run is waiting for. */
+  private readonly capabilityDenials = new Set<string>();
 
   /**
    * Credentials that must never reach persisted output (Person 3).
@@ -201,6 +208,22 @@ export class AgentService {
     return this.setStatus(id, "stopped");
   }
 
+  /**
+   * The owner refusing the keycard a Run is waiting for.
+   *
+   * "No" is an answer, and it should take effect the moment it is given -- a
+   * refused Agent that sat out the rest of the wait would make the owner's
+   * decision look ignored. The Run continues immediately with an empty inbox,
+   * which is the same outcome the timeout produces, just honestly and at once.
+   *
+   * Refusing is itself an authorization decision, so it is gated on ownership
+   * exactly as starting or stopping the Agent is.
+   */
+  async denyCapabilityRequest(caller: CallerContext, agentId: string): Promise<void> {
+    await this.enforce(caller, AgentAction.Write, this.findAgentRecord(agentId));
+    this.capabilityDenials.add(agentId);
+  }
+
   async getMessages(caller: CallerContext, agentId: string): Promise<Message[]> {
     await this.enforce(caller, AgentAction.Read, this.findAgentRecord(agentId));
     return this.store
@@ -252,6 +275,9 @@ export class AgentService {
       output: null,
       error: null,
       usage: null,
+      awaitingCapability: false,
+      withheldCount: 0,
+      stagedResources: [],
       startedAt: null,
       completedAt: null,
       createdAt: timestamp,
@@ -342,7 +368,15 @@ export class AgentService {
       // separate PDP decision, so the Agent's workspace ends up containing
       // what it is allowed to see and nothing else -- and after a revocation
       // it never gets this far, so it sees nothing at all.
-      await this.stagePermittedResources(agentAtStart, principal, capability.id, run.id);
+      const staging = await this.stagePermittedResources(agentAtStart, principal, run.id);
+      if (staging.refusedByOwner) {
+        // The owner said no and nothing reached the workspace. Launching the
+        // model anyway would spend a real API call to reach a foregone
+        // conclusion, and report it as a missing file rather than a refusal.
+        // A timeout is deliberately NOT treated this way: nobody said no, so
+        // the Agent still gets to attempt whatever needs no resource at all.
+        throw new PolicyDeniedError("owner refused access");
+      }
 
       const result = await this.runner.run({
         agentId: agentAtStart.id,
@@ -405,35 +439,158 @@ export class AgentService {
   }
 
   /**
-   * Copies every resource the run's capability permits into the Agent's
-   * workspace inbox. Denials are silent here by design: they are already
-   * recorded as PolicyDecisions by the gate, and a run should still proceed
-   * with the subset it is entitled to.
+   * Materialises into the Agent's inbox exactly those resources its owner has
+   * granted it a keycard for.
+   *
+   * Staging is the ONLY moment a resource can physically reach the workspace:
+   * the Agent reads files off its own disk, with no route back to the PDP, so
+   * there is nothing to intercept once the model is running. That makes this
+   * the authorization gate, and it is why the run waits here -- see
+   * `awaitDataKeycard`. Without the wait, the World's request -> grant exchange
+   * could never affect the run that provoked it, and saying yes to an Agent
+   * standing at a door would change nothing.
    */
   private async stagePermittedResources(
     agent: Agent,
     principal: AgentPrincipal,
-    capabilityId: string,
     requestId: string,
-  ): Promise<void> {
-    if (!this.resourceAccess) return;
-    const { gate, resources } = this.resourceAccess;
+  ): Promise<{ refusedByOwner: boolean }> {
+    if (!this.resourceAccess) return { refusedByOwner: false };
 
     // Always start from a clean inbox. Without this, a file staged by an
     // earlier permitted run would still be sitting there, and the run after a
     // revocation would read it and appear to succeed.
-    await gate.clear(agent.workspacePath);
+    await this.resourceAccess.gate.clear(agent.workspacePath);
+
+    // First pass now, so the refusals reach the audit trail immediately rather
+    // than after the wait -- the owner should see WHY the Agent is asking.
+    if ((await this.stagingPass(agent, principal, requestId)) > 0) {
+      return { refusedByOwner: false };
+    }
+
+    // `requestId` is the run's id (see executeRun), so it addresses the run.
+    await this.setAwaitingCapability(requestId, true);
+    try {
+      const { granted, refusedByOwner } = await this.awaitDataKeycard(agent);
+      if (granted.length === 0) return { refusedByOwner };
+      await this.stagingPass(agent, principal, requestId);
+      return { refusedByOwner: false };
+    } finally {
+      // Cleared however the wait ends -- granted, refused, timed out or
+      // cancelled. A run left flagged would keep asking the owner for something
+      // it no longer needs, and a refusal left set would silently pre-refuse
+      // the NEXT run before its owner had seen the request.
+      this.capabilityDenials.delete(agent.id);
+      await this.setAwaitingCapability(requestId, false);
+    }
+  }
+
+  /** Marks a Run as held at the gate, so the Playground can say why. */
+  private async setAwaitingCapability(runId: string, waiting: boolean): Promise<void> {
+    await this.store.mutate((database) => {
+      const run = database.runs.find((item) => item.id === runId);
+      if (run) run.awaitingCapability = waiting;
+    });
+  }
+
+  /**
+   * One trip through the owner's namespace. Returns how many files were
+   * actually staged.
+   *
+   * The keycard presented per resource is the one the owner issued for it --
+   * NOT the run's execution keycard, which carries no data scope at all. A
+   * resource with no matching grant is still asked about, so the refusal is a
+   * real decision in the audit trail rather than a file quietly missing from
+   * the inbox. Denials are otherwise silent: the run proceeds with the subset
+   * it is entitled to.
+   */
+  private async stagingPass(
+    agent: Agent,
+    principal: AgentPrincipal,
+    requestId: string,
+  ): Promise<number> {
+    if (!this.resourceAccess) return 0;
+    const { gate, resources } = this.resourceAccess;
+    const granted = capabilityStore.liveFor(agent.id);
+    let withheld = 0;
+    const permitted: string[] = [];
 
     for (const ref of await resources.list(agent.ownerId)) {
-      await gate.access({
+      const keycard = granted.find((record) =>
+        scopeAllows(record.scope, "read", ref.uri),
+      );
+      const result = await gate.access({
         principal,
         action: "read",
         resourceUri: ref.uri,
         requestId,
-        capabilityId,
+        // No grant covers this file: present nothing, and let the PDP say
+        // `capability-unknown`. Substituting a card that cannot open it would
+        // report the wrong reason for the right refusal.
+        ...(keycard ? { capabilityId: keycard.id } : {}),
         workspacePath: agent.workspacePath,
       });
+      if (result.effect === "permit") {
+        permitted.push(ref.name);
+      } else {
+        withheld += 1;
+      }
     }
+    // Replaced, not appended: a second pass after a grant re-decides every
+    // resource, and the earlier pass's refusals are no longer the outcome.
+    await this.store.mutate((database) => {
+      const run = database.runs.find((item) => item.id === requestId);
+      if (!run) return;
+      run.withheldCount = withheld;
+      run.stagedResources = permitted;
+    });
+    return permitted.length;
+  }
+
+  /**
+   * Waits, briefly, for the owner to hand this Agent a data keycard.
+   *
+   * Only waits when the Agent holds NO data keycard at all. A keycard that
+   * simply does not cover a particular file is a DECIDED refusal, not an
+   * undecided one, and must not be slowed down -- least privilege should feel
+   * instant, and only "you have been given nothing yet" is worth pausing for.
+   *
+   * Waiting never widens access: the second staging pass asks the PDP exactly
+   * as the first did. All this buys is the chance for the answer to change
+   * because a human changed it.
+   */
+  private async awaitDataKeycard(
+    agent: Agent,
+  ): Promise<{ granted: CapabilityRecord[]; refusedByOwner: boolean }> {
+    const dataKeycards = () =>
+      capabilityStore
+        .liveFor(agent.id)
+        .filter((record) => scopeAllowsAction(record.scope, "read"));
+
+    const held = dataKeycards();
+    if (held.length > 0 || this.config.capabilityWaitMs <= 0) {
+      return { granted: held, refusedByOwner: false };
+    }
+
+    // A refusal that arrived before the wait even began still counts.
+    this.capabilityDenials.delete(agent.id);
+
+    const deadline = Date.now() + this.config.capabilityWaitMs;
+    while (Date.now() < deadline) {
+      // A cancelled run must not sit here holding the Agent busy.
+      if (this.cancellationRequests.has(agent.id)) {
+        return { granted: [], refusedByOwner: false };
+      }
+      await new Promise((resolve) => setTimeout(resolve, GRANT_POLL_MS));
+      const granted = dataKeycards();
+      if (granted.length > 0) return { granted, refusedByOwner: false };
+      // The owner said no. Stop waiting for an answer already given.
+      if (this.capabilityDenials.has(agent.id)) {
+        return { granted: [], refusedByOwner: true };
+      }
+    }
+    // Timed out. Not the same as a refusal: nobody actually said no.
+    return { granted: [], refusedByOwner: false };
   }
 
   private async setStatus(id: string, status: Agent["status"]): Promise<Agent> {

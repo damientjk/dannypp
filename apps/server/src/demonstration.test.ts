@@ -108,7 +108,7 @@ async function agentAsksFor(app: FastifyInstance, uri: string, capabilityId: str
 describe("CLAIM 1: the decision happens in the backend, against real files", () => {
   it("lets an Agent read its own owner's file, and hands back the real contents", async () => {
     const { app, capabilities } = await makeWorld();
-    const keycard = capabilities.issueForRun(
+    const keycard = capabilities.issueNamespaceRead(
       { kind: "agent", id: "agent:" + AGENT_OF_A, agentId: AGENT_OF_A, ownerId: "user-a" },
       "run-1",
     );
@@ -124,7 +124,7 @@ describe("CLAIM 1: the decision happens in the backend, against real files", () 
   it("REFUSES User A's Agent when it reaches for User B's file", async () => {
     // This is the proof the brief asks for, in one assertion.
     const { app, capabilities } = await makeWorld();
-    const keycard = capabilities.issueForRun(
+    const keycard = capabilities.issueNamespaceRead(
       { kind: "agent", id: "agent:" + AGENT_OF_A, agentId: AGENT_OF_A, ownerId: "user-a" },
       "run-1",
     );
@@ -148,7 +148,7 @@ describe("CLAIM 1: the decision happens in the backend, against real files", () 
 
   it("cannot be tricked by a traversing path dressed up as the owner's own", async () => {
     const { app, capabilities } = await makeWorld();
-    const keycard = capabilities.issueForRun(
+    const keycard = capabilities.issueNamespaceRead(
       { kind: "agent", id: "agent:" + AGENT_OF_A, agentId: AGENT_OF_A, ownerId: "user-a" },
       "run-1",
     );
@@ -251,7 +251,7 @@ describe("CLAIM 2: a human can revoke, and execution changes immediately", () =>
 describe("CLAIM 3: every decision is recorded, attributed and isolated", () => {
   it("writes down the refusals, not only the successes", async () => {
     const { app, capabilities, recorded } = await makeWorld();
-    const keycard = capabilities.issueForRun(
+    const keycard = capabilities.issueNamespaceRead(
       { kind: "agent", id: "agent:" + AGENT_OF_A, agentId: AGENT_OF_A, ownerId: "user-a" },
       "run-1",
     );
@@ -266,7 +266,7 @@ describe("CLAIM 3: every decision is recorded, attributed and isolated", () => {
 
   it("names the human an Agent was acting for", async () => {
     const { app, capabilities, recorded } = await makeWorld();
-    const keycard = capabilities.issueForRun(
+    const keycard = capabilities.issueNamespaceRead(
       { kind: "agent", id: "agent:" + AGENT_OF_A, agentId: AGENT_OF_A, ownerId: "user-a" },
       "run-1",
     );
@@ -311,7 +311,7 @@ describe("FOLDERS: the namespace is a real directory you control", () => {
       "# Q3 (fake demo data)\n",
       "utf8",
     );
-    const keycard = capabilities.issueForRun(
+    const keycard = capabilities.issueNamespaceRead(
       { kind: "agent", id: "agent:" + AGENT_OF_A, agentId: AGENT_OF_A, ownerId: "user-a" },
       "run-1",
     );

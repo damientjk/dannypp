@@ -74,6 +74,33 @@ export function roomByScope(scope: string): FileRoom | null {
   return FILE_ROOMS.find((room) => room.resourceUri === uri) ?? null;
 }
 
+/**
+ * Rooms a keycard's scope actually opens.
+ *
+ * DISPLAY ONLY. The backend is still the sole authority on every access -- this
+ * exists so the keycard wall and the world's "which card do I present" cache
+ * agree with what the owner granted, instead of treating any live card as
+ * opening everything. A scope may name one file (`read:res://user-a/notes.md`)
+ * or a whole namespace (`read:res://user-a/*`); rooms in another owner's
+ * namespace never match, because the scope names exactly one owner.
+ */
+export function roomsForScope(scope: string): FileRoom[] {
+  const separator = scope.indexOf(":");
+  if (separator <= 0) return [];
+  const actions = scope.slice(0, separator).split(",");
+  if (!actions.includes("read")) return [];
+  const pattern = scope.slice(separator + 1);
+  const matcher = new RegExp(
+    "^" +
+      pattern
+        .split("*")
+        .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+        .join(".*") +
+      "$",
+  );
+  return FILE_ROOMS.filter((room) => room.resourceUri && matcher.test(room.resourceUri));
+}
+
 /** The scope a keycard for this room needs: read access to exactly that file. */
 export function scopeForRoom(room: FileRoom): string | null {
   return room.resourceUri ? "read:" + room.resourceUri : null;
@@ -122,13 +149,20 @@ export function assignedRoomFor(agent: Agent): FileRoom | null {
 export function roomForTask(prompt: string | null | undefined, agent: Agent): FileRoom | null {
   if (typeof prompt === "string" && prompt.trim().length > 0) {
     const haystack = prompt.toLowerCase();
-    let best: { room: FileRoom; length: number } | null = null;
+    let best: { room: FileRoom; length: number; owned: boolean } | null = null;
 
     for (const room of FILE_ROOMS) {
       for (const alias of aliasesFor(room)) {
         if (!haystack.includes(alias)) continue;
-        // Longest alias wins, so "deploy config" beats a bare "deploy".
-        if (!best || alias.length > best.length) best = { room, length: alias.length };
+        // Longest alias wins, so "deploy config" beats a bare "deploy". On a
+        // tie the Agent's own owner wins -- "notes.md" names a file in BOTH
+        // namespaces, and reaching for your own copy is the ordinary reading.
+        const ownsIt = room.ownerId === agent.ownerId;
+        if (!best || alias.length > best.length) {
+          best = { room, length: alias.length, owned: ownsIt };
+        } else if (alias.length === best.length && ownsIt && !best.owned) {
+          best = { room, length: alias.length, owned: ownsIt };
+        }
       }
     }
     if (best) return best.room;
@@ -145,6 +179,18 @@ function aliasesFor(room: FileRoom): string[] {
   // people actually refer to these in a sentence.
   const firstWord = name.split(" ")[0];
   if (firstWord.length >= 5) aliases.add(firstWord);
+  // The file the room stands for. People write the task in terms of the file
+  // they want read ("read inbox/secret-recipe.txt"), never the room's display
+  // name -- without this, every such prompt matched nothing and the Agent fell
+  // back to its hashed home room, so two Agents reading the SAME file walked
+  // to different doors.
+  if (room.resourceUri) {
+    const fileName = room.resourceUri.slice(room.resourceUri.lastIndexOf("/") + 1);
+    aliases.add(fileName.toLowerCase());
+    const dot = fileName.lastIndexOf(".");
+    const stem = dot > 0 ? fileName.slice(0, dot) : fileName;
+    if (stem.length >= 5) aliases.add(stem.toLowerCase());
+  }
   return [...aliases];
 }
 

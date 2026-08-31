@@ -231,8 +231,6 @@ describe("WorldView", () => {
     });
     vi.mocked(api.runs).mockResolvedValue({ runs: [] });
     vi.mocked(api.messages).mockResolvedValue({ messages: [] });
-    // No backend keycard by default; tests that need one override this.
-    vi.mocked(api.capabilities).mockResolvedValue({ capabilities: [] });
   });
 
   /** A live backend capability for `agentId`, scoped to its owner's namespace. */

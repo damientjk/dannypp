@@ -109,12 +109,6 @@ export const api = {
     request<{ agent: Agent }>("/api/agents/" + id + "/stop", {
       method: "POST",
     }),
-  capabilities: () =>
-    request<{ capabilities: CapabilityRecord[] }>("/api/capabilities"),
-  revokeCapability: (id: string) =>
-    request<{ capability: CapabilityRecord }>("/api/capabilities/" + id + "/revoke", {
-      method: "POST",
-    }),
   messages: (id: string) =>
     request<{ messages: Message[] }>("/api/agents/" + id + "/messages"),
   runs: (id: string) =>

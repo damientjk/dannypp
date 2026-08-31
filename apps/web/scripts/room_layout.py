@@ -301,11 +301,36 @@ DECOR = {
     # clearance before machine press begins; also clear of bench press
     # (adjacent columns, touching at x=224 but not overlapping).
     #
-    # All 13 entries (6 floor + rack + ball + 2 punching bags + treadmill +
-    # bench + machine) checked pairwise for overlap (excluding the
-    # deliberate floor-under-rack and floor-under-ball stacking): none
-    # collide with each other, none overlap the door column at row=-1,
-    # none run past the interior's right/back edges.
+    # Third fix round (2026-08-31, fourth): two more positioning tweaks from
+    # a live screenshot review, both pure row moves, no asset/column
+    # changes.
+    #
+    # Dumbbell rack (64x64, 2x2) moved from row=4 to row=3: at row=4 its
+    # footprint exactly coincided with the mat's own rows 4-5, so the rack
+    # read as flatly stamped across the whole mat rather than clearly
+    # standing on it. At row=3 its BASE (bottom tile, row=4) still lands on
+    # the mat's front row -- same "floor-under-rack" stacking as before,
+    # still intentional -- while its top tile (row=3) rises into open floor
+    # above the mat, giving it a visible "standing on the mat's edge" read.
+    # Row 5 (the mat's back row) is now fully exposed/visible, no longer
+    # hidden under the rack.
+    #
+    # Punching bags (32x96, 1x3 each) moved from row=-1 to row=-2 -- one
+    # tile further onto the wall, per the request. CAP_H=1 means the wall
+    # stack is CAP_H+1=2 tiles tall (interior-relative rows -2 and -1), so
+    # row=-2 is the wall stack's own top-most row -- the bags' top edge
+    # (y=row*32=-64) lands exactly flush with the top of that 2-tile stack,
+    # zero overflow past it. Their base moves from row=1 to row=0 -- still
+    # a real interior floor row, not out of bounds, so they stay grounded
+    # rather than floating disconnected from the floor. Columns (1, 2)
+    # unchanged, so they're still clear of the door (interior col=4) and
+    # of the treadmill (col=7, untouched by this round).
+    #
+    # All 13 entries re-checked pairwise after both moves (same exclusions
+    # as before for the deliberate floor-under-rack/floor-under-ball
+    # stacking): none collide with each other, none overlap the door
+    # column, none overflow past the wall stack's top or the interior's
+    # right/back edges.
     "billing": [
         dict(col=0, row=4, dest="floor-top-left.png",
              src=REPO_ROOT / "Gym Room" / "floor top left.png"),
@@ -319,13 +344,13 @@ DECOR = {
              src=REPO_ROOT / "Gym Room" / "floor bottom middle.png"),
         dict(col=2, row=5, dest="floor-bottom-right.png",
              src=REPO_ROOT / "Gym Room" / "floor bottom right.png"),
-        dict(col=0, row=4, dest="dumbbell-rack.png",
+        dict(col=0, row=3, dest="dumbbell-rack.png",
              src=REPO_ROOT / "Gym Room" / "Dumbbell rack.png"),
         dict(col=2, row=4, dest="yoga-ball.png",
              src=REPO_ROOT / "Gym Room" / "Yoga ball, put this near the flooring.png"),
-        dict(col=1, row=-1, dest="punching-bag-1.png",
+        dict(col=1, row=-2, dest="punching-bag-1.png",
              src=REPO_ROOT / "Gym Room" / "Punching bag.png"),
-        dict(col=2, row=-1, dest="punching-bag-2.png",
+        dict(col=2, row=-2, dest="punching-bag-2.png",
              src=REPO_ROOT / "Gym Room" / "Punching bag.png"),
         dict(col=7, row=-1, dest="treadmill.png",
              src=REPO_ROOT / "Gym Room" / "Threadmill.png"),

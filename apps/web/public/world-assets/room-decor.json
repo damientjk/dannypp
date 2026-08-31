@@ -173,7 +173,7 @@
     {
       "image": "decor/billing/dumbbell-rack.png",
       "x": 32,
-      "y": 608
+      "y": 576
     },
     {
       "image": "decor/billing/yoga-ball.png",
@@ -183,12 +183,12 @@
     {
       "image": "decor/billing/punching-bag-1.png",
       "x": 64,
-      "y": 448
+      "y": 416
     },
     {
       "image": "decor/billing/punching-bag-2.png",
       "x": 96,
-      "y": 448
+      "y": 416
     },
     {
       "image": "decor/billing/treadmill.png",

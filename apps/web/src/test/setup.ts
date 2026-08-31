@@ -1,5 +1,14 @@
 import { afterEach } from "vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
+
+// The world suites boot PixiJS inside jsdom and then wait on polled state, so
+// a single assertion sits behind several async hops -- a poll, a policy round
+// trip, and a couple of React commits. In isolation they settle in about a
+// second; with the whole suite running in parallel on a loaded machine they
+// can be starved for much longer, and Testing Library's 1s default turns that
+// into a flake report about correct code. The ceiling only costs wall-clock
+// when it is actually needed: a passing assertion still resolves immediately.
+configure({ asyncUtilTimeout: 15_000 });
 
 afterEach(() => {
   cleanup();

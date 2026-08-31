@@ -12,5 +12,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    // Comfortably above the async-utility budget in setup.ts, so a slow wait
+    // fails on its own assertion rather than on the test deadline.
+    testTimeout: 30_000,
   },
 });

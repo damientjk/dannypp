@@ -12,9 +12,15 @@
  * permitted read genuinely reads a file and a denied read genuinely does not.
  */
 
+import type { Dirent } from "node:fs";
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseResourceUri, RESOURCE_SCHEME, type ResourceUri } from "./uri.js";
+
+/** How deep a namespace walk descends before it stops. */
+const MAX_LIST_DEPTH = 8;
+/** Upper bound on one listing, so a huge tree truncates instead of hanging. */
+const MAX_LIST_RESOURCES = 500;
 
 export interface ResourceRef {
   uri: string;
@@ -33,6 +39,8 @@ const SEED: Record<string, Record<string, string>> = {
     "secret-recipe.txt":
       "SECRET-RECIPE-42 (fake demo data)\nThree parts cocoa, one part nonsense, folded twice.\n",
     "notes.md": "# User A notes\n\n- Ship the launchpad\n- Do not tell User B the recipe\n",
+    "analytics-summary.md":
+      "# Analytics summary (fake demo data)\n\n- 412 runs this week\n- 3 refused access attempts\n",
   },
   "user-b": {
     "tax-return.txt":
@@ -90,23 +98,75 @@ export class ResourceStore {
 
   /** Lists resources on disk. Listing is not reading: contents stay behind the guard. */
   async list(ownerId?: string): Promise<ResourceRef[]> {
+    return (await this.listDetailed(ownerId)).resources;
+  }
+
+  /**
+   * The same walk as `list`, but it also reports what it refused to list.
+   *
+   * A namespace pointed at a real folder will contain names the URI grammar
+   * rejects -- spaces, dotfiles, anything outside SEGMENT_PATTERN. Dropping
+   * those silently is how someone ends up wondering why half their files never
+   * appeared, so the skipped names are surfaced rather than swallowed.
+   */
+  async listDetailed(
+    ownerId?: string,
+  ): Promise<{ resources: ResourceRef[]; skipped: string[] }> {
     const targets = ownerId ? [ownerId] : this.knownOwners();
-    const refs: ResourceRef[] = [];
+    const resources: ResourceRef[] = [];
+    const skipped: string[] = [];
     for (const owner of targets) {
       if (!this.owners.has(owner)) continue;
-      let names: string[];
-      try {
-        names = await readdir(path.join(this.root, owner));
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-        throw error;
-      }
-      for (const name of names.sort()) {
-        const ref = this.parse(RESOURCE_SCHEME + owner + "/" + name);
-        if (ref) refs.push(ref);
-      }
+      await this.walk(owner, "", 0, resources, skipped);
     }
-    return refs;
+    return { resources, skipped };
+  }
+
+  /**
+   * Depth-first walk of one owner's namespace, emitting FILES only.
+   *
+   * Directories are descended into, never emitted: a directory is not a
+   * resource, and advertising one produces a URI that `read` can only fail on.
+   * Symlinks are skipped outright -- `isFile()` is false for them, and
+   * following one is a way out of the namespace that `filePath`'s containment
+   * check should never have to catch.
+   *
+   * Bounded on both depth and count so that pointing a namespace at a large
+   * tree degrades into a truncated listing rather than a hung request.
+   */
+  private async walk(
+    owner: string,
+    prefix: string,
+    depth: number,
+    resources: ResourceRef[],
+    skipped: string[],
+  ): Promise<void> {
+    if (depth > MAX_LIST_DEPTH || resources.length >= MAX_LIST_RESOURCES) return;
+
+    let entries: Dirent[];
+    try {
+      entries = await readdir(path.join(this.root, owner, prefix), {
+        withFileTypes: true,
+      });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw error;
+    }
+
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (resources.length >= MAX_LIST_RESOURCES) return;
+      const relative = prefix ? prefix + "/" + entry.name : entry.name;
+
+      if (entry.isDirectory()) {
+        await this.walk(owner, relative, depth + 1, resources, skipped);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+
+      const ref = this.parse(RESOURCE_SCHEME + owner + "/" + relative);
+      if (ref) resources.push(ref);
+      else skipped.push(owner + "/" + relative);
+    }
   }
 
   async exists(uri: unknown): Promise<boolean> {

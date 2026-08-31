@@ -7,11 +7,20 @@ export interface FileRoom {
   ownerId: string | null;
   requiresPermission: boolean;
   deskIds: string[];
+  /**
+   * The protected resource this room stands for, or null for an open area.
+   *
+   * This is the join between the drawn world and the guarded backend: entering
+   * the room is a real read of this URI, judged by the PDP. A room with a null
+   * uri is not a protected resource and no decision is made about it.
+   */
+  resourceUri: string | null;
 }
 
 export const FILE_ROOMS: FileRoom[] = [
   {
     id: "auth-module",
+    resourceUri: "res://user-a/notes.md",
     displayName: "Auth Module",
     ownerId: "user-a",
     requiresPermission: true,
@@ -19,6 +28,7 @@ export const FILE_ROOMS: FileRoom[] = [
   },
   {
     id: "billing",
+    resourceUri: "res://user-a/secret-recipe.txt",
     displayName: "Billing",
     ownerId: "user-a",
     requiresPermission: true,
@@ -26,6 +36,7 @@ export const FILE_ROOMS: FileRoom[] = [
   },
   {
     id: "database",
+    resourceUri: "res://user-b/notes.md",
     displayName: "Database",
     ownerId: "user-b",
     requiresPermission: true,
@@ -33,6 +44,7 @@ export const FILE_ROOMS: FileRoom[] = [
   },
   {
     id: "deploy-config",
+    resourceUri: "res://user-b/tax-return.txt",
     displayName: "Deploy Config",
     ownerId: "user-b",
     requiresPermission: true,
@@ -40,6 +52,7 @@ export const FILE_ROOMS: FileRoom[] = [
   },
   {
     id: "analytics",
+    resourceUri: "res://user-a/analytics-summary.md",
     displayName: "Analytics",
     ownerId: "user-a",
     requiresPermission: true,
@@ -47,12 +60,24 @@ export const FILE_ROOMS: FileRoom[] = [
   },
   {
     id: "living-room",
+    resourceUri: null,
     displayName: "Living Room",
     ownerId: null,
     requiresPermission: false,
     deskIds: [],
   },
 ];
+
+/** The room standing for a capability's scope, e.g. "read:res://user-a/notes.md". */
+export function roomByScope(scope: string): FileRoom | null {
+  const uri = scope.slice(scope.indexOf(":") + 1);
+  return FILE_ROOMS.find((room) => room.resourceUri === uri) ?? null;
+}
+
+/** The scope a keycard for this room needs: read access to exactly that file. */
+export function scopeForRoom(room: FileRoom): string | null {
+  return room.resourceUri ? "read:" + room.resourceUri : null;
+}
 
 export function roomById(id: string): FileRoom {
   const room = FILE_ROOMS.find((candidate) => candidate.id === id);

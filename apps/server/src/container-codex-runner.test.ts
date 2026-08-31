@@ -1,9 +1,17 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "./config.js";
 import {
   buildContainerRunArgs,
   containerName,
 } from "./container-codex-runner.js";
+
+// `loadConfig` resolves CODEX_HOME against the cwd, which on Windows turns
+// "/tmp/codex-home" into "C:\tmp\codex-home". Resolve the expectation the same
+// way so the assertion tests the mount wiring rather than the host's path
+// separator -- otherwise this suite is red on Windows and green everywhere else.
+const codexHomeMount =
+  "type=bind,src=" + path.resolve("/tmp/codex-home") + ",dst=/codex-home";
 
 describe("Container Codex runner", () => {
   it("builds an isolated Docker/Podman-compatible invocation", () => {
@@ -33,7 +41,7 @@ describe("Container Codex runner", () => {
     );
     expect(args).toContain("runtime:test");
     expect(args).toContain("type=bind,src=/tmp/agent-workspace,dst=/workspace");
-    expect(args).toContain("type=bind,src=/tmp/codex-home,dst=/codex-home");
+    expect(args).toContain(codexHomeMount);
     expect(args).toContain("501:20");
     expect(args).toContain("workspace-write");
     expect(args).toContain("/workspace");

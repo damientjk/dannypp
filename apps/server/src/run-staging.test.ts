@@ -104,7 +104,11 @@ describe("a Run sees exactly what its keycard opens", () => {
       .toBe("completed");
 
     // User A's two resources, and neither of User B's.
-    expect(runner.sawInbox).toEqual(["notes.md", "secret-recipe.txt"]);
+    expect(runner.sawInbox).toEqual([
+      "analytics-summary.md",
+      "notes.md",
+      "secret-recipe.txt",
+    ]);
   });
 
   it("leaves nothing staged after the run finishes", async () => {
@@ -136,7 +140,11 @@ describe("a Run sees exactly what its keycard opens", () => {
     await expect
       .poll(async () => (await service.getRun(caller, first.run.id)).status)
       .toBe("completed");
-    expect(runner.sawInbox).toEqual(["notes.md", "secret-recipe.txt"]);
+    expect(runner.sawInbox).toEqual([
+      "analytics-summary.md",
+      "notes.md",
+      "secret-recipe.txt",
+    ]);
 
     // The owner shreds the keycard the run was issued.
     const issued = capabilityStore.list({ agentId: agent.id });

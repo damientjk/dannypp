@@ -248,6 +248,10 @@ describe("a Run sees exactly what its keycard opens", () => {
     expect(failed.error).toContain("owner refused access");
     // The model was never invoked.
     expect(runner.sawInbox).toBe("missing");
+    // And the owner was never asked. A refusal that arrives this quickly is a
+    // decision already made -- prompting for a keycard in the meantime offers
+    // a choice that was never available.
+    expect(failed.awaitingCapability).toBe(false);
   });
 
   // Ownership alone is not the permission: with no grant, nothing is staged.

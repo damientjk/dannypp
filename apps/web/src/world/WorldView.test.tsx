@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent, AuditEntry, CapabilityRecord } from "../types";
 import { api, PolicyDeniedError } from "../api";
-import { FILE_ROOMS } from "./resources";
+import { FILE_ROOMS, roomById } from "./resources";
 import { issueCapability, resetCapabilities } from "./decision";
 import { resetRequests } from "./requests";
 import { beginHeadingToDesk } from "./agentSim";
@@ -361,6 +361,87 @@ describe("WorldView", () => {
   // The keycard a Run holds authorises execution, not data (scope
   // "owner:user-a"). Treating any live card as opening every room made the
   // owner's grant meaningless on screen.
+  // No keycard for another owner's room can exist -- the backend refuses any
+  // cross-owner scope -- so queuing a request would ask for something nobody
+  // could grant, and the Run would hold open until it timed out.
+  it("tells the server to stop waiting when an Agent is jailed for a foreign room", async () => {
+    // Deploy Config, not just "any user-b room": its aliases are unambiguous.
+    // "notes.md" names a file in BOTH namespaces, so a prompt mentioning it
+    // resolves to the Agent's own copy and never reaches the foreign branch.
+    const foreign = roomById("deploy-config");
+    expect(foreign.ownerId).not.toBe(AGENT_A.ownerId);
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [{ ...AGENT_A, status: "busy" }] });
+    vi.mocked(api.runs).mockResolvedValue({
+      runs: [
+        {
+          id: "run-b",
+          agentId: AGENT_A.id,
+          status: "running",
+          prompt: `read ${foreign.displayName}`,
+          output: null,
+          error: null,
+          usage: null,
+          awaitingCapability: true,
+          withheldCount: 0,
+          stagedResources: [],
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    });
+    await login();
+
+    await waitFor(
+      () => {
+        expect(api.denyCapability).toHaveBeenCalledWith(
+          AGENT_A.id,
+          expect.stringContaining(foreign.displayName),
+        );
+      },
+      { timeout: 6000 },
+    );
+    // Reported as being caught, not as a request awaiting an answer.
+    await screen.findByText(new RegExp(`thrown in the Jail`));
+    // The arrest is drawn first: the Agent is in the cell BEFORE the refusal
+    // reaches the server and collapses the Run under it.
+    expect(screen.getByText("JAILED")).toBeTruthy();
+    expect(screen.queryByText(new RegExp(`requested access to ${foreign.displayName}`))).toBeNull();
+  });
+
+  // The run-start sweep evaluates the owner's whole namespace under ONE
+  // requestId. A row per resource made an Agent that reached for nothing look
+  // like it was demanding every keycard at once, and it scales with the
+  // namespace rather than with what happened.
+  it("collapses a run-start sweep into a single log row", async () => {
+    const sweep = "req-sweep";
+    const sweptAt = new Date().toISOString();
+    const entry = (id: string, resource: string, effect: "permit" | "deny") => ({
+      id,
+      requestId: sweep,
+      decidedAt: sweptAt,
+      humanId: "user-a",
+      agentId: AGENT_A.id,
+      principalKind: "agent" as const,
+      action: "resource:read",
+      resource,
+      effect,
+      reason: effect === "permit" ? "capability-in-scope" : "capability-unknown",
+    });
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    vi.mocked(api.audit).mockResolvedValue({
+      entries: [
+        entry("a1", "res://user-a/notes.md", "deny"),
+        entry("a2", "res://user-a/secret-recipe.txt", "permit"),
+        entry("a3", "res://user-a/analytics-summary.md", "deny"),
+      ],
+    });
+    await login();
+
+    await screen.findByText(`${AGENT_A.name} at run start: 1 staged, 2 withheld`);
+    // Not one row per resource.
+    expect(screen.queryByText(/Auth Module: deny/)).toBeNull();
+    expect(screen.queryByText(/Analytics: deny/)).toBeNull();
+  });
+
   it("shows no rooms held for an Agent carrying only its run keycard", async () => {
     vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
     vi.mocked(api.capabilities).mockResolvedValue({

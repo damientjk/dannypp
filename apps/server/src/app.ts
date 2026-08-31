@@ -29,6 +29,8 @@ function requireCaller(request: { principal?: HumanPrincipal | undefined; id: st
 }
 
 const agentIdParams = z.object({ id: z.string().uuid() });
+/** Why the keycard was refused, for the Run's error. Bounded and optional. */
+const denyCapabilityBody = z.object({ reason: z.string().trim().min(1).max(120).optional() });
 const runIdParams = z.object({ id: z.string().uuid() });
 const createAgentBody = z.object({
   name: z.string().trim().min(1).max(80),
@@ -190,7 +192,12 @@ export async function createApp(
   app.post("/api/agents/:id/deny-capability", async (request) => {
     const caller = requireCaller(request);
     const { id } = agentIdParams.parse(request.params);
-    await service.denyCapabilityRequest(caller, id);
+    const body = denyCapabilityBody.parse(request.body ?? {});
+    await service.denyCapabilityRequest(
+      caller,
+      id,
+      ...(body.reason === undefined ? [] : ([body.reason] as const)),
+    );
     return { denied: true };
   });
 

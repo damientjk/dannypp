@@ -1158,13 +1158,18 @@ textarea:focus {
   color: #e8c979;
 }
 
-.awaiting-grant > button {
+.awaiting-actions {
+  display: flex;
+  gap: 8px;
   margin-top: 12px;
+}
+
+.awaiting-grant .button-primary {
   color: #000;
   background: #e8c979;
 }
 
-.awaiting-grant > button:hover {
+.awaiting-grant .button-primary:hover {
   background: #f2d68e;
 }
 

@@ -56,6 +56,18 @@ const AGENT_POLL_MS = 1000;
  */
 const MIN_VISIT_MS = 6000;
 
+/**
+ * How long a jailed Agent stays in the cell, and how long the world gets to
+ * draw the arrest before the Run is refused.
+ *
+ * Being caught reaching into another owner's namespace is the single clearest
+ * thing this world shows. Refusing the Run is now immediate, so without these
+ * the Agent would be jailed and released inside one poll and nobody would see
+ * it happen.
+ */
+const MIN_JAIL_MS = 6000;
+const JAIL_GRACE_MS = 2500;
+
 /** Wall-clock time of the decision, so the log reads as an audit trail. */
 function formatDecisionTime(iso: string): string {
   const parsed = new Date(iso);
@@ -313,6 +325,26 @@ export function WorldView() {
             // jailAgent). Released when its run ends. The backend's deny is
             // already in the audit trail; these rows are the world-facing
             // consequence.
+            //
+            // Tell the server too. No keycard for another owner's room can
+            // exist -- it refuses any cross-owner scope -- so a Run held at the
+            // staging gate would wait out its whole timeout for an answer
+            // nobody could give, and then launch the model on a task that
+            // cannot succeed. Refusing here stops it at once.
+            markDenied(agent.id, room.id);
+            visitStartedAtRef.current.set(agent.id, Date.now());
+            // Held back by JAIL_GRACE_MS so the Agent is seen being caught
+            // before the Run collapses under it. Nothing is being decided in
+            // this delay -- the PDP already refused, and the Agent is already
+            // in the cell; this only lets the consequence finish being drawn.
+            window.setTimeout(() => {
+              void api
+                .denyCapability(agent.id, `${room.displayName} belongs to another owner`)
+                .catch(() => {
+                  // The Run still times out on its own; a failed refusal must
+                  // not break the World.
+                });
+            }, JAIL_GRACE_MS);
             setWorldAgents((current) =>
               current.map((wa) => (wa.agentId === agent.id ? jailAgent(wa, mapRenderer) : wa)),
             );
@@ -358,7 +390,14 @@ export function WorldView() {
           // it to a desk (a denied agent stays "roaming", never "working").
           clearDeniedForAgent(agent.id);
           if (worldAgent.behaviorMode === "jailed") {
-            // Sentence served: the run that earned the jailing is over.
+            // Sentence served: the run that earned the jailing is over -- but
+            // serve a minimum term first. Refusing a cross-owner reach now
+            // fails the Run within a second, so releasing the moment it ends
+            // would teleport the Agent in and straight back out, and the one
+            // moment the whole demo turns on would never be seen.
+            const jailedAt = visitStartedAtRef.current.get(agent.id);
+            if (jailedAt !== undefined && Date.now() - jailedAt < MIN_JAIL_MS) continue;
+            visitStartedAtRef.current.delete(agent.id);
             setWorldAgents((current) =>
               current.map((wa) => (wa.agentId === agent.id ? releaseAgent(wa, mapRenderer) : wa)),
             );
@@ -555,15 +594,44 @@ export function WorldView() {
   // Every permit/deny row is a backend audit entry, rendered rather than
   // authored here. The owner's own grant/deny/request narration is merged in
   // around it -- those are UI consequences the PDP has no opinion about.
-  const auditRows: LogEntry[] = auditEntries
-    .filter((entry) => entry.action.startsWith("resource:"))
-    .map((entry) => ({
-      id: entry.id,
-      agentId: entry.agentId,
-      category: entry.effect === "permit" ? "permit" : "deny",
-      message: `${askerNameFor(entry)} → ${roomLabelFor(entry.resource)}: ${entry.effect} (${entry.reason})`,
-      timestamp: entry.decidedAt,
-    }));
+  //
+  // Grouped by requestId, because two very different things arrive here as the
+  // same kind of row. A door decision is one Agent reaching for one room and
+  // carries its own requestId. The run-start sweep is the gate evaluating the
+  // owner's ENTIRE namespace under a single requestId -- nobody reached for
+  // those files, and rendering one row each made an Agent that asked for
+  // nothing look like it was demanding every keycard at once. Worse, it scales
+  // with the namespace: a hundred files would bury the log a hundred rows at a
+  // time. A sweep collapses to one row carrying its tally.
+  const byRequest = new Map<string, AuditEntry[]>();
+  for (const entry of auditEntries) {
+    if (!entry.action.startsWith("resource:")) continue;
+    const group = byRequest.get(entry.requestId);
+    if (group) group.push(entry);
+    else byRequest.set(entry.requestId, [entry]);
+  }
+
+  const auditRows: LogEntry[] = [...byRequest.values()].map((group) => {
+    const first = group[0]!;
+    if (group.length === 1) {
+      return {
+        id: first.id,
+        agentId: first.agentId,
+        category: first.effect === "permit" ? "permit" : "deny",
+        message: `${askerNameFor(first)} → ${roomLabelFor(first.resource)}: ${first.effect} (${first.reason})`,
+        timestamp: first.decidedAt,
+      };
+    }
+    const staged = group.filter((entry) => entry.effect === "permit").length;
+    const withheld = group.length - staged;
+    return {
+      id: first.requestId,
+      agentId: first.agentId,
+      category: staged > 0 ? "permit" : "deny",
+      message: `${askerNameFor(first)} at run start: ${staged} staged, ${withheld} withheld`,
+      timestamp: first.decidedAt,
+    };
+  });
 
   const logRows = [...auditRows, ...events].sort((a, b) =>
     b.timestamp.localeCompare(a.timestamp),

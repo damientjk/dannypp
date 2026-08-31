@@ -22,13 +22,13 @@ describe("FILE_ROOMS", () => {
   it("has exactly the 6 rooms with the expected owners and permission flags", () => {
     const byId = Object.fromEntries(FILE_ROOMS.map((r) => [r.id, r]));
     expect(Object.keys(byId).sort()).toEqual(
-      ["auth-module", "billing", "database", "deploy-config", "kitchen", "living-room"].sort(),
+      ["analytics", "auth-module", "billing", "database", "deploy-config", "living-room"].sort(),
     );
     expect(byId["auth-module"].ownerId).toBe("user-a");
     expect(byId["auth-module"].requiresPermission).toBe(true);
-    expect(byId["kitchen"].ownerId).toBeNull();
-    expect(byId["kitchen"].requiresPermission).toBe(false);
-    expect(byId["kitchen"].deskIds).toEqual([]);
+    expect(byId["analytics"].ownerId).toBe("user-a");
+    expect(byId["analytics"].requiresPermission).toBe(true);
+    expect(byId["analytics"].deskIds).toEqual(["desk-analytics-1", "desk-analytics-2"]);
   });
 });
 
@@ -45,7 +45,7 @@ describe("roomById", () => {
 describe("roomsOwnedBy", () => {
   it("returns only permission-gated rooms owned by the given owner", () => {
     const rooms = roomsOwnedBy("user-a");
-    expect(rooms.map((r) => r.id).sort()).toEqual(["auth-module", "billing"]);
+    expect(rooms.map((r) => r.id).sort()).toEqual(["analytics", "auth-module", "billing"]);
   });
 
   it("returns an empty array for an owner with no rooms", () => {

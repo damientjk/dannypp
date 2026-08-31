@@ -8,9 +8,13 @@ data/
 workspaces/
 codex-home/
 coverage/
+__pycache__/
 *.log
 *.tsbuildinfo
 .DS_Store
 deploy/volcengine/.terraform/
 deploy/volcengine/*.tfstate*
 deploy/volcengine/terraform.tfvars
+
+# Isolated worktrees for subagent-driven-development plan execution
+.worktrees/

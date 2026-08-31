@@ -48,6 +48,12 @@ export function pendingRequestsFor(ownerId: string): AccessRequest[] {
   return pending.filter((request) => request.roomOwnerId === ownerId);
 }
 
+/** Every pending request, regardless of which nominal owner the room
+ *  carries — there is one signed-in manager, and they manage all of it. */
+export function allPendingRequests(): AccessRequest[] {
+  return pending;
+}
+
 export function resolveRequest(requestId: string): void {
   pending = pending.filter((request) => request.id !== requestId);
 }

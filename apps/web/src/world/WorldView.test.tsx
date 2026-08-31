@@ -212,10 +212,29 @@ describe("WorldView", () => {
     for (const candidate of gated) {
       expect(screen.getAllByText(candidate.displayName).length).toBeGreaterThan(0);
     }
-    // The granted room reads as held; a room owned by somebody else can never be.
+    // The granted room reads as held; every other gated room — regardless of
+    // which nominal owner it carries — just reads as not-yet-granted, since
+    // the single signed-in manager can grant any of them.
     expect(screen.getAllByText("keycard held").length).toBe(1);
-    const foreign = gated.filter((candidate) => candidate.ownerId !== "user-a");
-    expect(screen.getAllByText("another owner").length).toBe(foreign.length);
+    expect(screen.getAllByText("no keycard").length).toBe(gated.length - 1);
+    expect(screen.queryByText("another owner")).toBeNull();
+  });
+
+  it("surfaces and grants a request for a room owned by a different nominal owner (single-manager fix)", async () => {
+    const AGENT_B: Agent = { ...AGENT_A, id: "agent-b", ownerId: "user-b", name: "Robot B" };
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [{ ...AGENT_B, status: "busy" }] });
+
+    render(<WorldView />);
+    fireEvent.click(await screen.findByText("Enter the world"));
+    await screen.findByText("Robot B");
+
+    const room = agentAssignedRoom(AGENT_B.id, AGENT_B.ownerId);
+    expect(room.ownerId).toBe("user-b");
+    await screen.findByText(new RegExp(`wants access to ${room.displayName}`));
+
+    fireEvent.click(screen.getByText("Grant"));
+    fireEvent.click(screen.getByText("Confirm grant"));
+    await screen.findByText(new RegExp(`granted ${AGENT_B.name} access to ${room.displayName}`));
   });
 
   it("claims a different desk for each of two same-room agents busy in the same poll (finding 1)", async () => {

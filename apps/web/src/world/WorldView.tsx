@@ -15,10 +15,10 @@ import { loadWorldMap } from "./engineMap";
 import type { TiledMapRenderer } from "./engine/TiledMapRenderer";
 import type { AccessRequest } from "./requests";
 import {
+  allPendingRequests,
   clearDeniedForAgent,
   hasPendingRequest,
   markDenied,
-  pendingRequestsFor,
   queueRequest,
   resolveRequest,
 } from "./requests";
@@ -395,7 +395,7 @@ export function WorldView() {
   const selectedRoom = selectedWorldAgent?.assignedRoomId ? roomById(selectedWorldAgent.assignedRoomId) : null;
   const selectedGrantedRooms = selectedAgent ? grantedRoomsFor(selectedAgent.id) : [];
   const activeRun = runs.find((run) => run.status === "running" || run.status === "queued") ?? null;
-  const myRequests = pendingRequestsFor(principal.id);
+  const myRequests = allPendingRequests();
   // Attempts the policy engine refused, counted over the whole session. NOT a
   // live "how many agents are blocked right now": granting access does not
   // decrement it, and an owner's own refusal is category "denied", not "deny".
@@ -426,7 +426,6 @@ export function WorldView() {
           agents={worldAgents}
           onFrame={setWorldAgents}
           paused={!roaming}
-          viewerOwnerId={principal.id}
         />
       </div>
       <aside className="world-panel">
@@ -494,13 +493,8 @@ export function WorldView() {
             <ul className="keycard-wall">
               {FILE_ROOMS.filter((room) => room.requiresPermission).map((room) => {
                 const held = selectedGrantedRooms.includes(room.id);
-                const foreign = room.ownerId !== principal.id;
-                const state = foreign ? "foreign" : held ? "held" : "missing";
-                const stateLabel = foreign
-                  ? "another owner"
-                  : held
-                    ? "keycard held"
-                    : "no keycard";
+                const state = held ? "held" : "missing";
+                const stateLabel = held ? "keycard held" : "no keycard";
                 return (
                   <li key={room.id} className={"keycard keycard-" + state}>
                     <span
@@ -513,7 +507,7 @@ export function WorldView() {
                       <span className="keycard-state">{stateLabel}</span>
                     </span>
                     <span className="keycard-mark" aria-hidden="true">
-                      {foreign ? "✕" : held ? "✓" : "–"}
+                      {held ? "✓" : "–"}
                     </span>
                   </li>
                 );

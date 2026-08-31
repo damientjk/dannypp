@@ -1823,17 +1823,6 @@ textarea:focus {
   opacity: 0.75;
 }
 
-/* A room owned by somebody else is not a "not yet" — it is a "never, by you". */
-.keycard-foreign {
-  border-style: dashed;
-  opacity: 0.6;
-}
-
-.keycard-foreign .keycard-state,
-.keycard-foreign .keycard-mark {
-  color: var(--w-deny, #e2687a);
-}
-
 /* --- Grant / deny confirmation --------------------------------------- */
 
 .world-request-confirm {

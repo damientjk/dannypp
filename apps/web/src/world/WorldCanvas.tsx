@@ -14,25 +14,21 @@ import type { WorldAgent } from "./types";
 
 const LABEL_INK = 0xf4f1e4;
 const LABEL_PLATE = 0x1d2333;
-/** Protected and yours. */
-const OWNER_SELF = 0x6fb1e8;
-/** Protected and somebody else's — same red the deny states use. */
-const OWNER_OTHER = 0xe2687a;
+/** Protected room outline — every permission-gated room is manageable by
+ *  the single signed-in owner, so one accent color covers all of them. */
+const ROOM_ACCENT = 0x6fb1e8;
 
 export interface WorldCanvasProps {
   agents: WorldAgent[];
   onFrame: (agents: WorldAgent[]) => void;
   /** Freezes movement in place (sprites stay put) without tearing the loop down. */
   paused?: boolean;
-  /** Signed-in human, so rooms can be drawn as "yours" or "somebody else's". */
-  viewerOwnerId?: string | null;
 }
 
 export function WorldCanvas({
   agents,
   onFrame,
   paused = false,
-  viewerOwnerId = null,
 }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const agentsRef = useRef(agents);
@@ -133,7 +129,7 @@ export function WorldCanvas({
         }
         app.stage.addChild(renderer.getContainer());
         try {
-          renderer.getContainer().addChild(buildRoomOverlay(renderer, viewerOwnerId));
+          renderer.getContainer().addChild(buildRoomOverlay(renderer));
         } catch (labelError) {
           // Text measurement needs a 2D canvas context. Losing the name
           // plates is cosmetic; losing the whole world is not.
@@ -194,19 +190,14 @@ export function WorldCanvas({
 }
 
 /**
- * Per-room overlay: an owner-tinted outline plus a name plate.
- *
- * The outline is what makes ownership legible on the map itself — without it
- * every protected room looks alike, and "this agent may not touch another
- * owner's room" is invisible outside the keycard panel. Blue is yours, red is
- * somebody else's, and unprotected rooms get no outline at all.
+ * Per-room overlay: an accent outline plus a name plate on every protected
+ * room — without it every room looks alike, and "this is a permission-gated
+ * folder" is invisible outside the keycard panel. Unprotected rooms get no
+ * outline at all.
  *
  * Presentation only: nothing here gates movement or decides access.
  */
-function buildRoomOverlay(
-  renderer: TiledMapRenderer,
-  viewerOwnerId: string | null,
-): Container {
+function buildRoomOverlay(renderer: TiledMapRenderer): Container {
   const layer = new Container();
   layer.zIndex = 10_000;
   const tile = renderer.tileSize;
@@ -215,12 +206,7 @@ function buildRoomOverlay(
     const zone = renderer.getZone(room.id);
     if (!zone) continue;
 
-    const isForeign = room.requiresPermission && room.ownerId !== viewerOwnerId;
-    const accent = !room.requiresPermission
-      ? null
-      : isForeign
-        ? OWNER_OTHER
-        : OWNER_SELF;
+    const accent = room.requiresPermission ? ROOM_ACCENT : null;
 
     if (accent !== null) {
       layer.addChild(

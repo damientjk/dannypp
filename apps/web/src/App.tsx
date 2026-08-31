@@ -302,6 +302,15 @@ export default function App() {
     }
   };
 
+  /** Refuse the keycard a held Run is waiting for; it continues without one. */
+  const denyKeycard = async (agentId: string) => {
+    try {
+      await api.denyCapability(agentId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not refuse the request");
+    }
+  };
+
   if (authRequired === null) {
     return (
       <main className="auth-screen">
@@ -602,12 +611,24 @@ export default function App() {
                     </div>
                     <div className="thinking-row">
                       <Spinner />
-                      {selected.name} is asking for a keycard. Grant it in the World
-                      and this run continues.
+                      {selected.name} holds no keycard, so nothing was placed in its
+                      workspace. Give it one to continue, or refuse and let it run
+                      without.
                     </div>
-                    <button className="button button-primary" onClick={() => setView("world")}>
-                      Review the request in the World
-                    </button>
+                    {/* Refusing has to be possible from HERE. The World only
+                        offers a grant/deny toast for rooms you own, so an Agent
+                        reaching into another owner's namespace raises no
+                        request you could answer -- and pointing at the World
+                        for a decision that is not there strands the run until
+                        it times out. */}
+                    <div className="awaiting-actions">
+                      <button className="button button-primary" onClick={() => setView("world")}>
+                        Give it a keycard
+                      </button>
+                      <button className="button" onClick={() => void denyKeycard(selected.id)}>
+                        Refuse
+                      </button>
+                    </div>
                   </article>
                 ) : activeRun && ["queued", "running"].includes(activeRun.status) ? (
                   <article className="message message-assistant thinking">
@@ -651,11 +672,21 @@ export default function App() {
                             )}
                           </ul>
                         )}
-                        <span>
-                          {staged.length > 0
-                            ? `${files(withheld)} in your namespace were withheld. The gate asks about every resource at run start — it cannot know in advance what an Agent will reach for — and this Agent never saw the rest, so it cannot act on them or even know they exist.`
-                            : `No keycard covered any of the ${files(withheld)} in your namespace, so the Agent reported the file as missing rather than refused. Grant a keycard in the World and run again.`}
-                        </span>
+                        {/* Only the empty case gets a caption. When the Agent
+                            got what it asked for the heading already says it,
+                            and a count of files nobody asked for is noise.
+
+                            This panel reports on STAGING, which only ever
+                            considers the owner's own namespace. It cannot see
+                            what the Agent went on to reach for, so it must not
+                            claim to explain the Agent's output -- an Agent that
+                            reached into another owner's namespace was refused
+                            somewhere this panel knows nothing about. */}
+                        {staged.length === 0 && (
+                          <span>
+                            {`No keycard covers any of your ${files(withheld)}, so none were staged. Only resources you own can be staged — another owner's files are never candidates.`}
+                          </span>
+                        )}
                       </article>
                     );
                   })()}

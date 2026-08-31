@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { api, ApiError } from "./api";
@@ -12,6 +12,7 @@ vi.mock("./api", () => ({
     login: vi.fn(),
     runs: vi.fn(),
     messages: vi.fn(),
+    denyCapability: vi.fn().mockResolvedValue({ denied: true }),
   },
   setAuthToken: vi.fn(),
   setSessionToken: vi.fn(),
@@ -135,8 +136,13 @@ describe("App view toggle", () => {
     await screen.findByText("waiting for your permission");
     expect(screen.queryByText(/Codex is reading, editing/)).toBeNull();
 
-    // And it hands them the way to answer it.
-    fireEvent.click(screen.getByText("Review the request in the World"));
+    // Both answers are reachable from here. The World only raises a
+    // grant/deny toast for rooms you own, so an Agent reaching into another
+    // owner's namespace produces no request there to answer.
+    fireEvent.click(screen.getByText("Refuse"));
+    await waitFor(() => expect(api.denyCapability).toHaveBeenCalledWith(AGENT_A.id));
+
+    fireEvent.click(screen.getByText("Give it a keycard"));
     await screen.findByText("Enter the world");
   });
 
@@ -167,7 +173,10 @@ describe("App view toggle", () => {
     fireEvent.click((await screen.findAllByText(AGENT_A.name))[0]!);
 
     await screen.findByText("Nothing reached the workspace");
-    await screen.findByText(/No keycard covered any of the 3 files/);
+    await screen.findByText(/No keycard covers any of your 3 files/);
+    // The panel reports on staging, which only ever considers the owner's own
+    // namespace -- it must not claim to explain output it cannot see.
+    expect(screen.queryByText(/reported the file as missing/)).toBeNull();
   });
 
   // Refusals alongside a successful read are least privilege working, not a
@@ -198,8 +207,9 @@ describe("App view toggle", () => {
 
     await screen.findByText("Only what you granted reached the workspace");
     await screen.findByText("secret-recipe.txt");
-    // A count, never a list -- "everything you did not grant" does not scale.
-    await screen.findByText(/2 files in your namespace were withheld/);
+    // The heading carries it. A count of files nobody asked for is noise, and
+    // "everything you did not grant" was never going to be a list.
+    expect(screen.queryByText(/in your namespace/)).toBeNull();
   });
 
   // Unmounting the World tore down its Pixi app, its poll and every agent's

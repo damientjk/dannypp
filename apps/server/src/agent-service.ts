@@ -30,13 +30,24 @@ import { processSecrets, redact } from "./secrets/redact.js";
 /** How often the staging wait re-checks for a freshly granted keycard. */
 const GRANT_POLL_MS = 500;
 
+/**
+ * How long a Run waits before it asks the human for a keycard.
+ *
+ * Long enough for a decision that is already coming to arrive first: a
+ * cross-owner reach is caught and refused within a second or two, and asking
+ * for a keycard in the meantime offers a choice that was never available.
+ */
+const AWAIT_NOTICE_MS = 4000;
+
 const now = () => new Date().toISOString();
 
 export class AgentService {
   private readonly activeExecutions = new Map<string, Promise<void>>();
   private readonly cancellationRequests = new Set<string>();
-  /** Agents whose owner has refused the keycard their Run is waiting for. */
-  private readonly capabilityDenials = new Set<string>();
+  /** Agents whose owner has refused the keycard their Run is waiting for,
+   *  with the reason to report -- refusals differ, and "another owner's
+   *  resource" is a different fact from "I said no". */
+  private readonly capabilityDenials = new Map<string, string>();
 
   /**
    * Credentials that must never reach persisted output (Person 3).
@@ -219,9 +230,13 @@ export class AgentService {
    * Refusing is itself an authorization decision, so it is gated on ownership
    * exactly as starting or stopping the Agent is.
    */
-  async denyCapabilityRequest(caller: CallerContext, agentId: string): Promise<void> {
+  async denyCapabilityRequest(
+    caller: CallerContext,
+    agentId: string,
+    reason = "owner refused access",
+  ): Promise<void> {
     await this.enforce(caller, AgentAction.Write, this.findAgentRecord(agentId));
-    this.capabilityDenials.add(agentId);
+    this.capabilityDenials.set(agentId, reason);
   }
 
   async getMessages(caller: CallerContext, agentId: string): Promise<Message[]> {
@@ -375,7 +390,7 @@ export class AgentService {
         // conclusion, and report it as a missing file rather than a refusal.
         // A timeout is deliberately NOT treated this way: nobody said no, so
         // the Agent still gets to attempt whatever needs no resource at all.
-        throw new PolicyDeniedError("owner refused access");
+        throw new PolicyDeniedError(staging.reason ?? "owner refused access");
       }
 
       const result = await this.runner.run({
@@ -454,7 +469,7 @@ export class AgentService {
     agent: Agent,
     principal: AgentPrincipal,
     requestId: string,
-  ): Promise<{ refusedByOwner: boolean }> {
+  ): Promise<{ refusedByOwner: boolean; reason?: string }> {
     if (!this.resourceAccess) return { refusedByOwner: false };
 
     // Always start from a clean inbox. Without this, a file staged by an
@@ -468,11 +483,19 @@ export class AgentService {
       return { refusedByOwner: false };
     }
 
+    // Flag the Run as needing a human only if the wait actually lasts. A reach
+    // into another owner's namespace is refused within a couple of seconds --
+    // the World catches it and says so -- and flagging immediately made the
+    // Playground flash "give it a keycard / refuse" for a decision that was
+    // already made and that no keycard could have answered anyway.
+    //
     // `requestId` is the run's id (see executeRun), so it addresses the run.
-    await this.setAwaitingCapability(requestId, true);
+    const notice = setTimeout(() => {
+      void this.setAwaitingCapability(requestId, true);
+    }, AWAIT_NOTICE_MS);
     try {
-      const { granted, refusedByOwner } = await this.awaitDataKeycard(agent);
-      if (granted.length === 0) return { refusedByOwner };
+      const { granted, refusedByOwner, reason } = await this.awaitDataKeycard(agent);
+      if (granted.length === 0) return { refusedByOwner, ...(reason ? { reason } : {}) };
       await this.stagingPass(agent, principal, requestId);
       return { refusedByOwner: false };
     } finally {
@@ -480,6 +503,7 @@ export class AgentService {
       // cancelled. A run left flagged would keep asking the owner for something
       // it no longer needs, and a refusal left set would silently pre-refuse
       // the NEXT run before its owner had seen the request.
+      clearTimeout(notice);
       this.capabilityDenials.delete(agent.id);
       await this.setAwaitingCapability(requestId, false);
     }
@@ -561,7 +585,7 @@ export class AgentService {
    */
   private async awaitDataKeycard(
     agent: Agent,
-  ): Promise<{ granted: CapabilityRecord[]; refusedByOwner: boolean }> {
+  ): Promise<{ granted: CapabilityRecord[]; refusedByOwner: boolean; reason?: string }> {
     const dataKeycards = () =>
       capabilityStore
         .liveFor(agent.id)
@@ -585,8 +609,9 @@ export class AgentService {
       const granted = dataKeycards();
       if (granted.length > 0) return { granted, refusedByOwner: false };
       // The owner said no. Stop waiting for an answer already given.
-      if (this.capabilityDenials.has(agent.id)) {
-        return { granted: [], refusedByOwner: true };
+      const refusal = this.capabilityDenials.get(agent.id);
+      if (refusal !== undefined) {
+        return { granted: [], refusedByOwner: true, reason: refusal };
       }
     }
     // Timed out. Not the same as a refusal: nobody actually said no.

@@ -110,9 +110,10 @@ export const api = {
       method: "POST",
     }),
   /** The owner refusing the keycard this Agent's Run is waiting for. */
-  denyCapability: (id: string) =>
+  denyCapability: (id: string, reason?: string) =>
     request<{ denied: boolean }>("/api/agents/" + id + "/deny-capability", {
       method: "POST",
+      body: JSON.stringify(reason === undefined ? {} : { reason }),
     }),
   messages: (id: string) =>
     request<{ messages: Message[] }>("/api/agents/" + id + "/messages"),

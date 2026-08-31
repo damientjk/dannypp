@@ -1,0 +1,128 @@
+Volc Agent Launchpad -- demo test cases
+Backend: http://localhost:3000
+Part 1 shows what the app does. Part 2 shows what it refuses,
+and where it genuinely stops working.
+----------------------------------------------------------
+
+### 01-what-works.sh
+
+== 1. The platform is up ==
+  OK    the control plane answers
+        HTTP 200  ·  "ok":true
+== 2. A human signs in ==
+  OK    user-a signed in and holds a session
+  OK    the session identifies the human it belongs to
+        HTTP 200  ·  "id":"user-a"
+== 3. An Agent can be created, and it belongs to its creator ==
+  OK    agent 2003820b-a56d-4779-a74c-d8d53b2c91b1 created
+        stamped with ownerId=user-a by the backend, not by the caller
+  OK    the owner sees it in their own list
+        HTTP 200  ·  2003820b-a56d-4779-a74c-d8d53b2c91b1
+  OK    the owner can rename it
+        HTTP 200  ·  "name":"Demo Agent v2"
+== 4. The owner issues a scoped keycard to their Agent ==
+  OK    keycard 23a8ec54-0719-4ef7-a8de-1df8c9eb10e7 issued
+        scope read:res://user-a/*  ·  time-bound  ·  revocable
+  OK    the owner can see the keycards they hold
+        HTTP 200  ·  23a8ec54-0719-4ef7-a8de-1df8c9eb10e7
+== 5. THE NORMAL CASE: the Agent opens a door it is allowed through ==
+  OK    the read is permitted by the policy engine
+        HTTP 200  ·  "effect":"permit"
+  OK    and it really read the file, not a canned reply
+        HTTP 200  ·  SECRET-RECIPE-42
+== 6. A human reads their own file, still through the guard ==
+  OK    permitted, with the decision attached
+        HTTP 200  ·  "effect":"permit"
+== 7. The folders on screen are a real directory ==
+  OK    every room's file is listed
+        HTTP 200  ·  res://user-a/analytics-summary.md
+  OK    both houses are visible, so the world can draw them
+        HTTP 200  ·  res://user-b/notes.md
+== 8. Every decision lands in the audit trail ==
+  OK    the permit was recorded
+        HTTP 200  ·  "effect":"permit"
+  OK    attributed to the human the Agent acted for
+        HTTP 200  ·  "humanId":"user-a"
+  OK    naming the file that was opened
+        HTTP 200  ·  res://user-a/secret-recipe.txt
+
+== WHAT WORKS: 13 of 13 cases behaved as predicted ==
+
+### 02-what-does-not-work.sh
+
+== 1. Nobody gets in without identifying themselves ==
+  OK    no session at all is refused
+        HTTP 401  ·  
+  OK    an invented session token is refused
+        HTTP 401  ·  
+  OK    the wrong password is refused
+        HTTP 401  ·  
+== 2. THE PROOF: one user's Agent cannot touch another user's file ==
+  OK    A's Agent reaching for B's file is denied
+        HTTP 403  ·  "reason":"out-of-scope"
+  OK    and B's secret does not appear in the refusal
+        no 'SECRET-TAX-99' anywhere in the response
+  OK    a human reaching into another's namespace is denied too
+        HTTP 403  ·  "reason":"out-of-scope"
+== 3. A keycard cannot be forged, widened, or skipped ==
+  OK    an Agent with no keycard is refused
+        HTTP 403  ·  "reason":"capability-unknown"
+  OK    minting a keycard for someone else's house is refused
+        HTTP 400  ·  Refusing to issue
+  OK    a path that tries to climb out of the namespace is refused
+        HTTP 403  ·  "reason":"resource-unknown"
+== 4. Revocation really changes what happens next ==
+  OK    before revoking, the read is permitted
+        HTTP 200  ·  "effect":"permit"
+  OK    a different user cannot shred the keycard
+        HTTP 403  ·  
+  OK    the owner can
+        HTTP 200  ·  "revokedBy":"user-a"
+  OK    and the IDENTICAL request is now refused
+        HTTP 403  ·  "reason":"capability-revoked"
+== 5. A keycard stops working on its own, with nobody watching ==
+  OK    an expired keycard is refused
+        HTTP 403  ·  "reason":"capability-expired"
+== 6. One user cannot operate another user's Agent ==
+  OK    B cannot read A's Agent
+        HTTP 403  ·  "error":"not-owner"
+  OK    B cannot rename it
+        HTTP 403  ·  "error":"not-owner"
+  OK    B cannot start it
+        HTTP 403  ·  "error":"not-owner"
+  OK    B cannot read its conversation
+        HTTP 403  ·  "error":"not-owner"
+  OK    B cannot give it a task
+        HTTP 403  ·  "error":"not-owner"
+  OK    B cannot delete it
+        HTTP 403  ·  "error":"not-owner"
+  OK    and A's Agent is absent from B's list entirely
+        no 'e90abd26-3cbd-4a4f-bc4e-96684ac2bd89' anywhere in the response
+== 7. The audit trail is not a shared noticeboard ==
+  OK    B's refusals are recorded against B
+        HTTP 200  ·  "humanId":"user-b"
+  OK    and never leak into A's trail
+        no '"humanId":"user-b"' anywhere in the response
+== 8. Malformed input is rejected rather than guessed at ==
+  OK    an agent with no name is rejected
+        HTTP 400  ·  
+  OK    an empty message is rejected
+        HTTP 400  ·  
+  OK    an unknown agent id is a clean 404, not a crash
+        HTTP 404  ·  
+== 9. WHERE THE APP GENUINELY STOPS: no model configured ==
+  OK    asking an Agent to do real work is refused, and says why
+        HTTP 503  ·  Ark is not configured
+        This is a real limitation, not a bug: ARK_API_KEY and ARK_MODEL are
+        unset, so no Codex run can happen. Note that authorization above still
+        worked -- the guard runs before the model is ever reached.
+== 10. Filenames the resource grammar cannot accept ==
+        Files whose names fall outside [A-Za-z0-9][A-Za-z0-9._-]* -- spaces,
+        leading dots -- are reported in the listing's "skipped" array rather
+        than silently ignored. Drop a file called "my notes.txt" into
+        apps/server/.data/resources/user-a/ and re-run to see it named there.
+  OK    the listing reports a skipped array, even when empty
+        HTTP 200  ·  "skipped"
+
+== WHAT DOES NOT WORK: 28 of 28 cases behaved as predicted ==
+Every case behaved as predicted.

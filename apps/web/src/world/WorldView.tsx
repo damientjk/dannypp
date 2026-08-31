@@ -6,7 +6,6 @@ import {
   decideRoomEntry,
   getCapability,
   grantedRoomsFor,
-  issueCapability,
   newId,
   revokeCapability,
 } from "./decision";
@@ -23,11 +22,11 @@ import type { AccessRequest } from "./requests";
 import {
   clearDeniedForAgent,
   hasPendingRequest,
-  markDenied,
-  pendingRequestsFor,
   queueRequest,
-  resolveRequest,
 } from "./requests";
+import { appendEvent } from "./eventLog";
+import { denyRequest as commitDeny, grantRequest as commitGrant } from "./decisions";
+import { useEventLog, useRequests } from "./useWorldStores";
 import { FILE_ROOMS, roomById, roomForTask } from "./resources";
 import { cssColorForAgent } from "./agentAppearance";
 import type { LogEntry, WorldAgent } from "./types";
@@ -61,17 +60,29 @@ const LOG_BADGE_LABELS: Record<LogEntry["category"], string> = {
   denied: "DENIED",
 };
 
-export function WorldView() {
+export interface WorldViewProps {
+  /** Lets a parent (the split Playground) learn who signed in here, so its
+   *  own request list can filter to this owner's rooms. */
+  onPrincipalChange?: (principal: HumanPrincipal | null) => void;
+  /** Split view hides the canvas-overlay toasts: the requests are already
+   *  listed beside the composer, and showing both is just noise. */
+  showRequestToasts?: boolean;
+}
+
+export function WorldView({
+  onPrincipalChange,
+  showRequestToasts = true,
+}: WorldViewProps = {}) {
   const [principal, setPrincipal] = useState<HumanPrincipal | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [worldAgents, setWorldAgents] = useState<WorldAgent[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [events, setEvents] = useState<LogEntry[]>([]);
+  const events = useEventLog();
+  const allRequests = useRequests();
   const [error, setError] = useState<string | null>(null);
   const [mapRenderer, setMapRenderer] = useState<TiledMapRenderer | null>(null);
-  const [, setRequestVersion] = useState(0);
   const [roaming, setRoaming] = useState(true);
   // Lazy initialiser: the stored preference is read once on mount rather than
   // on every render, and a browser that refuses localStorage still boots.
@@ -119,10 +130,11 @@ export function WorldView() {
       const result = await api.login(userId, password);
       setSessionToken(result.sessionToken);
       setPrincipal(result.principal);
+      onPrincipalChange?.(result.principal);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     }
-  }, [mapRenderer]);
+  }, [mapRenderer, onPrincipalChange]);
 
   // Poll every agent's real status — this is what drives task-visits: an
   // agent only walks to its desk (or triggers a request) when its real
@@ -231,16 +243,13 @@ export function WorldView() {
               setWorldAgents((current) =>
                 current.map((wa) => (wa.agentId === agent.id ? updated : wa)),
               );
-              setEvents((current) => [
-                {
-                  id: requestId,
-                  agentId: agent.id,
-                  category: "permit",
-                  message: `${agent.name} → ${room.displayName}: permit (${decision.reason})`,
-                  timestamp: decision.decidedAt,
-                },
-                ...current,
-              ]);
+              appendEvent({
+                id: requestId,
+                agentId: agent.id,
+                category: "permit",
+                message: `${agent.name} → ${room.displayName}: permit (${decision.reason})`,
+                timestamp: decision.decidedAt,
+              });
             }
             // else: every desk is occupied, agent keeps roaming and waits
             // (spec §4) — nothing changed, so nothing new to log.
@@ -252,24 +261,20 @@ export function WorldView() {
               roomOwnerId: room.ownerId!,
             });
             if (queued) {
-              setEvents((current) => [
-                {
-                  id: requestId,
-                  agentId: agent.id,
-                  category: "deny",
-                  message: `${agent.name} → ${room.displayName}: deny (${decision.reason})`,
-                  timestamp: decision.decidedAt,
-                },
-                {
-                  id: newId(),
-                  agentId: agent.id,
-                  category: "requested",
-                  message: `${agent.name} requested access to ${room.displayName}`,
-                  timestamp: decision.decidedAt,
-                },
-                ...current,
-              ]);
-              setRequestVersion((v) => v + 1);
+              appendEvent({
+                id: requestId,
+                agentId: agent.id,
+                category: "deny",
+                message: `${agent.name} → ${room.displayName}: deny (${decision.reason})`,
+                timestamp: decision.decidedAt,
+              });
+              appendEvent({
+                id: newId(),
+                agentId: agent.id,
+                category: "requested",
+                message: `${agent.name} requested access to ${room.displayName}`,
+                timestamp: decision.decidedAt,
+              });
             }
             // else: already pending or already denied this cycle — no new
             // toast, no duplicate log line (finding 2).
@@ -343,36 +348,12 @@ export function WorldView() {
 
   const grantRequest = useCallback((request: AccessRequest) => {
     setPendingDecision(null);
-    issueCapability(request.agentId, request.roomId);
-    resolveRequest(request.id);
-    setRequestVersion((v) => v + 1);
-    setEvents((current) => [
-      {
-        id: newId(),
-        agentId: request.agentId,
-        category: "granted",
-        message: `${principal?.displayName ?? "Owner"} granted ${request.agentName} access to ${roomById(request.roomId).displayName}`,
-        timestamp: new Date().toISOString(),
-      },
-      ...current,
-    ]);
+    commitGrant(request, principal?.displayName ?? "Owner");
   }, [principal]);
 
   const denyRequest = useCallback((request: AccessRequest) => {
     setPendingDecision(null);
-    resolveRequest(request.id);
-    markDenied(request.agentId, request.roomId);
-    setRequestVersion((v) => v + 1);
-    setEvents((current) => [
-      {
-        id: newId(),
-        agentId: request.agentId,
-        category: "denied",
-        message: `${principal?.displayName ?? "Owner"} denied ${request.agentName} access to ${roomById(request.roomId).displayName}`,
-        timestamp: new Date().toISOString(),
-      },
-      ...current,
-    ]);
+    commitDeny(request, principal?.displayName ?? "Owner");
   }, [principal]);
 
   if (!principal) {
@@ -410,7 +391,9 @@ export function WorldView() {
   const selectedRoom = selectedWorldAgent?.assignedRoomId ? roomById(selectedWorldAgent.assignedRoomId) : null;
   const selectedGrantedRooms = selectedAgent ? grantedRoomsFor(selectedAgent.id) : [];
   const activeRun = runs.find((run) => run.status === "running" || run.status === "queued") ?? null;
-  const myRequests = pendingRequestsFor(principal.id);
+  const myRequests = allRequests.filter(
+    (request) => request.roomOwnerId === principal.id,
+  );
   // Attempts the policy engine refused, counted over the whole session. NOT a
   // live "how many agents are blocked right now": granting access does not
   // decrement it, and an owner's own refusal is category "denied", not "deny".
@@ -421,17 +404,13 @@ export function WorldView() {
   const shredKeycard = () => {
     if (!selectedAgent || selectedGrantedRooms.length === 0) return;
     for (const roomId of selectedGrantedRooms) revokeCapability(selectedAgent.id, roomId);
-    setRequestVersion((v) => v + 1);
-    setEvents((current) => [
-      {
-        id: newId(),
-        agentId: selectedAgent.id,
-        category: "denied",
-        message: `${principal.displayName} shredded ${selectedAgent.name}'s keycard (${selectedGrantedRooms.length} room${selectedGrantedRooms.length === 1 ? "" : "s"} revoked)`,
-        timestamp: new Date().toISOString(),
-      },
-      ...current,
-    ]);
+    appendEvent({
+      id: newId(),
+      agentId: selectedAgent.id,
+      category: "denied",
+      message: `${principal.displayName} shredded ${selectedAgent.name}'s keycard (${selectedGrantedRooms.length} room${selectedGrantedRooms.length === 1 ? "" : "s"} revoked)`,
+      timestamp: new Date().toISOString(),
+    });
   };
 
   return (
@@ -604,7 +583,7 @@ export function WorldView() {
         </section>
       </aside>
       <div className="world-request-toasts">
-        {myRequests.map((request) => {
+        {(showRequestToasts ? myRequests : []).map((request) => {
           const armed = pendingDecision?.requestId === request.id ? pendingDecision.action : null;
           const roomName = roomById(request.roomId).displayName;
           return (

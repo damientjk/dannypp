@@ -1945,3 +1945,388 @@ textarea:focus {
   color: var(--pw-border, var(--green));
   border-color: var(--pw-border, var(--green));
 }
+
+/* ---------------------------------------------------------------------------
+   Split layout: queries on the left, the world on the right.
+
+   The two halves share one session and one request queue, so a task typed into
+   the composer is visible as an agent walking across the map, and the access
+   request that walk raises lands directly above the composer that caused it.
+
+   The whole thing is pinned to the viewport: the page itself never scrolls in
+   either direction. Only the two panes that genuinely need it scroll inside
+   their own box — the message transcript and the world panel.
+--------------------------------------------------------------------------- */
+
+.app-shell-split {
+  /* Overridden inline by the dragged layout; this is the pre-hydration default. */
+  grid-template-columns: 232px 6px minmax(0, 1fr) 6px minmax(0, 1fr);
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+.split-handle {
+  position: relative;
+  height: 100vh;
+  cursor: col-resize;
+  background: var(--line);
+  touch-action: none;
+  transition: background 120ms ease;
+}
+
+.split-handle:hover,
+.split-handle:focus-visible {
+  background: rgba(122, 102, 227, 0.75);
+  outline: none;
+}
+
+/* A 6px column is a small target, so widen the *hit* area either side of it
+   without moving the pixels anyone sees. */
+.split-handle::before {
+  content: "";
+  position: absolute;
+  inset: 0 -5px;
+}
+
+.split-handle-grip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 26px;
+  border-radius: 2px;
+  background: rgba(236, 233, 226, 0.5);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.app-shell-split .sidebar {
+  min-height: 0;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 18px 14px;
+}
+
+.app-shell-split .main {
+  min-height: 0;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+}
+
+/* The agent header and any open settings panel keep their natural height; the
+   playground takes whatever is left. */
+.app-shell-split .agent-header,
+.app-shell-split .config-banner,
+.app-shell-split .error-banner {
+  flex: none;
+}
+
+.app-shell-split .playground {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  max-width: none;
+  margin: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+}
+
+.app-shell-split .messages {
+  min-height: 0;
+  padding: 18px;
+}
+
+.app-shell-split .playground-topbar {
+  min-height: 0;
+  padding: 12px 16px;
+}
+
+.app-shell-split .composer {
+  padding: 12px 16px;
+}
+
+/* Narrower column, so the starter-prompt grid stops forcing a minimum width. */
+.app-shell-split .prompt-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.split-world {
+  min-width: 0;
+  height: 100vh;
+  max-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--line);
+  background: #14130f;
+}
+
+/* The world view is built for a full window; inside half of one its panel gives
+   up its fixed 340px column and sits under the canvas instead. */
+.split-world .world-layout {
+  height: 100%;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 40%);
+  gap: 8px;
+  padding: 8px;
+  overflow: hidden;
+}
+
+/* The canvas is a fixed 1120x640 bitmap. Letting CSS scale it down keeps the
+   whole map on screen instead of handing the column a horizontal scrollbar —
+   image-rendering: pixelated (set on .world-canvas) keeps the art crisp. */
+.split-world .world-canvas-wrap {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.split-world .world-canvas {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.split-world .world-panel {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+/* Long agent names and room labels wrap instead of widening the column. */
+.split-world .world-panel * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The sign-in card is sized for a full window too. */
+.split-world .world-login {
+  min-height: 0;
+  overflow-y: auto;
+  gap: 20px;
+  padding: 24px 16px;
+}
+
+/* Layout switch in the sidebar */
+.view-switch {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.view-switch-option {
+  padding: 7px 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #9d978a;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.view-switch-option:hover {
+  color: var(--ink);
+}
+
+.view-switch-on,
+.view-switch-on:hover {
+  background: rgba(122, 102, 227, 0.22);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px rgba(122, 102, 227, 0.5);
+}
+
+/* Incoming access requests, directly above the composer */
+.request-queue {
+  padding: 10px 16px 12px;
+  border-top: 1px solid #33322c;
+  background: rgba(26, 24, 20, 0.96);
+  max-height: 26vh;
+  overflow-y: auto;
+}
+
+.request-queue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.request-queue-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: #9d978a;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.request-queue-count-live {
+  border-color: rgba(226, 168, 84, 0.55);
+  background: rgba(226, 168, 84, 0.16);
+  color: #e2a854;
+  animation: request-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes request-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.request-queue-empty {
+  margin: 0;
+  color: #8d8779;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.request-queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.request-queue-item {
+  padding: 10px 12px;
+  border: 1px solid rgba(226, 168, 84, 0.32);
+  border-radius: 10px;
+  background: rgba(226, 168, 84, 0.07);
+}
+
+.request-queue-line {
+  margin: 0 0 8px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.request-queue-confirm p {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #c9c3b5;
+}
+
+.request-queue-actions {
+  display: flex;
+  gap: 7px;
+}
+
+.request-queue-actions button {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.request-queue-actions .confirm-grant {
+  border-color: rgba(126, 196, 132, 0.5);
+  color: #7ec484;
+}
+
+.request-queue-actions .confirm-deny {
+  border-color: rgba(214, 110, 110, 0.5);
+  color: #d66e6e;
+}
+
+.request-queue-log {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 9px 0 0;
+  border-top: 1px dashed #33322c;
+  display: grid;
+  gap: 5px;
+}
+
+.request-queue-log-row {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 11px;
+  color: #8d8779;
+  line-height: 1.45;
+}
+
+.request-queue-log-badge {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.request-queue-log-row.log-permit .request-queue-log-badge,
+.request-queue-log-row.log-granted .request-queue-log-badge {
+  border-color: rgba(126, 196, 132, 0.45);
+  color: #7ec484;
+}
+
+.request-queue-log-row.log-deny .request-queue-log-badge,
+.request-queue-log-row.log-denied .request-queue-log-badge {
+  border-color: rgba(214, 110, 110, 0.45);
+  color: #d66e6e;
+}
+
+.request-queue-log-row.log-requested .request-queue-log-badge {
+  border-color: rgba(226, 168, 84, 0.45);
+  color: #e2a854;
+}
+
+/* Below this the three columns stop being readable; fall back to the old
+   full-screen views. */
+/* Below this the three columns stop being readable, so the world column drops
+   away and the dashboard goes back to scrolling normally. */
+@media (max-width: 1180px) {
+  .app-shell-split {
+    grid-template-columns: 232px minmax(0, 1fr) !important;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .split-handle {
+    display: none;
+  }
+
+  .app-shell-split .sidebar,
+  .app-shell-split .main {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  .app-shell-split .playground {
+    height: calc(100vh - 150px);
+  }
+
+  .split-world {
+    display: none;
+  }
+}

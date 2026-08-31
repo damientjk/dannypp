@@ -5,6 +5,7 @@ import { api } from "../api";
 import { FILE_ROOMS } from "./resources";
 import { issueCapability, resetCapabilities } from "./decision";
 import { resetRequests } from "./requests";
+import { resetEvents } from "./eventLog";
 import { beginHeadingToDesk } from "./agentSim";
 import { WorldView } from "./WorldView";
 
@@ -107,6 +108,10 @@ describe("WorldView", () => {
     window.localStorage.clear();
     resetCapabilities();
     resetRequests();
+    // The security log is module-level now (the Playground's request queue
+    // renders the same entries), so it leaks across tests unless reset here
+    // exactly like the capability and request stores above.
+    resetEvents();
     vi.mocked(beginHeadingToDesk).mockClear();
     vi.mocked(api.login).mockResolvedValue({
       sessionToken: "tok",

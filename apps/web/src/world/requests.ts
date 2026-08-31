@@ -11,6 +11,28 @@ export interface AccessRequest {
 
 let pending: AccessRequest[] = [];
 
+// Two panels now render the same queue: the toasts over the world canvas and
+// the request list beside the Playground composer. They subscribe here rather
+// than each keeping their own copy, so a grant in one is instantly gone from
+// the other.
+type Listener = () => void;
+const listeners = new Set<Listener>();
+
+export function subscribeRequests(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function notify(): void {
+  for (const listener of listeners) listener();
+}
+
+/** Stable snapshot for useSyncExternalStore: same array identity until a
+ *  mutation actually happens, otherwise React re-renders forever. */
+export function pendingRequests(): AccessRequest[] {
+  return pending;
+}
+
 // (agentId, roomId) pairs the owner has explicitly denied and hasn't been
 // re-asked since. Not a permanent block (spec §5) — cleared once the
 // agent's current task cycle ends, so a later run can ask again.
@@ -37,6 +59,7 @@ export function queueRequest(params: {
     requestedAt: new Date().toISOString(),
   };
   pending = [...pending, request];
+  notify();
   return request;
 }
 
@@ -50,10 +73,12 @@ export function pendingRequestsFor(ownerId: string): AccessRequest[] {
 
 export function resolveRequest(requestId: string): void {
   pending = pending.filter((request) => request.id !== requestId);
+  notify();
 }
 
 export function markDenied(agentId: string, roomId: string): void {
   denied.add(pairKey(agentId, roomId));
+  notify();
 }
 
 export function wasDenied(agentId: string, roomId: string): boolean {
@@ -72,4 +97,5 @@ export function clearDeniedForAgent(agentId: string): void {
 export function resetRequests(): void {
   pending = [];
   denied.clear();
+  notify();
 }

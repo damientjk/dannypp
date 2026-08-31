@@ -1,13 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, setAuthToken } from "./api";
-import type { Agent, AgentRun, Message, SystemInfo } from "./types";
+import type { Agent, AgentRun, HumanPrincipal, Message, SystemInfo } from "./types";
 import { WorldView } from "./world/WorldView";
+import { RequestQueue } from "./world/RequestQueue";
+import { SplitHandle } from "./SplitHandle";
+import {
+  clampLayout,
+  DEFAULT_LAYOUT,
+  loadLayout,
+  QUERIES_MAX,
+  QUERIES_MIN,
+  saveLayout,
+  SIDEBAR_MAX,
+  SIDEBAR_MIN,
+  type SplitLayout,
+} from "./splitLayout";
 
 const starterPrompts = [
   "Create a small TypeScript CLI that prints a weather summary from sample JSON.",
   "Inspect this workspace and explain what you would improve first.",
   "Build a responsive single-page todo app with tests.",
 ];
+
+/** Width of a drag handle column, in px. Mirrored by .split-handle in CSS. */
+const HANDLE_PX = 6;
 
 const emptyForm = {
   name: "",
@@ -50,12 +66,55 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [authRequired, setAuthRequired] = useState<boolean | null>(null);
   const [authInput, setAuthInput] = useState("");
-  const [view, setView] = useState<"dashboard" | "world">("dashboard");
+  const [view, setView] = useState<"dashboard" | "split" | "world">("split");
+  // Who is signed in to the world half. The dashboard has no login of its own —
+  // the world view owns that flow — so it learns the principal from there and
+  // uses it to filter the request queue to this owner's rooms.
+  const [worldPrincipal, setWorldPrincipal] = useState<HumanPrincipal | null>(null);
+  // Column proportions, dragged by the two handles and remembered per browser.
+  // Lazy initialiser so localStorage is read once, not on every render.
+  const [layout, setLayout] = useState<SplitLayout>(loadLayout);
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const messageEnd = useRef<HTMLDivElement>(null);
   const selectedIdRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   const pollingRunIds = useRef(new Set<string>());
   selectedIdRef.current = selectedId;
+
+  const setSidebar = useCallback((sidebar: number) => {
+    setLayout((current) => clampLayout({ ...current, sidebar }));
+  }, []);
+
+  const setQueries = useCallback((queries: number) => {
+    setLayout((current) => clampLayout({ ...current, queries }));
+  }, []);
+
+  const commitLayout = useCallback(() => {
+    setLayout((current) => {
+      saveLayout(current);
+      return current;
+    });
+  }, []);
+
+  /** Pointer x -> sidebar width, measured from the shell's own left edge so a
+   *  scrolled or offset page does not skew the drag. */
+  const sidebarFromPointer = useCallback((clientX: number) => {
+    const left = shellRef.current?.getBoundingClientRect().left ?? 0;
+    return clientX - left;
+  }, []);
+
+  /** Pointer x -> the queries column's share of the space left over after the
+   *  sidebar and the two handles. */
+  const queriesFromPointer = useCallback(
+    (clientX: number) => {
+      const rect = shellRef.current?.getBoundingClientRect();
+      if (!rect) return layout.queries;
+      const available = rect.width - layout.sidebar - HANDLE_PX * 2;
+      if (available <= 0) return layout.queries;
+      return (clientX - rect.left - layout.sidebar - HANDLE_PX) / available;
+    },
+    [layout.queries, layout.sidebar],
+  );
 
   const selected = useMemo(
     () => agents.find((agent) => agent.id === selectedId) ?? null,
@@ -325,8 +384,27 @@ export default function App() {
     );
   }
 
+  const split = view === "split";
+
+  const splitColumns = split
+    ? layout.sidebar +
+      "px " +
+      HANDLE_PX +
+      "px minmax(0, " +
+      layout.queries +
+      "fr) " +
+      HANDLE_PX +
+      "px minmax(0, " +
+      (1 - layout.queries) +
+      "fr)"
+    : undefined;
+
   return (
-    <div className="app-shell">
+    <div
+      ref={shellRef}
+      className={"app-shell" + (split ? " app-shell-split" : "")}
+      {...(splitColumns ? { style: { gridTemplateColumns: splitColumns } } : {})}
+    >
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">A</div>
@@ -340,9 +418,23 @@ export default function App() {
           </div>
         </div>
 
-        <button className="button view-toggle-button" onClick={() => setView("world")}>
-          World
-        </button>
+        <div className="view-switch" role="group" aria-label="Layout">
+          {([
+            ["dashboard", "Chat"],
+            ["split", "Split"],
+            ["world", "World"],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={"view-switch-option" + (view === id ? " view-switch-on" : "")}
+              aria-pressed={view === id}
+              onClick={() => setView(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
         <button
           className="button button-primary create-button"
@@ -390,6 +482,20 @@ export default function App() {
           </span>
         </div>
       </aside>
+
+      {split && (
+        <SplitHandle
+          label="Resize the sidebar"
+          value={layout.sidebar}
+          min={SIDEBAR_MIN}
+          max={SIDEBAR_MAX}
+          step={16}
+          onChange={setSidebar}
+          valueFromPointer={sidebarFromPointer}
+          onCommit={commitLayout}
+          onReset={() => setSidebar(DEFAULT_LAYOUT.sidebar)}
+        />
+      )}
 
       <main className="main">
         {!system?.arkConfigured || !system?.codexAvailable ? (
@@ -500,7 +606,7 @@ export default function App() {
               </form>
             )}
 
-            <section className="playground">
+            <section className={"playground" + (split ? " playground-split" : "")}>
               <div className="playground-topbar">
                 <div>
                   <span className="eyebrow">Playground</span>
@@ -564,6 +670,13 @@ export default function App() {
                 <div ref={messageEnd} />
               </div>
 
+              {split && (
+                <RequestQueue
+                  ownerId={worldPrincipal?.id ?? null}
+                  ownerName={worldPrincipal?.displayName ?? "Owner"}
+                />
+              )}
+
               <form className="composer" onSubmit={sendMessage}>
                 <textarea
                   value={prompt}
@@ -624,6 +737,29 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {split && (
+        <SplitHandle
+          label="Resize the world panel"
+          value={layout.queries}
+          min={QUERIES_MIN}
+          max={QUERIES_MAX}
+          step={0.04}
+          onChange={setQueries}
+          valueFromPointer={queriesFromPointer}
+          onCommit={commitLayout}
+          onReset={() => setQueries(DEFAULT_LAYOUT.queries)}
+        />
+      )}
+
+      {split && (
+        <section className="split-world pixel-theme" aria-label="World">
+          <WorldView
+            onPrincipalChange={setWorldPrincipal}
+            showRequestToasts={false}
+          />
+        </section>
+      )}
 
       {showCreate && (
         <div className="modal-backdrop" onMouseDown={() => setShowCreate(false)}>

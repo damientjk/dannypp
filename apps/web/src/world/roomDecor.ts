@@ -17,10 +17,10 @@ export interface EquipmentEntry {
   frames: number;
   x: number;
   y: number;
-  /** desk-<room>-N spawn point this prop's animation is gated on, matching
-   *  WorldAgent.occupiedDeskId -- or null for a prop that just animates
-   *  continuously regardless of occupancy (e.g. an ambient candle). */
-  spawnPoint: string | null;
+  /** desk-<room>-N spawn points this prop's animation is gated on (any one
+   *  occupied plays the loop), matching WorldAgent.occupiedDeskId -- or
+   *  null for a prop that animates continuously (e.g. the ambient candle). */
+  spawnPoints: string[] | null;
 }
 
 export interface RoomDecor {

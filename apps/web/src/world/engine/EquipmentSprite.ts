@@ -4,18 +4,16 @@
 // but there's no direction/multi-anim grid here -- just one row-0 loop per
 // prop, sliced the same way TiledMapRenderer.textureForGid crops a GID.
 //
-// Frame WIDTH is a fixed 32px (every sheet is frameCount*32 wide), but frame
-// HEIGHT is not -- these are naturally-tall objects (a hanging punching bag,
-// a treadmill in profile, a piano) rather than directional character rows,
-// so each frame is cropped to the sheet's full height. The sprite is
+// Frame WIDTH is the sheet's width divided by its frame count (the props
+// range from 32px amps to the 160px haunted bookcase), and frame HEIGHT is
+// the sheet's full height -- these are naturally-tall objects rather than
+// directional character rows. The sprite is
 // anchored at its base (bottom-left, not top-left) so a taller-than-one-tile
 // prop grows upward from its desk position instead of overflowing downward
 // past the room -- same anchor convention as CharacterSprite's (0.5, 1) and
 // WorldCanvas's agent.y + 32 offset.
 
 import { AnimatedSprite, Container, Rectangle, Texture } from "pixi.js";
-
-const FRAME_WIDTH = 32;
 
 export class EquipmentSprite {
   readonly container: Container;
@@ -24,10 +22,11 @@ export class EquipmentSprite {
 
   constructor(sheet: Texture, frameCount: number) {
     const frameHeight = sheet.height;
+    const frameWidth = Math.floor(sheet.width / frameCount);
     const frames: Texture[] = [];
     for (let i = 0; i < frameCount; i++) {
       frames.push(
-        new Texture({ source: sheet.source, frame: new Rectangle(i * FRAME_WIDTH, 0, FRAME_WIDTH, frameHeight) }),
+        new Texture({ source: sheet.source, frame: new Rectangle(i * frameWidth, 0, frameWidth, frameHeight) }),
       );
     }
     this.container = new Container();

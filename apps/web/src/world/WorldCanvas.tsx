@@ -54,7 +54,7 @@ export function WorldCanvas({
     let renderer: TiledMapRenderer | null = null;
     let characterSets: Map<string, CharacterFrames> | null = null;
     let lastTime: number | null = null;
-    const equipmentSprites = new Map<string, EquipmentSprite>();
+    const equipmentSprites: Array<{ spawnPoints: string[]; es: EquipmentSprite }> = [];
     // Which character model each live sprite was built with -- a deleted
     // agent shifts everyone after it down the rotation, and that agent's
     // sprite must be rebuilt with its new model.
@@ -81,8 +81,8 @@ export function WorldCanvas({
           .filter((a) => a.behaviorMode === "working" && a.occupiedDeskId)
           .map((a) => a.occupiedDeskId as string),
       );
-      for (const [spawnPoint, es] of equipmentSprites) {
-        es.setWorking(workingSpawnPoints.has(spawnPoint));
+      for (const { spawnPoints, es } of equipmentSprites) {
+        es.setWorking(spawnPoints.some((sp) => workingSpawnPoints.has(sp)));
       }
 
       const seen = new Set<string>();
@@ -219,8 +219,8 @@ export function WorldCanvas({
           // bottom edge, matching EquipmentSprite's bottom-left anchor --
           // same convention as the agent.y + 32 offset just above.
           es.setPosition(entry.x, entry.y + 32);
-          if (entry.spawnPoint === null) es.setWorking(true); // ambient: always animating
-          else equipmentSprites.set(entry.spawnPoint, es);
+          if (entry.spawnPoints === null) es.setWorking(true); // ambient: always animating
+          else equipmentSprites.push({ spawnPoints: entry.spawnPoints, es });
           return es.container;
         });
 
@@ -236,7 +236,7 @@ export function WorldCanvas({
       disposed = true;
       for (const sprite of spritesRef.current.values()) sprite.destroy();
       spritesRef.current.clear();
-      for (const es of equipmentSprites.values()) es.destroy();
+      for (const { es } of equipmentSprites) es.destroy();
       for (const bubble of bubbleSprites.values()) bubble.destroy();
       app?.destroy();
     };

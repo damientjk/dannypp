@@ -111,7 +111,7 @@ describe("WorldCanvas", () => {
           frames: 12,
           x: 128,
           y: 96,
-          spawnPoint: "desk-billing-1",
+          spawnPoints: ["desk-billing-1"],
         },
       ],
     });

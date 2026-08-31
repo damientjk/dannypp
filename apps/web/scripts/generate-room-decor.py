@@ -368,19 +368,35 @@ def main() -> None:
                 "frames": frames,
                 "x": (ox + col) * TILE,
                 "y": (oy + row) * TILE,
-                "spawnPoint": f"desk-{room_id}-{i + 1}",
+                "spawnPoints": [f"desk-{room_id}-{i + 1}"],
             })
 
     for item in AMBIENT:
         ox, oy = room_origin(ROOM_BY_ID[item["room_id"]])
         dest_rel = f"equipment/{item['dest']}"
-        copy_asset(item["src"], dest_rel)
+        src = item["src"]
+        if str(src).lower().endswith(".gif"):
+            # The user's animations/ props are GIFs; EquipmentSprite wants a
+            # horizontal strip, so decode every frame side by side.
+            gif = Image.open(MODERNINTERIORS / src)
+            assert gif.n_frames == item["frames"], (
+                f"{item['dest']}: {gif.n_frames} GIF frames, dict says {item['frames']}"
+            )
+            strip = Image.new("RGBA", (gif.width * gif.n_frames, gif.height), (0, 0, 0, 0))
+            for i in range(gif.n_frames):
+                gif.seek(i)
+                strip.paste(gif.convert("RGBA"), (i * gif.width, 0))
+            dest = WORLD_ASSETS / dest_rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            strip.save(dest)
+        else:
+            copy_asset(src, dest_rel)
         equipment_entries.append({
             "image": dest_rel,
             "frames": item["frames"],
             "x": (ox + item["col"]) * TILE,
             "y": (oy + item["row"]) * TILE,
-            "spawnPoint": None,
+            "spawnPoints": item.get("spawn_points"),
         })
 
     # Work bubble: the user's two-frame hammer indicator (repo-root

@@ -100,8 +100,9 @@ DESKS = {
     # Work spots, two per room (the user's cap: two agents on a file at
     # a time). Each is where an agent STANDS while working; the pose is
     # sold by WORK_FACING in resources.ts:
-    # - auth-module: under bookshelf left-a / right-a, facing up into the
-    #   shelves ("searching for a book").
+    # - auth-module: both under the animated haunted bookcase (cols 2-6),
+    #   facing up into it ("searching for a book") -- (3,1) and (5,1) sit
+    #   under its left and right thirds.
     # - analytics: the two ends of the centred table-tennis table, facing
     #   each other across the net. The top end is (3,1), not (4,1): the
     #   table+wall enclose every top-end tile, and (3,1) is the only one
@@ -113,7 +114,7 @@ DESKS = {
     #   facing down over the cymbals -- its old (6,1) amp slot became
     #   plain decor when this round removed the last EQUIPMENT binding
     #   (see the amp's DECOR entry).
-    "auth-module": [(1, 1), (5, 1)],
+    "auth-module": [(3, 1), (5, 1)],
     "analytics": [(3, 1), (4, 4)],
     "billing": [(1, 1), (7, 1)],
     "deploy-config": [(1, 2), (4, 1)],
@@ -182,14 +183,10 @@ DECOR = {
         # this room's tall back wall (row 0 is auth-module's capped wall,
         # since it's a top-row room) instead of sitting flush below it -- see
         # this plan's "wall-covering effect" note.
-        dict(col=1, row=-1, dest="bookshelf-left-a.png",
-             src=REPO_ROOT / "bookshelf" / "Classroom_and_Library_Singles_48x48_74.png", scale=2/3),
-        dict(col=3, row=-1, dest="bookshelf-left-b.png",
-             src=REPO_ROOT / "bookshelf" / "Classroom_and_Library_Singles_48x48_75.png", scale=2/3),
-        dict(col=5, row=-1, dest="bookshelf-right-a.png",
-             src=REPO_ROOT / "bookshelf" / "Classroom_and_Library_Singles_48x48_74.png", scale=2/3),
-        dict(col=7, row=-1, dest="bookshelf-right-b.png",
-             src=REPO_ROOT / "bookshelf" / "Classroom_and_Library_Singles_48x48_75.png", scale=2/3),
+        # The four static bookshelf crops that lived here became the
+        # animated haunted-bookcase AMBIENT prop (prop-animation round,
+        # 2026-09-01): one 160px case centred on the wall, animating while
+        # either library work spot is occupied.
         # User-isolated "table with a book" Singles files (repo-root/Library/,
         # native 32px scale -- no crop/scale needed), replacing the old
         # composite-sheet desk crop per the user's mockup.
@@ -372,12 +369,9 @@ DECOR = {
              src=REPO_ROOT / "Gym Room" / "Dumbbell rack.png"),
         dict(col=3, row=4, dest="yoga-ball.png",  # right of the mats (opaque starts x=108 > 96)
              src=REPO_ROOT / "Gym Room" / "Yoga ball, put this near the flooring.png"),
-        dict(col=0.5, row=-2, dest="punching-bag-1.png",  # half-tile gap to bag-2
-             src=REPO_ROOT / "Gym Room" / "Punching bag.png"),
-        dict(col=2, row=-2, dest="punching-bag-2.png",
-             src=REPO_ROOT / "Gym Room" / "Punching bag.png"),
-        dict(col=7, row=-1, dest="treadmill.png",
-             src=REPO_ROOT / "Gym Room" / "Threadmill.png"),
+        # The static punching bags and treadmill became animated AMBIENT
+        # props (prop-animation round, 2026-09-01) -- same art, same spots,
+        # swinging/running while their work spot is occupied.
         # row=2, not 1 (work-spot round): at row 1 the bench, the
         # machine-press, and the walls sealed the treadmill corner into a
         # pocket the new desk-2 spot couldn't be reached through.
@@ -575,12 +569,10 @@ DECOR = {
         # round) in the upper-left, and the drums moved up under it.
         dict(col=5, row=-0.5, dest="guitar-electric.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_51.png"),
-        # The amplifier, ex-EQUIPMENT (see that dict's comment): frame 0
-        # of the animated sheet, cropped out as a still. Same (6,1) slot
-        # it animated in.
-        dict(col=6, row=1, dest="amplifier.png",
-             src="3_Animated_objects/32x32/spritesheets/animated_amplifier_32x32.png",
-             crop=(0, 0, 32, 32)),
+        # The amplifier is an animated AMBIENT prop again (prop-animation
+        # round, 2026-09-01) -- full 32x64 frames this time (the old still
+        # was a truncated top-half crop), playing while the keyboard spot
+        # is worked.
         dict(col=7, row=-1, dest="speaker.png",
              src=REPO_ROOT / "Music" / "Music_and_Sport_Singles_32x32_43.png"),
         dict(col=8, row=-0.5, dest="guitar-electric-2.png",
@@ -609,10 +601,43 @@ DECOR = {
 
 # Always-animating props not gated on any desk occupancy (col, row, dest,
 # src, frames, room_id). Empty until Task 7 adds Library's ambient candle.
+# Ambient/prop animations. col/row anchor the sprite's BOTTOM-LEFT (the
+# renderer grows tall props upward from there). GIF srcs (the user's
+# repo-root animations/) are converted to horizontal strips by
+# generate-room-decor.py; `frames` is asserted against the GIF's real
+# frame count. `spawn_points` lists the work spots whose occupancy plays
+# the loop -- omitted/None means always animating (the candle).
 AMBIENT = [
     dict(room_id="auth-module", col=7, row=4, dest="animated_wall_candle_32x32.png",
          src="3_Animated_objects/32x32/spritesheets/animated_wall_candle_32x32.png", frames=3),
-    # billing's second-treadmill ambient entry (added in a prior fix round)
-    # was removed here per the same controller ruling that pulled the
-    # EQUIPMENT bindings above -- see that comment.
+    # Prop-animation round (2026-09-01), all sourced from the user's
+    # animations/ GIFs:
+    # - haunted bookcase (160x128): centred on the library wall (art centre
+    #   x=145 vs interior 144), art bottom mid-row-1 so the two work spots
+    #   below read as browsing it. Either spot triggers it.
+    dict(room_id="auth-module", col=2, row=1, dest="animated_haunted_bookcase_32x32.png",
+         src=REPO_ROOT / "animations" / "animated_haunted_bookcase_32x32.gif", frames=24,
+         spawn_points=["desk-auth-module-1", "desk-auth-module-2"]),
+    # - punching bags: the left/right swing variants rest exactly where the
+    #   old statics hung (left's art at frame x 0..30 -> col 0.5 puts it at
+    #   abs 16..46, the static's spot; right's art at 32..62 -> col 1 puts
+    #   it at 64..94). Both swing while the bag work spot is occupied.
+    dict(room_id="billing", col=0.5, row=0, dest="animated_punching_bag_left_3_32x32.png",
+         src=REPO_ROOT / "animations" / "animated_punching_bag_left_3_32x32.gif", frames=6,
+         spawn_points=["desk-billing-1"]),
+    dict(room_id="billing", col=1, row=0, dest="animated_punching_bag_right_3_32x32.png",
+         src=REPO_ROOT / "animations" / "animated_punching_bag_right_3_32x32.gif", frames=6,
+         spawn_points=["desk-billing-1"]),
+    # - treadmill (tapis roulant, 64x96): frame 0's bbox is identical to the
+    #   old static crop's -- same art, same spot, belt running while the
+    #   treadmill work spot is occupied.
+    dict(room_id="billing", col=7, row=1, dest="animated_tapis_roulant_32x32.png",
+         src=REPO_ROOT / "animations" / "animated_tapis_roulant_32x32.gif", frames=12,
+         spawn_points=["desk-billing-2"]),
+    # - amplifier (32x64): backline slot, art bottom at 62 abs (the old
+    #   truncated still ended at 64), thumping while the KEYBOARD spot is
+    #   played, per the user.
+    dict(room_id="deploy-config", col=6, row=1.5, dest="animated_amplifier_32x32.png",
+         src=REPO_ROOT / "animations" / "animated_amplifier_32x32.gif", frames=3,
+         spawn_points=["desk-deploy-config-1"]),
 ]

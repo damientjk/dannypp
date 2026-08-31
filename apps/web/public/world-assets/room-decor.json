@@ -11,26 +11,6 @@
       "y": 0
     },
     {
-      "image": "decor/auth-module/bookshelf-left-a.png",
-      "x": 64,
-      "y": 32
-    },
-    {
-      "image": "decor/auth-module/bookshelf-left-b.png",
-      "x": 128,
-      "y": 32
-    },
-    {
-      "image": "decor/auth-module/bookshelf-right-a.png",
-      "x": 192,
-      "y": 32
-    },
-    {
-      "image": "decor/auth-module/bookshelf-right-b.png",
-      "x": 256,
-      "y": 32
-    },
-    {
       "image": "decor/auth-module/table-book-1.png",
       "x": 128,
       "y": 128
@@ -221,21 +201,6 @@
       "y": 608
     },
     {
-      "image": "decor/billing/punching-bag-1.png",
-      "x": 48.0,
-      "y": 416
-    },
-    {
-      "image": "decor/billing/punching-bag-2.png",
-      "x": 96,
-      "y": 416
-    },
-    {
-      "image": "decor/billing/treadmill.png",
-      "x": 256,
-      "y": 448
-    },
-    {
       "image": "decor/billing/bench-press.png",
       "x": 192,
       "y": 544
@@ -331,11 +296,6 @@
       "y": 464.0
     },
     {
-      "image": "decor/deploy-config/amplifier.png",
-      "x": 992,
-      "y": 512
-    },
-    {
       "image": "decor/deploy-config/speaker.png",
       "x": 1024,
       "y": 448
@@ -372,7 +332,53 @@
       "frames": 3,
       "x": 256,
       "y": 192,
-      "spawnPoint": null
+      "spawnPoints": null
+    },
+    {
+      "image": "equipment/animated_haunted_bookcase_32x32.png",
+      "frames": 24,
+      "x": 96,
+      "y": 96,
+      "spawnPoints": [
+        "desk-auth-module-1",
+        "desk-auth-module-2"
+      ]
+    },
+    {
+      "image": "equipment/animated_punching_bag_left_3_32x32.png",
+      "frames": 6,
+      "x": 48.0,
+      "y": 480,
+      "spawnPoints": [
+        "desk-billing-1"
+      ]
+    },
+    {
+      "image": "equipment/animated_punching_bag_right_3_32x32.png",
+      "frames": 6,
+      "x": 64,
+      "y": 480,
+      "spawnPoints": [
+        "desk-billing-1"
+      ]
+    },
+    {
+      "image": "equipment/animated_tapis_roulant_32x32.png",
+      "frames": 12,
+      "x": 256,
+      "y": 512,
+      "spawnPoints": [
+        "desk-billing-2"
+      ]
+    },
+    {
+      "image": "equipment/animated_amplifier_32x32.png",
+      "frames": 3,
+      "x": 992,
+      "y": 528.0,
+      "spawnPoints": [
+        "desk-deploy-config-1"
+      ]
     }
   ]
 }

@@ -55,6 +55,15 @@ vi.mock("pixi.js", async () => {
 // Every room has a door + zone; the 4 owned rooms also get 2 desks each —
 // enough for assignedRoomFor (real, unmocked resources.ts) to resolve
 // correctly for an agent owned by either user-a or user-b.
+// The manifest is fetched from a ROOT-RELATIVE path, which resolves against
+// the page origin in a browser and throws under Node, where there is no
+// origin. WorldCanvas catches that and renders without decor, so the tests
+// passed -- but every one of them printed a stack trace, which is exactly how
+// a real failure goes unnoticed. Same mock WorldCanvas.test.tsx uses.
+vi.mock("./roomDecor", () => ({
+  loadRoomDecor: vi.fn().mockResolvedValue({ decor: [], equipment: [] }),
+}));
+
 vi.mock("./engineMap", async () => {
   const { TiledMapRenderer } = await import("./engine/TiledMapRenderer");
   const { Texture } = await import("pixi.js");

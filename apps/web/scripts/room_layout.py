@@ -422,10 +422,17 @@ DECOR = {
     # own y-range starts at or past y=528 (arcade/tv-console's bottom edge)
     # -- the lowest integer row giving that is row=2 (y=544, a clean 16px
     # gap below them). Kept it at cols 6-8 (unchanged from every prior
-    # round) so it still sits directly under tv-console, facing the screen
-    # -- now genuinely closer to the wall than its old row=4, just not
-    # literally touching it, which the numbers don't support without
-    # overlapping the arcade or tv-console.
+    # round) so it still sits directly under tv-console -- now genuinely
+    # closer to the wall than its old row=4, just not literally touching
+    # it, which the numbers don't support without overlapping the arcade
+    # or tv-console. All three segments are flipped vertically
+    # (flip=True, Image.FLIP_TOP_BOTTOM) as of this round -- the reviewer
+    # found the un-flipped sprite's striped cushion bands (its backrest, by
+    # the pack's own art convention) were on top, seat slab on the bottom,
+    # meaning the seat faced south (away from the TV) before the flip. Not
+    # independently re-confirmed with a screenshot this round (browser
+    # unavailable) -- flip applied on the reviewer's structural read, not
+    # verified live.
     #
     # Pool table + balls: "middle-left, avoid the door column." A 3-tile/
     # 96px table at cols 1-3 (the brief's own suggested area) would abut the
@@ -445,26 +452,36 @@ DECOR = {
     # deliberate overlap in this room (same convention as the original
     # design's rug-under-sofa).
     #
-    # Snack table + 2 chairs: "bottom-right, row 4-5." chair-reversed.png
-    # (64px) + snack-table.png (64px) + chair-right.png (48px, the source
-    # file is literally named "chari right.png", a typo -- kept in `src`
-    # since that's the real filename on disk, fixed in `dest`) sum to 176px
-    # -- more than the 128px free in cols 5-8 alone, so the cluster spills
-    # one column left into col=3 (freed up by moving the pool table to cols
-    # 0-2 above) and, unavoidably, col=4 -- door column. Checked whether
-    # that's actually a problem the way arcade-2 plugging the door was in an
-    # earlier round: it isn't. That earlier bug was about a row=-1 item
-    # sitting right at the wall opening itself; this cluster is at row=4,
-    # deep in the room (y=608-672, the interior's own last 64px band, four
-    # rows south of the actual doorway), with the entire rest of the room
-    # floor still open between the door and it -- nothing here reads as
-    # blocking the entrance, and decor was already established (Task 5's
-    # first fix round) not to gate movement anyway. All three sit
-    # edge-to-edge (chair-reversed cols 3-4, snack-table cols 5-6, chair-
-    # right cols 7-8, ending at x=688, 16px inside the interior's right
-    # edge) -- verified against every other item in the room (arcade,
-    # tv-console, pool table, sofa) with a full pairwise pixel check, zero
-    # unintended overlaps.
+    # Snack table + 2 chairs: "bottom-right, row 4-5." snack-table.png
+    # (64px) + chair-right.png (48px, the source file is literally named
+    # "chari right.png", a typo -- kept in `src` since that's the real
+    # filename on disk, fixed in `dest`) sit edge-to-edge at cols 5-8
+    # (x 576-688, 16px inside the interior's right edge at 704), row=4 --
+    # unavoidably col=4/door-adjacent on their left side, but that's fine
+    # for the same reason as before: row=4 is 4 tiles south of the actual
+    # doorway (y 608-672 vs. the door's own y 416-480), decor doesn't gate
+    # movement, and nothing here reads as blocking the entrance.
+    #
+    # chair-reversed.png used to flank the table on the immediate left at
+    # this same row (col=3/row=4, touching the table) -- a fix round moved
+    # it per the user's marked-up screenshot, wanting it out of that tight
+    # flanking spot. The dot pointed roughly south of the table/chair-right
+    # gap, but row=5 was checked first (per this fix's own instruction to
+    # verify, not assume) and genuinely overflows: y=640, +64px height =
+    # 704, 32px past the interior's own bottom edge (672) -- there is no
+    # row=5 room in this room at all, confirmed, not assumed. With south
+    # off the table, col=3 is still the only fully clear column in this
+    # part of the room (immediately west of the door, one tile east of the
+    # pool table) -- moved there but to row=2 instead of row=4, so it's
+    # no longer touching the table (previously flush at x=576; now a full
+    # row separates their y-ranges, x=[512,576) vs the snack cluster's own
+    # y=[608,672)) and sits in the same open floor band as the pool table
+    # and sofa rather than pinned to the room's very back row. This is a
+    # shift *north*, not literally "down" -- flagged here and in the fix
+    # report, since south genuinely isn't available and "toward the open
+    # floor, decoupled from flanking the table" was the closest honest
+    # reading of a hand-drawn, non-exact instruction once the real numbers
+    # ruled out the literal one.
     "living-room": [
         dict(col=1, row=-1, dest="arcade-1.png",
              src=REPO_ROOT / "arcade" / "arcade machine 1.png"),
@@ -479,12 +496,12 @@ DECOR = {
         dict(col=1, row=3, dest="pool-balls.png",
              src=REPO_ROOT / "arcade" / "pool balls.png"),
         dict(col=6, row=2, dest="sofa-left.png",
-             src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_51.png", scale=2/3),
+             src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_51.png", scale=2/3, flip=True),
         dict(col=7, row=2, dest="sofa-mid.png",
-             src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_52.png", scale=2/3),
+             src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_52.png", scale=2/3, flip=True),
         dict(col=8, row=2, dest="sofa-right.png",
-             src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_53.png", scale=2/3),
-        dict(col=3, row=4, dest="chair-reversed.png",
+             src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_53.png", scale=2/3, flip=True),
+        dict(col=3, row=2, dest="chair-reversed.png",
              src=REPO_ROOT / "arcade" / "chair reversed.png"),
         dict(col=5, row=4, dest="snack-table.png",
              src=REPO_ROOT / "arcade" / "snack table.png"),

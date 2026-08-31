@@ -211,6 +211,7 @@ def build_wall_border_overlay(room, floor_crop):
 def copy_asset(
     src_rel: str, dest_rel: str,
     crop: tuple[int, int, int, int] | None = None, scale: float = 1.0,
+    flip: bool = False,
 ) -> None:
     # src_rel may be an absolute Path (e.g. REPO_ROOT / "bookshelf" / "x.png")
     # for the four user-supplied crops living outside moderninteriors-win at
@@ -219,7 +220,7 @@ def copy_asset(
     src = MODERNINTERIORS / src_rel
     dest = WORLD_ASSETS / dest_rel
     dest.parent.mkdir(parents=True, exist_ok=True)
-    if crop is None and scale == 1.0:
+    if crop is None and scale == 1.0 and not flip:
         shutil.copyfile(src, dest)
         return
     img = Image.open(src).convert("RGBA")
@@ -228,6 +229,8 @@ def copy_asset(
     if scale != 1.0:
         w, h = img.size
         img = img.resize((round(w * scale), round(h * scale)), Image.NEAREST)
+    if flip:
+        img = img.transpose(Image.FLIP_TOP_BOTTOM)
     img.save(dest)
 
 
@@ -295,7 +298,8 @@ def main() -> None:
 
         for item in DECOR.get(room_id, []):
             dest_rel = f"decor/{room_id}/{item['dest']}"
-            copy_asset(item["src"], dest_rel, item.get("crop"), item.get("scale", 1.0))
+            copy_asset(item["src"], dest_rel, item.get("crop"), item.get("scale", 1.0),
+                       item.get("flip", False))
             decor_entries.append({
                 "image": dest_rel,
                 "x": (ox + item["col"]) * TILE,

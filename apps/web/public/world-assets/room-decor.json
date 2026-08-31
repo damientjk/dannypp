@@ -141,24 +141,64 @@
       "y": 416
     },
     {
-      "image": "decor/billing/dumbbell-rack.png",
-      "x": 64,
-      "y": 512
+      "image": "decor/billing/floor-top-left.png",
+      "x": 32,
+      "y": 608
     },
     {
-      "image": "decor/billing/black-mat.png",
+      "image": "decor/billing/floor-top-middle.png",
+      "x": 64,
+      "y": 608
+    },
+    {
+      "image": "decor/billing/floor-top-right.png",
+      "x": 96,
+      "y": 608
+    },
+    {
+      "image": "decor/billing/floor-bottom-left.png",
+      "x": 32,
+      "y": 640
+    },
+    {
+      "image": "decor/billing/floor-bottom-middle.png",
       "x": 64,
       "y": 640
     },
     {
-      "image": "decor/billing/bike-1.png",
+      "image": "decor/billing/floor-bottom-right.png",
+      "x": 96,
+      "y": 640
+    },
+    {
+      "image": "decor/billing/dumbbell-rack.png",
+      "x": 32,
+      "y": 608
+    },
+    {
+      "image": "decor/billing/yoga-ball.png",
+      "x": 96,
+      "y": 608
+    },
+    {
+      "image": "decor/billing/punching-bag.png",
+      "x": 128,
+      "y": 512
+    },
+    {
+      "image": "decor/billing/treadmill.png",
       "x": 192,
       "y": 512
     },
     {
-      "image": "decor/billing/bike-2.png",
+      "image": "decor/billing/bench-press.png",
       "x": 256,
-      "y": 512
+      "y": 576
+    },
+    {
+      "image": "decor/billing/machine-press.png",
+      "x": 160,
+      "y": 608
     },
     {
       "image": "decor/living-room/wall-shade.png",
@@ -252,20 +292,6 @@
       "spawnPoint": "desk-database-2"
     },
     {
-      "image": "equipment/animated_punching_bag_left_32x32.png",
-      "frames": 12,
-      "x": 128,
-      "y": 576,
-      "spawnPoint": "desk-billing-1"
-    },
-    {
-      "image": "equipment/animated_treadmill_32x32.png",
-      "frames": 9,
-      "x": 192,
-      "y": 576,
-      "spawnPoint": "desk-billing-2"
-    },
-    {
       "image": "equipment/animated_wall_piano_32x32.png",
       "frames": 16,
       "x": 864,
@@ -284,13 +310,6 @@
       "frames": 3,
       "x": 256,
       "y": 224,
-      "spawnPoint": null
-    },
-    {
-      "image": "equipment/animated_treadmill_2_32x32.png",
-      "frames": 3,
-      "x": 128,
-      "y": 512,
       "spawnPoint": null
     }
   ]

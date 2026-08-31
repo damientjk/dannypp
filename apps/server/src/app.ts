@@ -85,7 +85,10 @@ export async function createApp(
       !config.authToken ||
       !request.url.startsWith("/api/") ||
       request.url === "/api/health" ||
-      request.url === "/api/auth"
+      // Prefix, not equality: /api/auth/login must stay reachable, or the token
+      // gate locks out the endpoint that exists to issue a session in the first
+      // place. /api/auth and /api/auth/me are covered by the same prefix.
+      request.url.startsWith("/api/auth")
     ) {
       return;
     }
@@ -207,20 +210,12 @@ export async function createApp(
     return { run: await service.getRun(caller, id) };
   });
 
-  if (config.nodeEnv === "production") {
-    const webRoot = fileURLToPath(new URL("../../web/dist", import.meta.url));
-    await app.register(fastifyStatic, {
-      root: webRoot,
-      prefix: "/",
-    });
-    app.setNotFoundHandler((request, reply) => {
-      if (request.url.startsWith("/api/")) {
-        return reply.code(404).send({ error: "API route not found" });
-      }
-      return reply.sendFile("index.html");
-    });
-  }
-
+  // Registered BEFORE the production static block below. Awaiting a `register`
+  // boots the plugin tree, and every route context built up to that point keeps
+  // whichever error handler existed when it was built. With this call after the
+  // static registration, the routes above fell back to Fastify's default error
+  // body in production only -- generic messages instead of the real reason, and
+  // 500 instead of 400 for validation failures -- while dev looked correct.
   app.setErrorHandler((error, request, reply) => {
     const appError = error instanceof Error ? error : new Error(String(error));
     const validationError = error instanceof z.ZodError;
@@ -244,6 +239,20 @@ export async function createApp(
       ...(validationError ? { details: error.issues } : {}),
     });
   });
+
+  if (config.nodeEnv === "production") {
+    const webRoot = fileURLToPath(new URL("../../web/dist", import.meta.url));
+    await app.register(fastifyStatic, {
+      root: webRoot,
+      prefix: "/",
+    });
+    app.setNotFoundHandler((request, reply) => {
+      if (request.url.startsWith("/api/")) {
+        return reply.code(404).send({ error: "API route not found" });
+      }
+      return reply.sendFile("index.html");
+    });
+  }
 
   // Registered AFTER setErrorHandler: these routes live in an encapsulated
   // plugin context, and a child context only inherits the error handler that

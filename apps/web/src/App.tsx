@@ -50,11 +50,13 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [authRequired, setAuthRequired] = useState<boolean | null>(null);
   const [authInput, setAuthInput] = useState("");
+  const [signedOut, setSignedOut] = useState(false);
   const [view, setView] = useState<"dashboard" | "world">("dashboard");
   const messageEnd = useRef<HTMLDivElement>(null);
   const selectedIdRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   const pollingRunIds = useRef(new Set<string>());
+  const previousViewRef = useRef(view);
   selectedIdRef.current = selectedId;
 
   const selected = useMemo(
@@ -83,6 +85,17 @@ export default function App() {
     await Promise.all([refreshAgents(), api.system().then(setSystem)]);
   }, [refreshAgents]);
 
+  // A 401 here is not an error the user can act on by reading it -- signing in
+  // lives in the World view, so say that instead of surfacing "Sign in required"
+  // from the API and leaving them to guess where the door is.
+  const reportLoadFailure = useCallback((reason: unknown) => {
+    if (reason instanceof ApiError && reason.status === 401) {
+      setSignedOut(true);
+      return;
+    }
+    setError(reason instanceof Error ? reason.message : String(reason));
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
     void api
@@ -92,11 +105,27 @@ export default function App() {
         setAuthRequired(required);
         if (!required) await bootstrap();
       })
-      .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)));
+      .catch(reportLoadFailure);
     return () => {
       mountedRef.current = false;
     };
   }, [bootstrap]);
+
+  // Coming back from the World means a sign-in may have happened while this
+  // view was unmounted -- the session token lives in the API client, not in
+  // React state, so nothing here re-renders when it changes. Without this the
+  // dashboard keeps showing the empty list from the unauthenticated fetch on
+  // mount, and the first successful load only happens as a side effect of
+  // creating an Agent.
+  useEffect(() => {
+    const cameBackFromWorld = previousViewRef.current === "world" && view === "dashboard";
+    previousViewRef.current = view;
+    if (!cameBackFromWorld) return;
+    setError(null);
+    void bootstrap()
+      .then(() => setSignedOut(false))
+      .catch(reportLoadFailure);
+  }, [view, bootstrap, reportLoadFailure]);
 
   useEffect(() => {
     setActiveRun(null);
@@ -407,6 +436,19 @@ export default function App() {
             </div>
           </div>
         ) : null}
+
+        {signedOut && (
+          <div className="config-banner signin-banner">
+            <span>→</span>
+            <div>
+              <strong>You are not signed in</strong>
+              <p>Open the World to sign in, then come back here to manage your Agents.</p>
+            </div>
+            <button className="button" onClick={() => setView("world")}>
+              Go to the World
+            </button>
+          </div>
+        )}
 
         {error && (
           <div className="error-banner" role="alert">

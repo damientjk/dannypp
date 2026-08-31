@@ -508,39 +508,55 @@ DECOR = {
         dict(col=7, row=4, dest="chair-right.png",
              src=REPO_ROOT / "arcade" / "chari right.png"),
     ],
-    # Real speakers + both guitar types from 6_Music_and_Sport_Singles_32x32,
-    # replacing the old crate/plant filler (dropped per the user's mockup --
-    # piano and amplifier are EQUIPMENT-bound to desk-1/desk-2 and untouched
-    # by this task). Drums are the user's own 2-piece isolated crop
-    # (repo-root/drums/, 48px-tier source, scale=2/3) -- no standalone
-    # multi-piece drum kit exists anywhere in the pack without a fused
-    # character sprite baked in.
+    # Fix round: swapped in the user's fresh Music/ crops (repo-root/Music/,
+    # native 32px-tier -- no scale needed) over the original picks, piano and
+    # amplifier still EQUIPMENT-bound to desk-1/desk-2 and untouched. Every
+    # Music/ file was viewed before use, since two of the coordinator's
+    # guesses about them turned out wrong:
+    # - _39.png is NOT "a full kit with a musician playing it" -- it's
+    #   pixel-identical (0 differing px after scaling) to the drums/ folder's
+    #   old 48px-tier drum-kit crop, just supplied at native 32px-tier
+    #   resolution instead. Same swap for _40.png vs the old drum-stand crop
+    #   -- both now source straight from Music/ with no scale=2/3 hack.
+    # - _40.png was re-flagged as "possibly a character figure" -- looked
+    #   again close up: it's a jagged gold cymbal-burst over blue stand
+    #   tubing, same palette as _39's kit, no humanoid silhouette. Kept as
+    #   the kit's hi-hat/cymbal stand.
+    # - _63.png ("ambiguous, could be a stool") is actually a second,
+    #   straight-pole microphone stand (companion to _64's boom stand) --
+    #   not a stool, not used here since one mic stand is enough, flagged in
+    #   the report for the coordinator.
+    # - _4.png is a market/shop stall (canopy + counter) as guessed --
+    #   architecture-scale and thematically wrong for a room prop, dropped.
+    # _51.png (existing guitar-electric) is byte-identical to Music/_51.png,
+    # so its src stays pointed at the original moderninteriors-win path.
+    # No acoustic-guitar file exists in the new set, so guitar-acoustic is
+    # replaced with _52.png, a second (red) electric guitar variant, per the
+    # coordinator's note.
     #
-    # All six items' real pixel footprints were checked against the 9x6
-    # interior and against DESKS["deploy-config"]'s two EQUIPMENT sprites
-    # (piano at desk-1 (2,4), 32x64; amplifier at desk-2 (6,3), 32x64) before
-    # shipping -- two placements had to move off their original draft:
-    # - Both guitars (32x80, 2.5 tiles tall) overflowed the floor by 16px at
-    #   row=4, so they sit at row=3 instead (flush under the row=2 speakers,
-    #   no gap, still clear of the floor).
-    # - drum-stand was drafted at col=6 (right next to drum-kit), but the
-    #   amplifier's sprite is 64px/2-tiles tall and occupies col=6 across
-    #   both row=3 and row=4, so anything at col=6/row=4 collides with its
-    #   lower half. Moved to col=3 (drum-kit's left side, between it and the
-    #   piano) instead -- same cluster, mirrored.
+    # Every item's real pixel footprint re-checked against the 9x6 interior
+    # and DESKS["deploy-config"]'s two EQUIPMENT sprites (piano desk-1 (2,4)
+    # 32x64; amplifier desk-2 (6,3) 32x64) -- the new, taller/wider speaker
+    # cabinets (_43 is 32x80, not 32x32) no longer leave room to stack a
+    # guitar underneath in the same column like the previous layout did, so
+    # the two electric guitars moved outward to col=0/col=8 (previously
+    # unused) instead of col=1/col=7, and the new mic-stand took col=7's
+    # freed-up lower half (row=4, below speaker-2, clear of the amplifier).
     "deploy-config": [
         dict(col=1, row=2, dest="speaker-1.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_34.png"),
+             src=REPO_ROOT / "Music" / "Music_and_Sport_Singles_32x32_43.png"),
         dict(col=7, row=2, dest="speaker-2.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_34.png"),
-        dict(col=1, row=3, dest="guitar-electric.png",
+             src=REPO_ROOT / "Music" / "Music_and_Sport_Singles_32x32_44.png"),
+        dict(col=0, row=2, dest="guitar-electric.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_51.png"),
-        dict(col=7, row=3, dest="guitar-acoustic.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_45.png"),
+        dict(col=8, row=2, dest="guitar-electric-2.png",
+             src=REPO_ROOT / "Music" / "Music_and_Sport_Singles_32x32_52.png"),
         dict(col=4, row=4, dest="drum-kit.png",
-             src=REPO_ROOT / "drums" / "Music_and_Sport_Singles_48x48_39.png", scale=2/3),
+             src=REPO_ROOT / "Music" / "Music_and_Sport_Singles_32x32_39.png"),
         dict(col=3, row=4, dest="drum-stand.png",
-             src=REPO_ROOT / "drums" / "Music_and_Sport_Singles_48x48_40.png", scale=2/3),
+             src=REPO_ROOT / "Music" / "Music_and_Sport_Singles_32x32_40.png"),
+        dict(col=7, row=4, dest="mic-stand.png",
+             src=REPO_ROOT / "Music" / "Music_and_Sport_Singles_32x32_64.png"),
     ],
 }
 

@@ -297,13 +297,13 @@
     },
     {
       "image": "decor/deploy-config/guitar-electric.png",
-      "x": 832,
-      "y": 576
+      "x": 800,
+      "y": 544
     },
     {
-      "image": "decor/deploy-config/guitar-acoustic.png",
-      "x": 1024,
-      "y": 576
+      "image": "decor/deploy-config/guitar-electric-2.png",
+      "x": 1056,
+      "y": 544
     },
     {
       "image": "decor/deploy-config/drum-kit.png",
@@ -313,6 +313,11 @@
     {
       "image": "decor/deploy-config/drum-stand.png",
       "x": 896,
+      "y": 608
+    },
+    {
+      "image": "decor/deploy-config/mic-stand.png",
+      "x": 1024,
       "y": 608
     }
   ],

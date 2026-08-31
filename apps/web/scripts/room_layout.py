@@ -346,46 +346,54 @@ DECOR = {
     # middle / right arm) from the pack's 48px-per-tile sheet
     # (repo-root/sofa/, scale=2/3 down to this game's 32px tiles).
     #
-    # The arcade machines went through two rounds: the first pick
+    # The arcade machines went through three rounds: the first pick
     # (Basement_Singles_32x32_208/_209) turned out to be armchairs, not
     # arcade cabinets -- no real arcade-cabinet sprite exists anywhere in
     # the pack itself, so the user isolated their own 2-piece crop instead
     # (repo-root/arcade/, native 32x80 -- 1 tile wide, 2.5 tall, no scale
-    # needed). Only 2 machines now (one per file), not 3 -- the pack-search
-    # for a 3rd item (e.g. a pool table) came up empty, and the user said
-    # to use both real cabinets, not stretch to a 3rd slot.
+    # needed). Only 2 machines (one per file), not 3 -- the pack-search for
+    # a 3rd item (e.g. a pool table) came up empty, and the user said to use
+    # both real cabinets, not stretch to a 3rd slot. A second round spread
+    # them to col=1/col=6 (clearing the door with a spare column on each
+    # side); a third round (this one) clustered them side by side at col=1/
+    # col=2 instead, per the user's screenshot feedback wanting both
+    # machines together on the left rather than split across the room.
     #
     # living-room is a bottom-row room, so row 0 is its capped DOOR-facing
     # wall (not the back wall) -- see room_y0()'s comment. The door punches
     # through that wall at DOOR_COL (room-relative), which is interior col
     # 4 (DOOR_COL=5 minus the 1-tile wall ring) -- see door_tile() in
-    # generate-world-map.py, i.e. absolute pixel span [544, 576). The
-    # armchair-era arcade slots (col 0/2/5, each 2 tiles wide) don't carry
-    # over to these 1-tile-wide cabinets -- recomputed from scratch: col=1
-    # (pixel [448, 480)) and col=6 (pixel [608, 640)) each cover exactly
-    # one interior column, both clear of col 4's door span, of each other,
-    # and of tv-console (col=7, pixel [640, 704)) with a full empty column
-    # (col 5 or col 3) of breathing room on both sides of the door instead
-    # of a flush fit. Both sit at row=-1 (wall-covering, same convention as
-    # every other room's row=-1/row=0 items) -- their 80px height pokes
-    # ~48px below the floor line by design, the same "front foot on the
-    # floor, cabinet back behind the wall line" look every other room's
-    # row=-1 decor already has (bookshelf, trophies, shoji), not a bug.
-    # tv-console sits at row=1/col=7 (pixel x [640,704), y [512,592)),
-    # flush against the right wall -- outside the row=-1 wall band entirely
-    # (which ends at y=480), so it isn't clipping the wall either. The
-    # sofa's three 32x64 (post-scale) segments sit at row=4, col 6/7/8
+    # generate-world-map.py, i.e. absolute pixel span [544, 576). col=1
+    # (pixel [448, 480)) and col=2 (pixel [480, 512)) sit edge-to-edge as
+    # one cluster, a full empty column (col 3) short of the door span --
+    # comfortably clear of it, not just technically non-overlapping. Both
+    # sit at row=-1 (wall-covering, same convention as every other room's
+    # row=-1/row=0 items) -- their 80px height pokes ~48px below the floor
+    # line by design, the same "front foot on the floor, cabinet back
+    # behind the wall line" look every other room's row=-1 decor already
+    # has (bookshelf, trophies, shoji), not a bug.
+    #
+    # tv-console was flush against the right wall at col=7 (right edge
+    # exactly 704, this room's interior right-edge boundary) -- the user
+    # reported it "seems cut off." Verified _194 vs _195 are two complete,
+    # separate TV+console color variants (not two halves of one sprite), so
+    # this wasn't a missing-piece problem -- it was sitting with zero
+    # margin against the wall. Moved to col=6 (pixel x [608, 672)), giving
+    # it a full 32px clearance from the interior's right edge (704) instead
+    # of landing exactly on it, while still clearing the (now-clustered)
+    # arcade pair by a wide margin and lining up directly above sofa-left +
+    # sofa-mid (also pixel x [608, 672)) for a centered TV-in-front-of-couch
+    # composition, with sofa-right (col=8) extending past its right edge.
+    # The sofa's three 32x64 (post-scale) segments sit at row=4, col 6/7/8
     # (pixel y [608,672)) -- edge-to-edge, flush against the right wall and
     # the room's plain south wall (opposite the door, interior bottom edge
-    # is also y=672), facing north toward the TV. None of tv-console's or
-    # the sofa's edges were found overflowing or clipping when rechecked
-    # against the interior bounds this round.
+    # is also y=672), facing north toward the TV -- unchanged this round.
     "living-room": [
         dict(col=1, row=-1, dest="arcade-1.png",
              src=REPO_ROOT / "arcade" / "Basement_Singles_Shadowless_32x32_218.png"),
-        dict(col=6, row=-1, dest="arcade-2.png",
+        dict(col=2, row=-1, dest="arcade-2.png",
              src=REPO_ROOT / "arcade" / "Basement_Singles_Shadowless_32x32_219.png"),
-        dict(col=7, row=1, dest="tv-console.png",
+        dict(col=6, row=1, dest="tv-console.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_194.png"),
         dict(col=6, row=4, dest="sofa-left.png",
              src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_51.png", scale=2/3),

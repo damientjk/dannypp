@@ -71,6 +71,16 @@
       "y": 32
     },
     {
+      "image": "decor/analytics/basketball.png",
+      "x": 544,
+      "y": 96
+    },
+    {
+      "image": "decor/analytics/table-tennis.png",
+      "x": 448,
+      "y": 96
+    },
+    {
       "image": "decor/analytics/plant.png",
       "x": 448,
       "y": 192

@@ -178,13 +178,30 @@ DECOR = {
     # proper top-down table-tennis sprite with a net.
     "analytics": [
         # row=-1: analytics is a top-row room, so row 0 is its capped back
-        # wall -- see this plan's wall-covering note.
+        # wall -- see this plan's wall-covering note. Fix round: _147 (used
+        # here originally) turned out to be a dagger on a pedestal, not a
+        # trophy -- replaced with _67 from 14_Basement_Singles_32x32, a
+        # genuine red trophy/torch-cup, verified visually before use.
         dict(col=1, row=-1, dest="trophy-left.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_147.png"),
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_67.png"),
         dict(col=7, row=-1, dest="trophy-right.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_147.png"),
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_67.png"),
         dict(col=4, row=-1, dest="basketball-hoop.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_76.png"),
+        # Floor items, fix round. Basketball (32x32, 1x1 footprint) sits on
+        # the floor under the hoop -- hoop's own footprint (32x48) only
+        # reaches to row -0.5, so row=1 leaves clear daylight between them.
+        dict(col=4, row=1, dest="basketball.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_79.png"),
+        # Table-tennis scene (64x96, 2x3-tile footprint: cols 1-2, rows
+        # 1-3). Moved to row=1 from the fix request's suggested row=2 --
+        # row=2 would have put the footprint's rows 2-4 squarely over the
+        # plant's tile at (col=1, row=4) below. row=1 (rows 1-3) clears the
+        # plant, desk-analytics-1 (3,2), desk-analytics-2 (6,3), and the
+        # basketball (4,1) -- checked all four pairwise, no overlap, and
+        # rows 1-3 stay inside the 0-5 interior row range.
+        dict(col=1, row=1, dest="table-tennis.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_157.png"),
         dict(col=1, row=4, dest="plant.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_16.png"),
     ],

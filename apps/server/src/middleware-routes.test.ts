@@ -36,6 +36,16 @@ afterEach(async () => {
   );
 });
 
+/** Collects whatever the gate and routes decide to record. */
+interface RecordedEntry {
+  humanId: string;
+  agentId: string;
+  action: string;
+  resource: string;
+  effect: string;
+  reason: string;
+}
+
 async function makeApp() {
   const root = await mkdtemp(path.join(tmpdir(), "launchpad-routes-"));
   roots.push(root);
@@ -43,19 +53,28 @@ async function makeApp() {
   const resources = new ResourceStore(path.join(root, "resources"));
   await resources.initialize();
   const capabilities = new CapabilityStore();
+  const recorded: RecordedEntry[] = [];
+  const audit = {
+    append: async (entry: RecordedEntry) => {
+      recorded.push(entry);
+      return entry;
+    },
+  };
   const gate = createResourceAccessGate({
     pdp: pdp,
     resources,
     capabilities,
+    audit,
   });
 
   const app = await createApp(loadConfig({ NODE_ENV: "test", LOG_LEVEL: "silent" }), service, {
     capabilities,
     resources,
     gate,
+    audit,
   });
   apps.push(app);
-  return { app, capabilities, resources };
+  return { app, capabilities, resources, recorded };
 }
 
 async function login(app: FastifyInstance, userId: string, password: string) {
@@ -342,9 +361,96 @@ describe("resource routes -- the human read path", () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    expect(body.resources).toHaveLength(4);
+    // Three of User A's, two of User B's.
+    expect(body.resources).toHaveLength(5);
+    // Names the URI grammar refuses are reported rather than dropped silently.
+    expect(body.skipped).toEqual([]);
     // The frontend needs to draw both houses; it must not receive what is inside.
     expect(JSON.stringify(body)).not.toContain("SECRET-TAX-99");
     expect(JSON.stringify(body)).not.toContain("SECRET-RECIPE-42");
+  });
+});
+
+describe("resource decisions reach the audit trail", () => {
+  it("records a permitted agent read, attributed to the owner", async () => {
+    const { app, capabilities, recorded } = await makeApp();
+    const capability = capabilities.issueForRun(agentOfA, "run-1");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/resources/read",
+      payload: { uri: "res://user-a/notes.md", capabilityId: capability.id },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const entry = recorded.at(-1);
+    expect(entry).toMatchObject({
+      effect: "permit",
+      action: "resource:read",
+      resource: "res://user-a/notes.md",
+      // An Agent acts in its owner's name, so that is who the trail names.
+      humanId: "user-a",
+      agentId: AGENT_ID,
+    });
+  });
+
+  it("records the cross-owner refusal, not just the permit", async () => {
+    const { app, capabilities, recorded } = await makeApp();
+    const capability = capabilities.issueForRun(agentOfA, "run-1");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/resources/read",
+      payload: { uri: "res://user-b/tax-return.txt", capabilityId: capability.id },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(recorded.at(-1)).toMatchObject({
+      effect: "deny",
+      reason: "out-of-scope",
+      resource: "res://user-b/tax-return.txt",
+      humanId: "user-a",
+    });
+  });
+
+  it("records an unknown keycard, which never reaches the gate", async () => {
+    const { app, recorded } = await makeApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/resources/read",
+      payload: {
+        uri: "res://user-a/notes.md",
+        capabilityId: "00000000-0000-0000-0000-000000000000",
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().decision.reason).toBe("capability-unknown");
+    // Refused before a holder could be identified, so no Agent is named --
+    // but the attempt is still on the record.
+    expect(recorded.at(-1)).toMatchObject({
+      effect: "deny",
+      reason: "capability-unknown",
+      agentId: "",
+    });
+  });
+
+  it("keeps an unparseable URI out of the log while still recording the refusal", async () => {
+    const { app, recorded } = await makeApp();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/resources/read",
+      payload: {
+        uri: "res://user-a/../user-b/tax-return.txt",
+        capabilityId: "00000000-0000-0000-0000-000000000000",
+      },
+    });
+
+    expect(recorded.at(-1)).toMatchObject({
+      effect: "deny",
+      resource: "unparseable",
+    });
   });
 });

@@ -19,7 +19,7 @@ import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { HttpError } from "../errors.js";
 import { agentPrincipalFor, type CapabilityStore } from "../capability/store.js";
-import type { ResourceAccessGate } from "./access.js";
+import type { AuditSink, ResourceAccessGate } from "./access.js";
 import type { ResourceStore } from "./store.js";
 
 const readBody = z.object({
@@ -32,6 +32,8 @@ export interface ResourceRoutesOptions {
   resources: ResourceStore;
   capabilities: CapabilityStore;
   gate: ResourceAccessGate;
+  /** Where an unknown-capability refusal is recorded. See the read route. */
+  audit?: AuditSink | undefined;
 }
 
 export function resourceRoutes(
@@ -47,7 +49,11 @@ export function resourceRoutes(
       if (!request.principal) {
         throw new HttpError(401, "Sign in to browse resources");
       }
-      return { resources: await options.resources.list() };
+      // `skipped` names files that are really on disk but whose names the URI
+      // grammar refuses. Returning them turns "my file never showed up" from a
+      // mystery into a visible, explainable list.
+      const { resources, skipped } = await options.resources.listDetailed();
+      return { resources, skipped };
     });
 
     /** A human reading their own namespace. Still goes through the PDP. */
@@ -88,14 +94,32 @@ export function resourceRoutes(
       // decision with a real reason, not a 404 from a lookup miss.
       const held = options.capabilities.get(body.capabilityId);
       if (!held) {
+        // This refusal never reaches the gate -- there is no holder to build a
+        // principal from -- so it would otherwise be the one denial missing
+        // from the audit trail. Record it here instead. Attribution falls back
+        // to the session when there is one; the URI is normalised through the
+        // store first so unparseable input never reaches the log.
+        const decision = {
+          effect: "deny" as const,
+          reason: "capability-unknown",
+          requestId: request.id,
+          decidedAt: new Date().toISOString(),
+        };
+        await options.audit?.append({
+          requestId: decision.requestId,
+          decidedAt: decision.decidedAt,
+          humanId: request.principal?.id ?? "",
+          // No holder was identified: an unknown card names no Agent.
+          agentId: "",
+          principalKind: "agent",
+          action: "resource:read",
+          resource: options.resources.parse(body.uri)?.uri ?? "unparseable",
+          effect: decision.effect,
+          reason: decision.reason,
+        });
         return reply.code(403).send({
           error: "Denied: capability-unknown",
-          decision: {
-            effect: "deny",
-            reason: "capability-unknown",
-            requestId: request.id,
-            decidedAt: new Date().toISOString(),
-          },
+          decision,
         });
       }
 

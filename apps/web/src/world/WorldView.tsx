@@ -4,6 +4,7 @@ import type {
   Agent,
   AgentRun,
   CapabilityRecord,
+  AuditEntry,
   HumanPrincipal,
   Message,
   PolicyRequestLike,
@@ -15,6 +16,7 @@ import {
   grantedRoomsFor,
   issueCapability,
   newId,
+  refreshCapabilities,
   revokeCapability,
 } from "./decision";
 import { WorldCanvas } from "./WorldCanvas";
@@ -71,7 +73,11 @@ export function WorldView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  // Owner-side narration only (requested / granted / denied). Every
+  // permit and deny row comes from the backend audit trail below, so the
+  // Security Log cannot show a verdict the server did not record.
   const [events, setEvents] = useState<LogEntry[]>([]);
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mapRenderer, setMapRenderer] = useState<TiledMapRenderer | null>(null);
   const [, setRequestVersion] = useState(0);
@@ -85,6 +91,20 @@ export function WorldView() {
   selectedIdRef.current = selectedId;
   const worldAgentsRef = useRef<WorldAgent[]>([]);
   worldAgentsRef.current = worldAgents;
+
+  /**
+   * Pulls the backend audit trail. Called on the roster poll and again right
+   * after a decision, so the Security Log reflects a permit or deny as it
+   * happens instead of up to one poll interval later.
+   */
+  const refreshAudit = useCallback(async () => {
+    try {
+      const { entries } = await api.audit();
+      setAuditEntries(entries);
+    } catch {
+      // transient failure; the last good trail stays on screen
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,6 +156,14 @@ export function WorldView() {
       } catch {
         // transient poll failure; try again next interval
       }
+      // The Security Log is a view of the backend audit trail, not a
+      // parallel record kept by the browser.
+      if (!cancelled) await refreshAudit();
+      try {
+        await refreshCapabilities();
+      } catch {
+        // keycard cache keeps its previous contents until the next poll
+      }
     };
     poll();
     const interval = setInterval(poll, AGENT_POLL_MS);
@@ -143,7 +171,7 @@ export function WorldView() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [principal]);
+  }, [principal, refreshAudit]);
 
   // Keep worldAgents in sync with the polled roster: spawn newcomers,
   // drop agents that disappeared, leave everyone else's position/behavior
@@ -218,6 +246,8 @@ export function WorldView() {
           };
           const decision = await decideRoomEntry(request);
           if (cancelled) return;
+          // The backend has just recorded this decision; show it now.
+          void refreshAudit();
 
           // Log the raw PDP decision only once it represents an actual state
           // change, not on every re-decided-but-nothing-changed poll — see
@@ -230,17 +260,9 @@ export function WorldView() {
               setWorldAgents((current) =>
                 current.map((wa) => (wa.agentId === agent.id ? updated : wa)),
               );
-              setEvents((current) => [
-                {
-                  id: requestId,
-                  agentId: agent.id,
-                  category: "permit",
-                  message: `${agent.name} → ${room.displayName}: permit (${decision.reason})`,
-                  timestamp: decision.decidedAt,
-                },
-                ...current,
-              ]);
             }
+            // No log push here: the permit is already an entry in the backend
+            // audit trail, and that trail is what the Security Log renders.
             // else: every desk is occupied, agent keeps roaming and waits
             // (spec §4) — nothing changed, so nothing new to log.
           } else {
@@ -251,14 +273,10 @@ export function WorldView() {
               roomOwnerId: room.ownerId!,
             });
             if (queued) {
+              // The deny itself is in the audit trail; this row is the
+              // owner-facing consequence of it, which the backend has no
+              // opinion about.
               setEvents((current) => [
-                {
-                  id: requestId,
-                  agentId: agent.id,
-                  category: "deny",
-                  message: `${agent.name} → ${room.displayName}: deny (${decision.reason})`,
-                  timestamp: decision.decidedAt,
-                },
                 {
                   id: newId(),
                   agentId: agent.id,
@@ -298,7 +316,7 @@ export function WorldView() {
     // Without depending on the roster size, this effect would never get a
     // second chance to see a freshly-spawned agent's assignedRoomId.
     // ponytail: length as a cheap "roster changed" signal, not a deep dep
-  }, [agents, mapRenderer, worldAgents.length]);
+  }, [agents, mapRenderer, worldAgents.length, refreshAudit]);
 
   // Re-fetch whenever the selected agent's polled status changes (not just
   // on selection) — otherwise a run that starts *after* the agent is already
@@ -340,9 +358,17 @@ export function WorldView() {
     }
   }, []);
 
-  const grantRequest = useCallback((request: AccessRequest) => {
+  const grantRequest = useCallback(async (request: AccessRequest) => {
     setPendingDecision(null);
-    issueCapability(request.agentId, request.roomId);
+    try {
+      // A real keycard, minted by the backend and scoped to this room's
+      // resource. If the backend refuses, no access is granted and the
+      // request stays pending rather than the UI pretending otherwise.
+      await issueCapability(request.agentId, request.roomId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not issue the keycard");
+      return;
+    }
     resolveRequest(request.id);
     setRequestVersion((v) => v + 1);
     setEvents((current) => [
@@ -430,39 +456,60 @@ export function WorldView() {
       : [];
   const activeRun = runs.find((run) => run.status === "running" || run.status === "queued") ?? null;
   const myRequests = pendingRequestsFor(principal.id);
-  // Attempts the policy engine refused, counted over the whole session. NOT a
+  /** Name of an Agent as the roster knows it, for rendering an audit row. */
+  const agentNameFor = (agentId: string): string =>
+    agents.find((agent) => agent.id === agentId)?.name ?? "An agent";
+
+  /** The room a recorded resource URI belongs to, so a row reads as a place. */
+  const roomLabelFor = (resourceUri: string): string =>
+    FILE_ROOMS.find((room) => room.resourceUri === resourceUri)?.displayName ??
+    resourceUri;
+
+  // Every permit/deny row is a backend audit entry, rendered rather than
+  // authored here. The owner's own grant/deny/request narration is merged in
+  // around it -- those are UI consequences the PDP has no opinion about.
+  const auditRows: LogEntry[] = auditEntries
+    .filter((entry) => entry.action.startsWith("resource:"))
+    .map((entry) => ({
+      id: entry.id,
+      agentId: entry.agentId,
+      category: entry.effect === "permit" ? "permit" : "deny",
+      message: `${agentNameFor(entry.agentId)} → ${roomLabelFor(entry.resource)}: ${entry.effect} (${entry.reason})`,
+      timestamp: entry.decidedAt,
+    }));
+
+  const logRows = [...auditRows, ...events].sort((a, b) =>
+    b.timestamp.localeCompare(a.timestamp),
+  );
+
+  // Attempts the policy engine refused, counted over the whole trail. NOT a
   // live "how many agents are blocked right now": granting access does not
   // decrement it, and an owner's own refusal is category "denied", not "deny".
-  const blockedCount = events.filter((event) => event.category === "deny").length;
+  const blockedCount = auditRows.filter((row) => row.category === "deny").length;
 
   // Revokes every room this agent currently holds, in one action — the
   // detail panel just lists what it has, it never offers a per-room undo.
   const shredKeycard = async () => {
-    if (!selectedAgent || !liveCapability) return;
-    const agent = selectedAgent;
+    if (!selectedAgent || selectedGrantedRooms.length === 0) return;
     try {
-      // The real revocation: the store marks the record revoked AND suspends
-      // the Agent, so the capability minted on its next run is already revoked.
-      // Revoking the in-browser rooms too keeps the map in step until room
-      // entry itself moves to the backend.
-      await api.revokeCapability(liveCapability.id);
-      for (const roomId of selectedGrantedRooms) revokeCapability(agent.id, roomId);
-      const { capabilities: next } = await api.capabilities();
-      setCapabilities(next);
-      setRequestVersion((v) => v + 1);
-      setEvents((current) => [
-        {
-          id: newId(),
-          agentId: agent.id,
-          category: "denied",
-          message: `${principal.displayName} shredded ${agent.name}'s keycard (${liveCapability.scope})`,
-          timestamp: new Date().toISOString(),
-        },
-        ...current,
-      ]);
+      for (const roomId of selectedGrantedRooms) {
+        await revokeCapability(selectedAgent.id, roomId);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not revoke the keycard");
+      return;
     }
+    setRequestVersion((v) => v + 1);
+    setEvents((current) => [
+      {
+        id: newId(),
+        agentId: selectedAgent.id,
+        category: "denied",
+        message: `${principal.displayName} shredded ${selectedAgent.name}'s keycard (${selectedGrantedRooms.length} room${selectedGrantedRooms.length === 1 ? "" : "s"} revoked)`,
+        timestamp: new Date().toISOString(),
+      },
+      ...current,
+    ]);
   };
 
   return (
@@ -586,13 +633,13 @@ export function WorldView() {
         <section className="panel-block security-log">
           <div className="panel-head">
             <h4>Security log</h4>
-            <span className="panel-count">{events.length}</span>
+            <span className="panel-count">{logRows.length}</span>
           </div>
-          {events.length === 0 ? (
+          {logRows.length === 0 ? (
             <p className="security-log-empty">No access attempts yet.</p>
           ) : (
             <ul>
-              {events.map((event) => (
+              {logRows.map((event) => (
                 <li key={event.id} className={"log-row effect-" + event.category}>
                   <span className="log-head">
                     {event.agentId && (

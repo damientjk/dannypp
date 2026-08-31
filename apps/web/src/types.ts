@@ -98,3 +98,33 @@ export interface PolicyDecision {
   requestId: string;
   decidedAt: string;
 }
+
+/** A capability as the backend stores it -- richer than the PDP's view. */
+export interface CapabilityRecord extends Capability {
+  agentId: string;
+  ownerId: string;
+  runId: string | null;
+  issuedAt: string;
+  revokedBy: string | null;
+}
+
+/** One protected resource's metadata. Listing is not reading. */
+export interface ResourceRef {
+  uri: string;
+  ownerId: string;
+  name: string;
+}
+
+/** One decision as recorded by the backend audit log. */
+export interface AuditEntry {
+  id: string;
+  requestId: string;
+  decidedAt: string;
+  humanId: string;
+  agentId: string;
+  principalKind: "human" | "agent";
+  action: string;
+  resource: string;
+  effect: PolicyEffect;
+  reason: string;
+}

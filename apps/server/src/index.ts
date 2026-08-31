@@ -30,6 +30,9 @@ const gate = createResourceAccessGate({
   pdp,
   resources,
   capabilities: capabilityStore,
+  // Resource decisions land in the same trail as Agent-lifecycle decisions,
+  // so /api/audit is one log rather than a partial view of two.
+  audit,
 });
 
 const service = new AgentService(config, store, workspaces, runner, audit, {
@@ -42,6 +45,7 @@ const app = await createApp(config, service, {
   capabilities: capabilityStore,
   resources,
   gate,
+  audit,
 });
 
 const shutdown = async (signal: string) => {

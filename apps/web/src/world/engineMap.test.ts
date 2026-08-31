@@ -1,4 +1,4 @@
-import { Texture } from "pixi.js";
+import { Sprite, Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import { TiledMapRenderer } from "./engine/TiledMapRenderer";
 import type { TiledMap } from "./engine/TiledMapRenderer";
@@ -45,5 +45,19 @@ describe("TiledMapRenderer against the fixture map (via engineMap's TILE_SIZE)",
     const renderer = new TiledMapRenderer(fixtureMap(), [Texture.WHITE]);
     expect(renderer.getSpawnPoint("common")).toEqual({ x: 1, y: 1 });
     expect(renderer.getZone("house-a")).toEqual({ x: 0, y: 0, width: 2, height: 2 });
+  });
+
+  it("layers decor above the tile grid but below characters", () => {
+    const renderer = new TiledMapRenderer(fixtureMap(), [Texture.WHITE]);
+    const prop = new Sprite(Texture.WHITE);
+    renderer.addDecorLayer([prop]);
+
+    const root = renderer.getContainer();
+    const decorIndex = root.children.findIndex((c) => c.label === "decor");
+    const charIndex = root.getChildIndex(renderer.getCharacterContainer());
+
+    expect(decorIndex).toBeGreaterThan(-1);
+    expect(decorIndex).toBeLessThan(charIndex);
+    expect(root.children[decorIndex].children).toContain(prop);
   });
 });

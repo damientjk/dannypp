@@ -9,7 +9,7 @@ import type {
   Message,
   PolicyRequestLike,
 } from "../types";
-import { beginHeadingToDesk, endWorking, spawnWorldAgents } from "./agentSim";
+import { beginHeadingToDesk, endWorking, jailAgent, releaseAgent, spawnWorldAgents } from "./agentSim";
 import {
   decideRoomEntry,
   getCapability,
@@ -73,6 +73,7 @@ const LOG_BADGE_LABELS: Record<LogEntry["category"], string> = {
   requested: "REQUESTED",
   granted: "GRANTED",
   denied: "DENIED",
+  jailed: "JAILED",
 };
 
 export function WorldView() {
@@ -306,6 +307,25 @@ export function WorldView() {
             // audit trail, and that trail is what the Security Log renders.
             // else: every desk is occupied, agent keeps roaming and waits
             // (spec §4) — nothing changed, so nothing new to log.
+          } else if (room.ownerId !== null && room.ownerId !== agent.ownerId) {
+            // Another owner's room: no request to file, no waiting -- the
+            // agent is caught red-handed and thrown in the Jail (teleport,
+            // jailAgent). Released when its run ends. The backend's deny is
+            // already in the audit trail; these rows are the world-facing
+            // consequence.
+            setWorldAgents((current) =>
+              current.map((wa) => (wa.agentId === agent.id ? jailAgent(wa, mapRenderer) : wa)),
+            );
+            setEvents((current) => [
+              {
+                id: newId(),
+                agentId: agent.id,
+                category: "jailed",
+                message: `${agent.name} was caught touching ${room.displayName} → thrown in the Jail`,
+                timestamp: decision.decidedAt,
+              },
+              ...current,
+            ]);
           } else {
             const queued = queueRequest({
               agentId: agent.id,
@@ -337,7 +357,12 @@ export function WorldView() {
           // ask again (spec §5), regardless of whether the agent ever made
           // it to a desk (a denied agent stays "roaming", never "working").
           clearDeniedForAgent(agent.id);
-          if (worldAgent.behaviorMode === "working" || worldAgent.behaviorMode === "heading-to-desk") {
+          if (worldAgent.behaviorMode === "jailed") {
+            // Sentence served: the run that earned the jailing is over.
+            setWorldAgents((current) =>
+              current.map((wa) => (wa.agentId === agent.id ? releaseAgent(wa, mapRenderer) : wa)),
+            );
+          } else if (worldAgent.behaviorMode === "working" || worldAgent.behaviorMode === "heading-to-desk") {
             // Hold the desk for MIN_VISIT_MS. A run that finished before the
             // walk did would otherwise turn the Agent around mid-corridor and
             // the visit would never be seen; the next poll retries.
@@ -657,8 +682,10 @@ export function WorldView() {
             {agents.map((agent) => {
               const worldAgent = worldAgents.find((wa) => wa.agentId === agent.id);
               const modeLabel =
-                worldAgent?.behaviorMode === "working"
-                  ? "working"
+                worldAgent?.behaviorMode === "jailed"
+                  ? "in jail"
+                  : worldAgent?.behaviorMode === "working"
+                    ? "working"
                   : worldAgent?.behaviorMode === "heading-to-desk"
                     ? "heading to desk"
                     : worldAgent?.assignedRoomId && hasPendingRequest(agent.id, worldAgent.assignedRoomId)

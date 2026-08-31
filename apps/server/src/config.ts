@@ -22,7 +22,7 @@ const envSchema = z.object({
    */
   CAPABILITY_WAIT_MS: z.coerce.number().int().min(0).max(300_000).default(45_000),
   CODEX_MAX_OUTPUT_BYTES: z.coerce.number().int().min(65_536).default(2_097_152),
-  RUNTIME_PROVIDER: z.enum(["local-process", "container"]).default("local-process"),
+  RUNTIME_PROVIDER: z.enum(["local-process", "container", "mock"]).default("local-process"),
   CONTAINER_ENGINE: z.string().min(1).default("docker"),
   CONTAINER_RUNTIME_IMAGE: z.string().min(1).default("volc-agent-runtime:local"),
   CONTAINER_CPU_LIMIT: z.coerce.number().positive().default(2),

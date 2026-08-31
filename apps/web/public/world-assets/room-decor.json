@@ -1,0 +1,378 @@
+{
+  "decor": [
+    {
+      "image": "decor/auth-module/wall-shade.png",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "image": "decor/auth-module/wall-border.png",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "image": "decor/auth-module/bookshelf-left-a.png",
+      "x": 64,
+      "y": 32
+    },
+    {
+      "image": "decor/auth-module/bookshelf-left-b.png",
+      "x": 128,
+      "y": 32
+    },
+    {
+      "image": "decor/auth-module/bookshelf-right-a.png",
+      "x": 192,
+      "y": 32
+    },
+    {
+      "image": "decor/auth-module/bookshelf-right-b.png",
+      "x": 256,
+      "y": 32
+    },
+    {
+      "image": "decor/auth-module/table-book-1.png",
+      "x": 128,
+      "y": 128
+    },
+    {
+      "image": "decor/auth-module/table-book-2.png",
+      "x": 192,
+      "y": 128
+    },
+    {
+      "image": "decor/auth-module/plant.png",
+      "x": 32,
+      "y": 160
+    },
+    {
+      "image": "decor/analytics/wall-shade.png",
+      "x": 384,
+      "y": 0
+    },
+    {
+      "image": "decor/analytics/wall-border.png",
+      "x": 384,
+      "y": 0
+    },
+    {
+      "image": "decor/analytics/trophy-left.png",
+      "x": 416,
+      "y": 32
+    },
+    {
+      "image": "decor/analytics/trophy-right.png",
+      "x": 480,
+      "y": 32
+    },
+    {
+      "image": "decor/analytics/basketball-hoop.png",
+      "x": 640,
+      "y": 16.0
+    },
+    {
+      "image": "decor/analytics/basketball.png",
+      "x": 640,
+      "y": 96
+    },
+    {
+      "image": "decor/analytics/table-tennis-table.png",
+      "x": 512,
+      "y": 104.0
+    },
+    {
+      "image": "decor/analytics/racket.png",
+      "x": 528.0,
+      "y": 152.0
+    },
+    {
+      "image": "decor/analytics/ball-yellow.png",
+      "x": 640,
+      "y": 184.0
+    },
+    {
+      "image": "decor/analytics/ball-blue.png",
+      "x": 672,
+      "y": 200.0
+    },
+    {
+      "image": "decor/database/wall-shade.png",
+      "x": 768,
+      "y": 0
+    },
+    {
+      "image": "decor/database/wall-border.png",
+      "x": 768,
+      "y": 0
+    },
+    {
+      "image": "decor/database/toilet.png",
+      "x": 800,
+      "y": 64
+    },
+    {
+      "image": "decor/database/toilet-paper.png",
+      "x": 832,
+      "y": 64
+    },
+    {
+      "image": "decor/database/bed-left.png",
+      "x": 1008.0,
+      "y": 64
+    },
+    {
+      "image": "decor/database/bed-right.png",
+      "x": 1056,
+      "y": 64
+    },
+    {
+      "image": "decor/database/bars-0.png",
+      "x": 800,
+      "y": 224
+    },
+    {
+      "image": "decor/database/bars-1.png",
+      "x": 832,
+      "y": 224
+    },
+    {
+      "image": "decor/database/bars-2.png",
+      "x": 864,
+      "y": 224
+    },
+    {
+      "image": "decor/database/bars-3.png",
+      "x": 896,
+      "y": 224
+    },
+    {
+      "image": "decor/database/cell-door.png",
+      "x": 928,
+      "y": 224
+    },
+    {
+      "image": "decor/database/bars-5.png",
+      "x": 960,
+      "y": 224
+    },
+    {
+      "image": "decor/database/bars-6.png",
+      "x": 992,
+      "y": 224
+    },
+    {
+      "image": "decor/database/bars-7.png",
+      "x": 1024,
+      "y": 224
+    },
+    {
+      "image": "decor/database/bars-8.png",
+      "x": 1056,
+      "y": 224
+    },
+    {
+      "image": "decor/billing/wall-shade.png",
+      "x": 0,
+      "y": 416
+    },
+    {
+      "image": "decor/billing/wall-border.png",
+      "x": 0,
+      "y": 416
+    },
+    {
+      "image": "decor/billing/floor-top-left.png",
+      "x": 32,
+      "y": 608
+    },
+    {
+      "image": "decor/billing/floor-top-middle.png",
+      "x": 64,
+      "y": 608
+    },
+    {
+      "image": "decor/billing/floor-top-right.png",
+      "x": 96,
+      "y": 608
+    },
+    {
+      "image": "decor/billing/floor-bottom-left.png",
+      "x": 32,
+      "y": 640
+    },
+    {
+      "image": "decor/billing/floor-bottom-middle.png",
+      "x": 64,
+      "y": 640
+    },
+    {
+      "image": "decor/billing/floor-bottom-right.png",
+      "x": 96,
+      "y": 640
+    },
+    {
+      "image": "decor/billing/dumbbell-rack.png",
+      "x": 32,
+      "y": 560.0
+    },
+    {
+      "image": "decor/billing/yoga-ball.png",
+      "x": 128,
+      "y": 608
+    },
+    {
+      "image": "decor/billing/punching-bag-1.png",
+      "x": 48.0,
+      "y": 416
+    },
+    {
+      "image": "decor/billing/punching-bag-2.png",
+      "x": 96,
+      "y": 416
+    },
+    {
+      "image": "decor/billing/treadmill.png",
+      "x": 256,
+      "y": 448
+    },
+    {
+      "image": "decor/billing/bench-press.png",
+      "x": 192,
+      "y": 544
+    },
+    {
+      "image": "decor/billing/machine-press.png",
+      "x": 256,
+      "y": 576
+    },
+    {
+      "image": "decor/living-room/wall-shade.png",
+      "x": 384,
+      "y": 416
+    },
+    {
+      "image": "decor/living-room/wall-border.png",
+      "x": 384,
+      "y": 416
+    },
+    {
+      "image": "decor/living-room/arcade-1.png",
+      "x": 448,
+      "y": 448
+    },
+    {
+      "image": "decor/living-room/arcade-2.png",
+      "x": 480,
+      "y": 448
+    },
+    {
+      "image": "decor/living-room/tv-console-left.png",
+      "x": 576,
+      "y": 448
+    },
+    {
+      "image": "decor/living-room/tv-console-right.png",
+      "x": 640,
+      "y": 448
+    },
+    {
+      "image": "decor/living-room/pool-table.png",
+      "x": 416,
+      "y": 544
+    },
+    {
+      "image": "decor/living-room/pool-balls.png",
+      "x": 448,
+      "y": 576
+    },
+    {
+      "image": "decor/living-room/sofa-left.png",
+      "x": 608,
+      "y": 544
+    },
+    {
+      "image": "decor/living-room/sofa-mid.png",
+      "x": 640,
+      "y": 544
+    },
+    {
+      "image": "decor/living-room/sofa-right.png",
+      "x": 672,
+      "y": 544
+    },
+    {
+      "image": "decor/living-room/snack-table.png",
+      "x": 576,
+      "y": 608
+    },
+    {
+      "image": "decor/living-room/chair-right.png",
+      "x": 640,
+      "y": 592.0
+    },
+    {
+      "image": "decor/living-room/chair-reversed.png",
+      "x": 576,
+      "y": 644.0
+    },
+    {
+      "image": "decor/deploy-config/wall-shade.png",
+      "x": 768,
+      "y": 416
+    },
+    {
+      "image": "decor/deploy-config/wall-border.png",
+      "x": 768,
+      "y": 416
+    },
+    {
+      "image": "decor/deploy-config/guitar-electric.png",
+      "x": 960,
+      "y": 464.0
+    },
+    {
+      "image": "decor/deploy-config/amplifier.png",
+      "x": 992,
+      "y": 512
+    },
+    {
+      "image": "decor/deploy-config/speaker.png",
+      "x": 1024,
+      "y": 448
+    },
+    {
+      "image": "decor/deploy-config/guitar-electric-2.png",
+      "x": 1056,
+      "y": 464.0
+    },
+    {
+      "image": "decor/deploy-config/keyboard.png",
+      "x": 816.0,
+      "y": 496.0
+    },
+    {
+      "image": "decor/deploy-config/drum-kit.png",
+      "x": 880.0,
+      "y": 560.0
+    },
+    {
+      "image": "decor/deploy-config/drum-stand.png",
+      "x": 944.0,
+      "y": 560.0
+    },
+    {
+      "image": "decor/deploy-config/mic-stand.png",
+      "x": 976.0,
+      "y": 592.0
+    }
+  ],
+  "equipment": [
+    {
+      "image": "equipment/animated_wall_candle_32x32.png",
+      "frames": 3,
+      "x": 256,
+      "y": 192,
+      "spawnPoint": null
+    }
+  ]
+}

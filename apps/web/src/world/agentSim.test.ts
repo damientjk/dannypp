@@ -1,5 +1,5 @@
 import { Texture } from "pixi.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Agent } from "../types";
 import { TiledMapRenderer } from "./engine/TiledMapRenderer";
 import type { TiledMap } from "./engine/TiledMapRenderer";
@@ -10,6 +10,8 @@ import {
   beginHeadingToDesk,
   endWorking,
   facingFromDelta,
+  jailAgent,
+  releaseAgent,
   settleAgent,
   spawnWorldAgents,
   tickAgent,
@@ -98,40 +100,6 @@ describe("spawnWorldAgents", () => {
   });
 });
 
-// The roam adapter treats every gated tile as unwalkable, including the one
-// under an Agent that has just been released from a desk INSIDE the room. Every
-// roam candidate came back unreachable, so it stood there indefinitely while
-// the roster label said "roaming".
-describe("leaving a room after working", () => {
-  it("walks an Agent released at a desk back out of the gated room", () => {
-    const renderer = testRenderer();
-    const room = roomById("auth-module");
-    const [spawned] = spawnWorldAgents([AGENT], renderer);
-    const heading = beginHeadingToDesk(spawned!, room, new Set(), renderer);
-    expect(heading).not.toBeNull();
-
-    // Walk it all the way to the desk, so it is genuinely inside the room.
-    const { agent: seated } = runToRest(heading!);
-    const deskTile = renderer.pixelToTile(seated.x, seated.y);
-    expect(deskTile.y).toBe(0); // auth-module's interior row
-
-    // Released, it must find its way back out rather than standing there.
-    const released = advanceBehavior(endWorking(seated), renderer);
-    expect(released.path.length).toBeGreaterThan(1);
-
-    const { agent: settled } = runToRest(released);
-    const endTile = renderer.pixelToTile(settled.x, settled.y);
-    expect(isGatedTile(renderer, endTile.x, endTile.y)).toBe(false);
-
-    // Out of the room, ordinary roaming works again.
-    let roaming = settled;
-    for (let attempt = 0; attempt < 10 && roaming.path.length === 0; attempt++) {
-      roaming = advanceBehavior(roaming, renderer);
-    }
-    expect(roaming.path.length).toBeGreaterThan(0);
-  });
-});
-
 describe("facingFromDelta", () => {
   it("picks the dominant axis", () => {
     expect(facingFromDelta(10, 1)).toBe("right");
@@ -155,13 +123,20 @@ describe("advanceBehavior", () => {
   it("picks a new roam waypoint and starts walking when idle and roaming", () => {
     const renderer = testRenderer();
     let [agent] = spawnWorldAgents([AGENT], renderer);
-    // advanceBehavior randomly samples candidate tiles and can legitimately
-    // miss on any single call (it just returns the agent unchanged, ready to
-    // retry next frame — see its docstring). Retrying a few times mirrors
-    // that real per-frame retry loop and avoids a flaky single-shot assertion.
+    // Scripted dice: skip the rest roll (0.9 > REST_CHANCE), then pick
+    // dx=+4 (0.99) and dy=0 (0.5) -- candidate (5,2), a walkable corridor
+    // tile four steps right of the spawn. A single pinned value can't work
+    // here: dx and dy would always match, landing on the start tile or off
+    // this 3-row map.
+    const rolls = [0.9, 0.99, 0.5];
+    let roll = 0;
+    const dice = vi
+      .spyOn(Math, "random")
+      .mockImplementation(() => rolls[Math.min(roll++, rolls.length - 1)]);
     for (let attempt = 0; attempt < 5 && agent.path.length === 0; attempt++) {
       agent = advanceBehavior(agent, renderer);
     }
+    dice.mockRestore();
     expect(agent.path.length).toBeGreaterThan(0);
   });
 
@@ -226,6 +201,30 @@ describe("beginHeadingToDesk", () => {
   });
 });
 
+describe("leaving a room after working", () => {
+  it("walks an Agent released at a desk back out of the gated room", () => {
+    const renderer = testRenderer();
+    const room = roomById("auth-module");
+    const [spawned] = spawnWorldAgents([AGENT], renderer);
+    const heading = beginHeadingToDesk(spawned!, room, new Set(), renderer);
+    expect(heading).not.toBeNull();
+
+    // Walk it all the way to the desk, so it is genuinely inside the room.
+    const { agent: seated } = runToRest(heading!);
+    const deskTile = renderer.pixelToTile(seated.x, seated.y);
+    expect(deskTile.y).toBe(0); // auth-module's interior row
+
+    // Released, it must find its way back out rather than standing there
+    // (the escape runs before any rest roll, so no dice-pinning needed).
+    const released = advanceBehavior(endWorking(seated), renderer);
+    expect(released.path.length).toBeGreaterThan(1);
+
+    const { agent: settled } = runToRest(released);
+    const endTile = renderer.pixelToTile(settled.x, settled.y);
+    expect(isGatedTile(renderer, endTile.x, endTile.y)).toBe(false);
+  });
+});
+
 describe("endWorking", () => {
   it("releases the desk and returns to roaming", () => {
     const renderer = testRenderer();
@@ -237,5 +236,86 @@ describe("endWorking", () => {
     agent = endWorking(agent);
     expect(agent.behaviorMode).toBe("roaming");
     expect(agent.occupiedDeskId).toBeNull();
+  });
+});
+
+// A 6x5 all-floor map with a "database" (jail) zone over tiles x=1..3,
+// y=1..3 and the common spawn outside it at (0,4) — just enough geometry
+// for the teleport-to-jail / pace-the-cell / release tests. The zone's last
+// row (y=3) stands in for the bars row, which jailed roaming must avoid.
+function jailTestRenderer(): TiledMapRenderer {
+  const width = 6;
+  const height = 5;
+  const mapData: TiledMap = {
+    width,
+    height,
+    tilewidth: TILE_SIZE,
+    tileheight: TILE_SIZE,
+    tilesets: [{ firstgid: 1, columns: 11, tilewidth: TILE_SIZE, tileheight: TILE_SIZE, tilecount: 11 }],
+    layers: [
+      { name: "floor", type: "tilelayer", data: new Array(width * height).fill(1) },
+      { name: "collision", type: "tilelayer", data: new Array(width * height).fill(0) },
+      {
+        name: "spawn-points",
+        type: "objectgroup",
+        objects: [{ name: "common", x: 0, y: 4 * TILE_SIZE }],
+      },
+      {
+        name: "zones",
+        type: "objectgroup",
+        objects: [
+          { name: "database", x: 1 * TILE_SIZE, y: 1 * TILE_SIZE, width: 3 * TILE_SIZE, height: 3 * TILE_SIZE },
+        ],
+      },
+    ],
+  };
+  return new TiledMapRenderer(mapData, [Texture.WHITE]);
+}
+
+describe("jailAgent / releaseAgent", () => {
+  it("teleports the agent to the middle of the jail zone and flips it to jailed", () => {
+    const renderer = jailTestRenderer();
+    const [spawned] = spawnWorldAgents([AGENT], renderer);
+    const jailed = jailAgent(spawned, renderer);
+    expect(jailed.behaviorMode).toBe("jailed");
+    // centre tile of the 3x3 zone anchored at (1,1) is (2,2)
+    expect(jailed.x).toBe(2 * TILE_SIZE);
+    expect(jailed.y).toBe(2 * TILE_SIZE);
+    expect(jailed.path).toEqual([]);
+    expect(jailed.progress).toBe(1);
+    expect(jailed.occupiedDeskId).toBeNull();
+  });
+
+  it("keeps a jailed agent pacing inside the cell, off the bars row", () => {
+    const renderer = jailTestRenderer();
+    let agent = jailAgent(spawnWorldAgents([AGENT], renderer)[0], renderer);
+    for (let i = 0; i < 50; i++) {
+      agent = advanceBehavior({ ...agent, path: [], pathIndex: 0, progress: 1 }, renderer);
+      // path[0] is the agent's own current position; every hop after it must
+      // stay inside the zone and off its last (bars) row.
+      for (const point of agent.path.slice(1)) {
+        const tile = renderer.pixelToTile(point.x, point.y);
+        expect(tile.x).toBeGreaterThanOrEqual(1);
+        expect(tile.x).toBeLessThanOrEqual(3);
+        expect(tile.y).toBeGreaterThanOrEqual(1);
+        expect(tile.y).toBeLessThanOrEqual(2);
+      }
+    }
+  });
+
+  it("releases the agent back to the common spawn, roaming", () => {
+    const renderer = jailTestRenderer();
+    const jailed = jailAgent(spawnWorldAgents([AGENT], renderer)[0], renderer);
+    const freed = releaseAgent(jailed, renderer);
+    expect(freed.behaviorMode).toBe("roaming");
+    expect(freed.x).toBe(0);
+    expect(freed.y).toBe(4 * TILE_SIZE);
+    expect(freed.path).toEqual([]);
+  });
+
+  it("does nothing on a map with no jail zone", () => {
+    const renderer = testRenderer(); // its only zone is auth-module
+    const [agent] = spawnWorldAgents([AGENT], renderer);
+    expect(jailAgent(agent, renderer)).toBe(agent);
   });
 });

@@ -1,5 +1,6 @@
 import type { Agent } from "../types";
 import type { TiledMapRenderer } from "./engine/TiledMapRenderer";
+import type { Facing } from "./types";
 
 export interface FileRoom {
   id: string;
@@ -34,13 +35,18 @@ export const FILE_ROOMS: FileRoom[] = [
     requiresPermission: true,
     deskIds: ["desk-billing-1", "desk-billing-2"],
   },
+  // The jail cell. Still user-b's permission-gated "database" zone on the
+  // map -- which keeps roamers out (isGatedTile) and keeps a task that
+  // names its file deniable -- but it has no desks: nobody works in a
+  // jail. Agents caught reaching for another owner's room are teleported
+  // here (see jailAgent in agentSim.ts).
   {
     id: "database",
     resourceUri: "res://user-b/notes.md",
-    displayName: "Database",
+    displayName: "Jail",
     ownerId: "user-b",
     requiresPermission: true,
-    deskIds: ["desk-database-1", "desk-database-2"],
+    deskIds: [],
   },
   {
     id: "deploy-config",
@@ -61,7 +67,7 @@ export const FILE_ROOMS: FileRoom[] = [
   {
     id: "living-room",
     resourceUri: null,
-    displayName: "Living Room",
+    displayName: "Rest Room",
     ownerId: null,
     requiresPermission: false,
     deskIds: [],
@@ -207,3 +213,32 @@ export function isGatedTile(renderer: TiledMapRenderer, x: number, y: number): b
   }
   return false;
 }
+
+/**
+ * Which way an agent faces once it arrives at its work spot -- the spots
+ * themselves live in room_layout.py's DESKS (single source of truth for
+ * positions; this map only sells the pose). Applied by settleAgent the
+ * moment heading-to-desk becomes working.
+ *
+ * - auth-module: both face up into the bookshelves ("searching for a book")
+ * - analytics: the two ends of the table-tennis table, facing each other
+ * - billing: facing the punching bag / running on the treadmill (up, into
+ *   its console)
+ * - deploy-config: keyboard player faces up at the keys; drummer stands
+ *   north of the kit facing down over it
+ */
+export const WORK_FACING: Record<string, Facing> = {
+  "desk-auth-module-1": "up",
+  "desk-auth-module-2": "up",
+  "desk-analytics-1": "down",
+  "desk-analytics-2": "up",
+  "desk-billing-1": "up",
+  "desk-billing-2": "up",
+  "desk-deploy-config-1": "up",
+  "desk-deploy-config-2": "down",
+};
+
+/** The map zone offenders are teleported into (agentSim.jailAgent): the
+ *  Database room's zone, reborn as the jail cell. The id survives from its
+ *  Database days because map.json's zone and the decor paths are keyed by it. */
+export const JAIL_ROOM_ID = "database";

@@ -371,61 +371,125 @@ DECOR = {
     # middle / right arm) from the pack's 48px-per-tile sheet
     # (repo-root/sofa/, scale=2/3 down to this game's 32px tiles).
     #
-    # The arcade machines went through three rounds: the first pick
-    # (Basement_Singles_32x32_208/_209) turned out to be armchairs, not
-    # arcade cabinets -- no real arcade-cabinet sprite exists anywhere in
-    # the pack itself, so the user isolated their own 2-piece crop instead
-    # (repo-root/arcade/, native 32x80 -- 1 tile wide, 2.5 tall, no scale
-    # needed). Only 2 machines (one per file), not 3 -- the pack-search for
-    # a 3rd item (e.g. a pool table) came up empty, and the user said to use
-    # both real cabinets, not stretch to a 3rd slot. A second round spread
-    # them to col=1/col=6 (clearing the door with a spare column on each
-    # side); a third round (this one) clustered them side by side at col=1/
-    # col=2 instead, per the user's screenshot feedback wanting both
-    # machines together on the left rather than split across the room.
+    # The arcade machines went through several rounds: the first pick
+    # (Basement_Singles_32x32_208/_209) turned out to be armchairs, so the
+    # user isolated their own 2-piece crop instead. That crop's folder later
+    # got a full refresh (rm -rf + re-copy) to add several more custom
+    # pieces below, which silently deleted the old
+    # Basement_Singles_Shadowless_32x32_218/_219.png files this dict used to
+    # reference by name -- breaking generate-room-decor.py for every room
+    # until fixed. Re-pointed at the refreshed folder's renamed files
+    # ("arcade machine 1/2.png", same cabinets, re-viewed to confirm) --
+    # position (col=1/col=2, row=-1) deliberately left untouched this round.
     #
     # living-room is a bottom-row room, so row 0 is its capped DOOR-facing
     # wall (not the back wall) -- see room_y0()'s comment. The door punches
     # through that wall at DOOR_COL (room-relative), which is interior col
     # 4 (DOOR_COL=5 minus the 1-tile wall ring) -- see door_tile() in
-    # generate-world-map.py, i.e. absolute pixel span [544, 576). col=1
-    # (pixel [448, 480)) and col=2 (pixel [480, 512)) sit edge-to-edge as
-    # one cluster, a full empty column (col 3) short of the door span --
-    # comfortably clear of it, not just technically non-overlapping. Both
-    # sit at row=-1 (wall-covering, same convention as every other room's
-    # row=-1/row=0 items) -- their 80px height pokes ~48px below the floor
-    # line by design, the same "front foot on the floor, cabinet back
-    # behind the wall line" look every other room's row=-1 decor already
-    # has (bookshelf, trophies, shoji), not a bug.
+    # generate-world-map.py, i.e. absolute pixel span [544, 576). Arcade
+    # col=1/col=2 (pixel [448, 512)) sit edge-to-edge, a full empty column
+    # short of the door span. Both sit at row=-1 (wall-covering, same
+    # convention as every other room's row=-1/row=0 items) -- their 80px
+    # height pokes ~48px below the floor line by design, same as every
+    # other room's row=-1 decor (bookshelf, trophies, shoji), not a bug.
     #
-    # tv-console was flush against the right wall at col=7 (right edge
-    # exactly 704, this room's interior right-edge boundary) -- the user
-    # reported it "seems cut off." Verified _194 vs _195 are two complete,
-    # separate TV+console color variants (not two halves of one sprite), so
-    # this wasn't a missing-piece problem -- it was sitting with zero
-    # margin against the wall. Moved to col=6 (pixel x [608, 672)), giving
-    # it a full 32px clearance from the interior's right edge (704) instead
-    # of landing exactly on it, while still clearing the (now-clustered)
-    # arcade pair by a wide margin and lining up directly above sofa-left +
-    # sofa-mid (also pixel x [608, 672)) for a centered TV-in-front-of-couch
-    # composition, with sofa-right (col=8) extending past its right edge.
-    # The sofa's three 32x64 (post-scale) segments sit at row=4, col 6/7/8
-    # (pixel y [608,672)) -- edge-to-edge, flush against the right wall and
-    # the room's plain south wall (opposite the door, interior bottom edge
-    # is also y=672), facing north toward the TV -- unchanged this round.
+    # tv-console (previously one single-piece sprite, sitting flush and
+    # "cut off" at the interior's right edge) is now the user's real 2-piece
+    # "tv console left/right.png" (64x80 each, 128px/4 tiles combined) --
+    # moved up to row=-1 alongside the arcades, per this round's request.
+    # cols 5-8 (pixel [576, 704)) is the *entire* remaining right-side gap
+    # between the door (ends at 576) and the interior's right edge (704) --
+    # exactly 128px, so the combined unit necessarily lands flush on both
+    # ends (col=5 touches the door span, col=8's right edge is exactly 704).
+    # This is a forced fit, not a repeat of the old "sloppy zero-margin"
+    # bug: there is no spare column to shift into without either replugging
+    # the door or overflowing the wall, and unlike the old single-piece
+    # sprite (which had zero transparent padding on its right edge),
+    # "tv console right.png"'s own bbox already ends 4px short of its
+    # canvas edge, so the visible art itself doesn't touch the wall line
+    # even though the canvas does.
+    #
+    # Sofa: asked to move "up to touch the wall" this round. Checked the
+    # numbers first, per the fix request's own instruction -- row=-1 has no
+    # room left (arcade fills cols 1-2, tv-console fills cols 5-8, only
+    # single-tile col=0/col=3 gaps remain on either side of the door, and
+    # the sofa is 3 tiles/96px wide). row=0 doesn't actually solve this
+    # either: row=-1 items are 80px tall, so they poke 48px past the floor
+    # seam into row=0's own pixel band (y 480-528 overlaps their y
+    # 448-528), and the only column gaps clear of both arcade and tv-console
+    # at that band are the same single-tile col=0/col=3 slivers -- still not
+    # 3 tiles. The sofa can only safely clear both existing items once its
+    # own y-range starts at or past y=528 (arcade/tv-console's bottom edge)
+    # -- the lowest integer row giving that is row=2 (y=544, a clean 16px
+    # gap below them). Kept it at cols 6-8 (unchanged from every prior
+    # round) so it still sits directly under tv-console, facing the screen
+    # -- now genuinely closer to the wall than its old row=4, just not
+    # literally touching it, which the numbers don't support without
+    # overlapping the arcade or tv-console.
+    #
+    # Pool table + balls: "middle-left, avoid the door column." A 3-tile/
+    # 96px table at cols 1-3 (the brief's own suggested area) would abut the
+    # sofa's new home if it re-used cols 3-4 the way an initial pass tried
+    # -- but more importantly, checking the numbers first (same rule as
+    # everywhere else in this file) showed cols 1-3 leaves zero room for the
+    # snack cluster below it (see that entry's comment). Shifted to cols
+    # 0-2 instead -- flush against the interior's own left edge, clear of
+    # the door, and (crucially) leaves col=3 entirely free for the snack
+    # cluster to use. row=2 is forced, not chosen: row=1 would overlap the
+    # arcade's cols 1-2 footprint (which reaches down to y=528, past
+    # row=1's y=512 start), and row=3 overflows the interior's bottom edge
+    # (576+112=688 > 672) -- row=2 (y=544, bottom y=656) is the only
+    # integer row that clears both. Balls sit at col=1/row=3, centered over
+    # the table's middle column and fully within its 544-656 y-span --
+    # listed after the table in this array so it draws on top, the one
+    # deliberate overlap in this room (same convention as the original
+    # design's rug-under-sofa).
+    #
+    # Snack table + 2 chairs: "bottom-right, row 4-5." chair-reversed.png
+    # (64px) + snack-table.png (64px) + chair-right.png (48px, the source
+    # file is literally named "chari right.png", a typo -- kept in `src`
+    # since that's the real filename on disk, fixed in `dest`) sum to 176px
+    # -- more than the 128px free in cols 5-8 alone, so the cluster spills
+    # one column left into col=3 (freed up by moving the pool table to cols
+    # 0-2 above) and, unavoidably, col=4 -- door column. Checked whether
+    # that's actually a problem the way arcade-2 plugging the door was in an
+    # earlier round: it isn't. That earlier bug was about a row=-1 item
+    # sitting right at the wall opening itself; this cluster is at row=4,
+    # deep in the room (y=608-672, the interior's own last 64px band, four
+    # rows south of the actual doorway), with the entire rest of the room
+    # floor still open between the door and it -- nothing here reads as
+    # blocking the entrance, and decor was already established (Task 5's
+    # first fix round) not to gate movement anyway. All three sit
+    # edge-to-edge (chair-reversed cols 3-4, snack-table cols 5-6, chair-
+    # right cols 7-8, ending at x=688, 16px inside the interior's right
+    # edge) -- verified against every other item in the room (arcade,
+    # tv-console, pool table, sofa) with a full pairwise pixel check, zero
+    # unintended overlaps.
     "living-room": [
         dict(col=1, row=-1, dest="arcade-1.png",
-             src=REPO_ROOT / "arcade" / "Basement_Singles_Shadowless_32x32_218.png"),
+             src=REPO_ROOT / "arcade" / "arcade machine 1.png"),
         dict(col=2, row=-1, dest="arcade-2.png",
-             src=REPO_ROOT / "arcade" / "Basement_Singles_Shadowless_32x32_219.png"),
-        dict(col=6, row=1, dest="tv-console.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_194.png"),
-        dict(col=6, row=4, dest="sofa-left.png",
+             src=REPO_ROOT / "arcade" / "arcade machine 2.png"),
+        dict(col=5, row=-1, dest="tv-console-left.png",
+             src=REPO_ROOT / "arcade" / "tv console left.png"),
+        dict(col=7, row=-1, dest="tv-console-right.png",
+             src=REPO_ROOT / "arcade" / "tv console right.png"),
+        dict(col=0, row=2, dest="pool-table.png",
+             src=REPO_ROOT / "arcade" / "pool table.png"),
+        dict(col=1, row=3, dest="pool-balls.png",
+             src=REPO_ROOT / "arcade" / "pool balls.png"),
+        dict(col=6, row=2, dest="sofa-left.png",
              src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_51.png", scale=2/3),
-        dict(col=7, row=4, dest="sofa-mid.png",
+        dict(col=7, row=2, dest="sofa-mid.png",
              src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_52.png", scale=2/3),
-        dict(col=8, row=4, dest="sofa-right.png",
+        dict(col=8, row=2, dest="sofa-right.png",
              src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_53.png", scale=2/3),
+        dict(col=3, row=4, dest="chair-reversed.png",
+             src=REPO_ROOT / "arcade" / "chair reversed.png"),
+        dict(col=5, row=4, dest="snack-table.png",
+             src=REPO_ROOT / "arcade" / "snack table.png"),
+        dict(col=7, row=4, dest="chair-right.png",
+             src=REPO_ROOT / "arcade" / "chari right.png"),
     ],
     # Real speakers + both guitar types from 6_Music_and_Sport_Singles_32x32,
     # replacing the old crate/plant filler (dropped per the user's mockup --

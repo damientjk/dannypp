@@ -48,6 +48,28 @@ export interface ResourceAccessGateOptions {
   pdp: PolicyDecisionPoint;
   resources: ResourceStore;
   capabilities: CapabilityStore;
+  /**
+   * Where decisions are recorded. Optional so the existing gate tests can keep
+   * constructing a gate without one, but the running server always supplies it:
+   * a denial nobody can point at afterwards is not evidence of anything.
+   */
+  audit?: AuditSink | undefined;
+}
+
+/** The slice of AuditLog this gate needs. Narrow on purpose: the gate writes
+ *  entries and never reads them. */
+export interface AuditSink {
+  append(entry: {
+    requestId: string;
+    decidedAt: string;
+    humanId: string;
+    agentId: string;
+    principalKind: "human" | "agent";
+    action: string;
+    resource: string;
+    effect: "permit" | "deny";
+    reason: string;
+  }): Promise<unknown>;
 }
 
 function denial(requestId: string, reason: string): PolicyDecision {
@@ -107,6 +129,11 @@ export class ResourceAccessGate {
       decision = denial(request.requestId, DENY_REASONS.policyError);
     }
 
+    // Record BEFORE acting, and record denials too. An audit trail that only
+    // holds successes cannot answer the one question it exists for: what was
+    // refused, to whom, and why.
+    await this.record(request, resource.uri, decision);
+
     if (decision.effect !== "permit") {
       return { effect: "deny", decision };
     }
@@ -128,6 +155,41 @@ export class ResourceAccessGate {
       : null;
 
     return { effect: "permit", decision, resource, content, stagedPath };
+  }
+
+  /**
+   * Writes one decision to the audit trail, attributed to the human behind it.
+   *
+   * An Agent principal is attributed to its OWNER, matching how the Agent PEP
+   * records things: the audit log answers "what happened in this person's
+   * name", and an agent acts in its owner's name even though it holds its own
+   * identity. A logging failure must never turn a deny into a permit, so this
+   * swallows its own errors.
+   */
+  private async record(
+    request: ResourceAccessRequest,
+    resourceUri: string,
+    decision: PolicyDecision,
+  ): Promise<void> {
+    const { audit } = this.options;
+    if (!audit) return;
+    const { principal } = request;
+    try {
+      await audit.append({
+        requestId: decision.requestId,
+        decidedAt: decision.decidedAt,
+        humanId: principal.kind === "human" ? principal.id : principal.ownerId,
+        // Empty when a human reads directly: no Agent was involved to name.
+        agentId: principal.kind === "agent" ? principal.agentId : "",
+        principalKind: principal.kind,
+        action: "resource:" + request.action,
+        resource: resourceUri,
+        effect: decision.effect,
+        reason: decision.reason,
+      });
+    } catch {
+      // Nothing to do but carry on: the decision itself already stands.
+    }
   }
 
   /** Wipes everything this gate staged for a workspace. Call in a `finally`. */

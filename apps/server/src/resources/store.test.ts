@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,11 +7,16 @@ import { ResourceStore } from "./store.js";
 const temporaryRoots: string[] = [];
 
 async function makeStore(): Promise<ResourceStore> {
+  return (await makeStoreAt()).store;
+}
+
+/** Same store, but the root comes back too so a test can plant files in it. */
+async function makeStoreAt(): Promise<{ store: ResourceStore; root: string }> {
   const root = await mkdtemp(path.join(tmpdir(), "launchpad-resources-"));
   temporaryRoots.push(root);
   const store = new ResourceStore(root);
   await store.initialize();
-  return store;
+  return { store, root };
 }
 
 afterEach(async () => {
@@ -27,6 +32,7 @@ describe("resource seeding", () => {
     const all = await store.list();
 
     expect(all.map((ref) => ref.uri)).toEqual([
+      "res://user-a/analytics-summary.md",
       "res://user-a/notes.md",
       "res://user-a/secret-recipe.txt",
       "res://user-b/notes.md",
@@ -122,5 +128,52 @@ describe("resource store isolation", () => {
     // User B's directory must not contain user A's content.
     const bNotes = await readFile(path.join(root, "user-b", "notes.md"), "utf8");
     expect(bNotes).not.toContain("SECRET-RECIPE-42");
+  });
+});
+
+describe("listing a namespace backed by a real folder", () => {
+  it("finds files inside subdirectories", async () => {
+    const { store, root } = await makeStoreAt();
+    await mkdir(path.join(root, "user-a", "project", "src"), { recursive: true });
+    await writeFile(path.join(root, "user-a", "project", "src", "index.ts"), "x\n");
+
+    const uris = (await store.list("user-a")).map((ref) => ref.uri);
+
+    expect(uris).toContain("res://user-a/project/src/index.ts");
+  });
+
+  it("never lists a directory as if it were a resource", async () => {
+    const { store, root } = await makeStoreAt();
+    await mkdir(path.join(root, "user-a", "project"), { recursive: true });
+    await writeFile(path.join(root, "user-a", "project", "notes.md"), "x\n");
+
+    const uris = (await store.list("user-a")).map((ref) => ref.uri);
+
+    // Advertising the directory produces a URI that `read` can only fail on.
+    expect(uris).not.toContain("res://user-a/project");
+    expect(uris).toContain("res://user-a/project/notes.md");
+  });
+
+  it("reports names the URI grammar refuses instead of dropping them silently", async () => {
+    const { store, root } = await makeStoreAt();
+    await writeFile(path.join(root, "user-a", "my notes.txt"), "x\n");
+    await writeFile(path.join(root, "user-a", ".hidden"), "x\n");
+
+    const { resources, skipped } = await store.listDetailed("user-a");
+
+    expect(resources.map((ref) => ref.name)).not.toContain("my notes.txt");
+    expect(skipped).toContain("user-a/my notes.txt");
+    expect(skipped).toContain("user-a/.hidden");
+  });
+
+  it("stops descending before an unbounded tree can hang a listing", async () => {
+    const { store, root } = await makeStoreAt();
+    const deep = path.join(root, "user-a", ...Array(12).fill("nested"));
+    await mkdir(deep, { recursive: true });
+    await writeFile(path.join(deep, "buried.md"), "x\n");
+
+    const uris = (await store.list("user-a")).map((ref) => ref.uri);
+
+    expect(uris.some((uri) => uri.endsWith("buried.md"))).toBe(false);
   });
 });

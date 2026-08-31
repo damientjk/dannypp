@@ -15,7 +15,7 @@ import { capabilityRoutes } from "./capability/routes.js";
 import { resourceRoutes } from "./resources/routes.js";
 import type { CapabilityStore } from "./capability/store.js";
 import type { ResourceStore } from "./resources/store.js";
-import type { ResourceAccessGate } from "./resources/access.js";
+import type { AuditSink, ResourceAccessGate } from "./resources/access.js";
 
 declare module "fastify" {
   interface FastifyRequest { principal?: HumanPrincipal | undefined; }
@@ -58,6 +58,8 @@ export interface MiddlewareDependencies {
   capabilities: CapabilityStore;
   resources: ResourceStore;
   gate: ResourceAccessGate;
+  /** Optional so tests can build an app without one; the server always passes it. */
+  audit?: AuditSink | undefined;
 }
 
 export async function createApp(

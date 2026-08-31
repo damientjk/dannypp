@@ -26,7 +26,7 @@ const agentOfB: AgentPrincipal = {
 function liveCapability(principal: AgentPrincipal = agentOfA, scope?: string) {
   const store = new CapabilityStore();
   return scope === undefined
-    ? store.issueForRun(principal, "run-1")
+    ? store.issueNamespaceRead(principal, "run-1")
     : store.issue({ agentPrincipal: principal, scope });
 }
 
@@ -66,7 +66,7 @@ describe("authorizeCapability -- agent principals", () => {
 
   it("denies a revoked capability", () => {
     const store = new CapabilityStore();
-    const capability = store.issueForRun(agentOfA, "run-1");
+    const capability = store.issueNamespaceRead(agentOfA, "run-1");
     store.revoke(capability.id, "user-a");
 
     expect(

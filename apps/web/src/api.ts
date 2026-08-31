@@ -109,6 +109,11 @@ export const api = {
     request<{ agent: Agent }>("/api/agents/" + id + "/stop", {
       method: "POST",
     }),
+  /** The owner refusing the keycard this Agent's Run is waiting for. */
+  denyCapability: (id: string) =>
+    request<{ denied: boolean }>("/api/agents/" + id + "/deny-capability", {
+      method: "POST",
+    }),
   messages: (id: string) =>
     request<{ messages: Message[] }>("/api/agents/" + id + "/messages"),
   runs: (id: string) =>

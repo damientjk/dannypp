@@ -59,7 +59,9 @@ class ObservingRunner implements AgentRunner {
   }
 }
 
-async function makeService(runner: AgentRunner) {
+/** `capabilityWaitMs` defaults to 0 so tests about staging itself stay instant;
+ *  the wait has its own test below. */
+async function makeService(runner: AgentRunner, capabilityWaitMs = 0) {
   const root = await mkdtemp(path.join(tmpdir(), "launchpad-run-"));
   roots.push(root);
   const config = loadConfig({
@@ -69,6 +71,7 @@ async function makeService(runner: AgentRunner) {
     CODEX_HOME: path.join(root, "codex"),
     ARK_API_KEY: "test-key-value",
     ARK_MODEL: "ep-test",
+    CAPABILITY_WAIT_MS: String(capabilityWaitMs),
   });
   const resources = new ResourceStore(path.join(root, "data", "resources"));
   await resources.initialize();
@@ -91,19 +94,52 @@ async function makeService(runner: AgentRunner) {
   return { service, root };
 }
 
+/** The owner handing this Agent a keycard, exactly as the UI's grant does. */
+function grant(agentId: string, ownerId: string, scope: string): void {
+  capabilityStore.issue({
+    agentPrincipal: { kind: "agent", id: "agent:" + agentId, agentId, ownerId },
+    scope,
+  });
+}
+
 describe("a Run sees exactly what its keycard opens", () => {
+  it("stages ONLY the file the keycard names, and says what it withheld", async () => {
+    // Least privilege, proved physically: a keycard for one file leaves the
+    // owner's other two out of the workspace entirely. The run also has to
+    // report which it was -- a withheld file is simply absent, so the Agent
+    // reports "no such file" and cannot tell refusal from non-existence.
+    const runner = new ObservingRunner();
+    const { service } = await makeService(runner);
+    const caller = callerFor("user-a");
+    const agent = await service.createAgent({ ownerId: "user-a", name: "Reader" });
+    grant(agent.id, "user-a", "read:res://user-a/secret-recipe.txt");
+
+    const { run } = await service.sendMessage(caller, agent.id, "read the recipe");
+    await expect
+      .poll(async () => (await service.getRun(caller, run.id)).status)
+      .toBe("completed");
+
+    expect(runner.sawInbox).toEqual(["secret-recipe.txt"]);
+
+    const finished = await service.getRun(caller, run.id);
+    expect(finished.stagedResources).toEqual(["secret-recipe.txt"]);
+    // A count, not a list: the withheld set is "everything you did not grant".
+    expect(finished.withheldCount).toBe(2);
+  });
+
   it("stages the owner's resources and nobody else's", async () => {
     const runner = new ObservingRunner();
     const { service } = await makeService(runner);
     const caller = callerFor("user-a");
     const agent = await service.createAgent({ ownerId: "user-a", name: "Reader" });
+    grant(agent.id, "user-a", "read:res://user-a/*");
 
     const { run } = await service.sendMessage(caller, agent.id, "read my notes");
     await expect
       .poll(async () => (await service.getRun(caller, run.id)).status)
       .toBe("completed");
 
-    // User A's two resources, and neither of User B's.
+    // User A's three resources, and neither of User B's.
     expect(runner.sawInbox).toEqual([
       "analytics-summary.md",
       "notes.md",
@@ -119,6 +155,7 @@ describe("a Run sees exactly what its keycard opens", () => {
     const { service } = await makeService(runner);
     const caller = callerFor("user-a");
     const agent = await service.createAgent({ ownerId: "user-a", name: "Reader" });
+    grant(agent.id, "user-a", "read:res://user-a/*");
 
     const { run } = await service.sendMessage(caller, agent.id, "go");
     await expect
@@ -135,6 +172,7 @@ describe("a Run sees exactly what its keycard opens", () => {
     const { service } = await makeService(runner);
     const caller = callerFor("user-a");
     const agent = await service.createAgent({ ownerId: "user-a", name: "Reader" });
+    grant(agent.id, "user-a", "read:res://user-a/*");
 
     const first = await service.sendMessage(caller, agent.id, "first run");
     await expect
@@ -146,12 +184,10 @@ describe("a Run sees exactly what its keycard opens", () => {
       "secret-recipe.txt",
     ]);
 
-    // The owner shreds the keycard the run was issued.
-    const issued = capabilityStore.list({ agentId: agent.id });
-    expect(issued.length).toBeGreaterThan(0);
-    const target = issued[0];
-    if (!target) throw new Error("expected an issued capability");
-    capabilityStore.revoke(target.id, "user-a");
+    // The owner shreds every keycard this Agent holds -- the grant AND the
+    // execution keycard, which is what suspends it for the next run.
+    const shredded = capabilityStore.revokeAllForAgent(agent.id, "user-a");
+    expect(shredded.length).toBeGreaterThan(0);
 
     runner.sawInbox = "missing";
     const second = await service.sendMessage(caller, agent.id, "second run");
@@ -167,11 +203,76 @@ describe("a Run sees exactly what its keycard opens", () => {
     expect(staged).toEqual([]);
   });
 
+  // The whole point of the World's request -> grant exchange: staging is the
+  // only moment a resource can physically reach the workspace, so a grant that
+  // lands after it would change nothing about the run that provoked it.
+  it("waits for a mid-run grant, then stages what it opens", async () => {
+    const runner = new ObservingRunner();
+    const { service } = await makeService(runner, 5_000);
+    const caller = callerFor("user-a");
+    const agent = await service.createAgent({ ownerId: "user-a", name: "Reader" });
+
+    // No keycard at all when the run starts.
+    const { run } = await service.sendMessage(caller, agent.id, "read the recipe");
+    await expect.poll(async () => (await service.getRun(caller, run.id)).status).toBe("running");
+    expect(runner.sawInbox).toBe("missing");
+
+    // The owner says yes while the Agent is still waiting at the door.
+    grant(agent.id, "user-a", "read:res://user-a/secret-recipe.txt");
+
+    await expect
+      .poll(async () => (await service.getRun(caller, run.id)).status, { timeout: 10_000 })
+      .toBe("completed");
+    expect(runner.sawInbox).toEqual(["secret-recipe.txt"]);
+  });
+
+  // Launching the model after an explicit refusal spends a real API call to
+  // reach a foregone conclusion, and reports it as a missing file rather than
+  // as the refusal it was.
+  it("fails the run immediately when the owner refuses, without calling the model", async () => {
+    const runner = new ObservingRunner();
+    const { service } = await makeService(runner, 10_000);
+    const caller = callerFor("user-a");
+    const agent = await service.createAgent({ ownerId: "user-a", name: "Reader" });
+
+    const { run } = await service.sendMessage(caller, agent.id, "read the recipe");
+    await expect.poll(async () => (await service.getRun(caller, run.id)).status).toBe("running");
+
+    await service.denyCapabilityRequest(caller, agent.id);
+
+    await expect
+      .poll(async () => (await service.getRun(caller, run.id)).status, { timeout: 10_000 })
+      .toBe("failed");
+
+    const failed = await service.getRun(caller, run.id);
+    expect(failed.error).toContain("owner refused access");
+    // The model was never invoked.
+    expect(runner.sawInbox).toBe("missing");
+  });
+
+  // Ownership alone is not the permission: with no grant, nothing is staged.
+  // And a timeout is not a refusal -- nobody said no, so unlike the test above
+  // the run COMPLETES, free to attempt whatever needs no resource at all.
+  it("gives up waiting and runs with an empty inbox if nobody grants", async () => {
+    const runner = new ObservingRunner();
+    const { service } = await makeService(runner, 750);
+    const caller = callerFor("user-a");
+    const agent = await service.createAgent({ ownerId: "user-a", name: "Reader" });
+
+    const { run } = await service.sendMessage(caller, agent.id, "read the recipe");
+    await expect
+      .poll(async () => (await service.getRun(caller, run.id)).status, { timeout: 10_000 })
+      .toBe("completed");
+
+    expect(runner.sawInbox).toBe("missing");
+  });
+
   it("still runs normally for an agent whose keycard was never revoked", async () => {
     const runner = new ObservingRunner();
     const { service } = await makeService(runner);
     const caller = callerFor("user-b");
     const agent = await service.createAgent({ ownerId: "user-b", name: "B's agent" });
+    grant(agent.id, "user-b", "read:res://user-b/*");
 
     const { run } = await service.sendMessage(caller, agent.id, "go");
     await expect

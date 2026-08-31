@@ -109,15 +109,117 @@ describe("App view toggle", () => {
     vi.mocked(api.messages).mockResolvedValue({ messages: [] });
   });
 
-  it("switches between the dashboard and the world view and back", async () => {
+  // A Run held at the authorization gate is not "Codex working" -- it is
+  // waiting on a decision only the owner can make, in a view they are not
+  // looking at.
+  it("tells the owner when a run is waiting on their permission", async () => {
+    const RUN = {
+      id: "run-1",
+      agentId: AGENT_A.id,
+      status: "running" as const,
+      prompt: "read the recipe",
+      output: null,
+      error: null,
+      usage: null,
+      awaitingCapability: true,
+      withheldCount: 0,
+      stagedResources: [],
+      createdAt: new Date().toISOString(),
+    };
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    vi.mocked(api.runs).mockResolvedValue({ runs: [RUN] });
+
+    render(<App />);
+    fireEvent.click((await screen.findAllByText(AGENT_A.name))[0]!);
+
+    await screen.findByText("waiting for your permission");
+    expect(screen.queryByText(/Codex is reading, editing/)).toBeNull();
+
+    // And it hands them the way to answer it.
+    fireEvent.click(screen.getByText("Review the request in the World"));
+    await screen.findByText("Enter the world");
+  });
+
+  // A refused file is simply absent from the workspace, so the Agent reports
+  // "No such file or directory" -- which reads as "it does not exist" rather
+  // than "you were not allowed to see it". Only the gate knows the difference.
+  it("says a completed run was refused, not that the file was missing", async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    vi.mocked(api.runs).mockResolvedValue({
+      runs: [
+        {
+          id: "run-2",
+          agentId: AGENT_A.id,
+          status: "completed" as const,
+          prompt: "read the recipe",
+          output: "head: cannot open 'inbox/secret-recipe.txt'",
+          error: null,
+          usage: null,
+          awaitingCapability: false,
+          withheldCount: 3,
+          stagedResources: [],
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    });
+
+    render(<App />);
+    fireEvent.click((await screen.findAllByText(AGENT_A.name))[0]!);
+
+    await screen.findByText("Nothing reached the workspace");
+    await screen.findByText(/No keycard covered any of the 3 files/);
+  });
+
+  // Refusals alongside a successful read are least privilege working, not a
+  // failure -- the earlier copy told the owner to "grant a keycard and run
+  // again" underneath a run that had just returned the file they asked for.
+  it("frames refusals as least privilege when the run got what it asked for", async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    vi.mocked(api.runs).mockResolvedValue({
+      runs: [
+        {
+          id: "run-3",
+          agentId: AGENT_A.id,
+          status: "completed" as const,
+          prompt: "read the recipe",
+          output: "SECRET-RECIPE-42",
+          error: null,
+          usage: null,
+          awaitingCapability: false,
+          withheldCount: 2,
+          stagedResources: ["secret-recipe.txt"],
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    });
+
+    render(<App />);
+    fireEvent.click((await screen.findAllByText(AGENT_A.name))[0]!);
+
+    await screen.findByText("Only what you granted reached the workspace");
+    await screen.findByText("secret-recipe.txt");
+    // A count, never a list -- "everything you did not grant" does not scale.
+    await screen.findByText(/2 files in your namespace were withheld/);
+  });
+
+  // Unmounting the World tore down its Pixi app, its poll and every agent's
+  // position, so re-opening it mid-run dropped everyone back on a spawn tile
+  // and asked you to enter the world again.
+  it("keeps the world mounted in the background instead of respawning it", async () => {
     render(<App />);
     await screen.findByText("Create Agent");
 
     fireEvent.click(screen.getByText("World"));
-    await screen.findByText("Enter the world");
+    fireEvent.click(await screen.findByText("Enter the world"));
+    const canvas = await screen.findByTestId("world-canvas");
 
     fireEvent.click(screen.getByText("← Dashboard"));
     await screen.findByText("Create Agent");
+
+    // The very same node, never torn down and rebuilt.
+    expect(screen.getByTestId("world-canvas")).toBe(canvas);
+    fireEvent.click(screen.getByText("World"));
+    expect(screen.getByTestId("world-canvas")).toBe(canvas);
   });
 
   // Signing in happens inside the World, and the session token lives in the API
@@ -131,10 +233,12 @@ describe("App view toggle", () => {
 
     render(<App />);
 
-    // The raw API message is unactionable on its own, so the dashboard names
-    // the way in instead of repeating it.
-    await screen.findByText("You are not signed in");
+    // The raw API message is unactionable on its own, so the dashboard leads
+    // with the way in instead of repeating it -- and instead of offering to
+    // create an Agent, which would only route the visitor into another 401.
+    await screen.findByText("Sign in to manage your Agents.");
     expect(screen.queryByText("Sign in required")).toBeNull();
+    expect(screen.queryByText("Your runtime is ready for an Agent.")).toBeNull();
     expect(screen.queryAllByText(AGENT_A.name)).toHaveLength(0);
 
     fireEvent.click(screen.getByText("Go to the World"));
@@ -143,6 +247,6 @@ describe("App view toggle", () => {
     fireEvent.click(screen.getByText("← Dashboard"));
     // The name renders in both the sidebar row and the detail heading.
     await screen.findAllByText(AGENT_A.name);
-    expect(screen.queryByText("You are not signed in")).toBeNull();
+    expect(screen.queryByText("Sign in to manage your Agents.")).toBeNull();
   });
 });

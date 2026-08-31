@@ -45,7 +45,7 @@ async function makeFixture(policy: PolicyDecisionPoint = pdp) {
 describe("resource access gate -- the enforcement point", () => {
   it("permits and stages user A's resource for user A's agent", async () => {
     const fixture = await makeFixture();
-    const capability = fixture.capabilities.issueForRun(fixture.agentOfA, "run-1");
+    const capability = fixture.capabilities.issueNamespaceRead(fixture.agentOfA, "run-1");
 
     const result = await fixture.gate.access({
       principal: fixture.agentOfA,
@@ -69,7 +69,7 @@ describe("resource access gate -- the enforcement point", () => {
 
   it("DENIES user A's agent reading user B, and stages nothing", async () => {
     const fixture = await makeFixture();
-    const capability = fixture.capabilities.issueForRun(fixture.agentOfA, "run-1");
+    const capability = fixture.capabilities.issueNamespaceRead(fixture.agentOfA, "run-1");
 
     const result = await fixture.gate.access({
       principal: fixture.agentOfA,
@@ -91,7 +91,7 @@ describe("resource access gate -- the enforcement point", () => {
   it("changes the outcome of the very next access after revocation", async () => {
     // This is the "execution changes after revocation" evidence, at unit level.
     const fixture = await makeFixture();
-    const capability = fixture.capabilities.issueForRun(fixture.agentOfA, "run-1");
+    const capability = fixture.capabilities.issueNamespaceRead(fixture.agentOfA, "run-1");
 
     const before = await fixture.gate.access({
       principal: fixture.agentOfA,
@@ -182,7 +182,7 @@ describe("resource access gate -- the enforcement point", () => {
 
   it("writes only under a write-scoped capability", async () => {
     const fixture = await makeFixture();
-    const readOnly = fixture.capabilities.issueForRun(fixture.agentOfA, "run-1");
+    const readOnly = fixture.capabilities.issueNamespaceRead(fixture.agentOfA, "run-1");
 
     const denied = await fixture.gate.access({
       principal: fixture.agentOfA,
@@ -216,7 +216,7 @@ describe("resource access gate -- the enforcement point", () => {
 
   it("derives the agent principal from the capability it was minted for", async () => {
     const fixture = await makeFixture();
-    const capability = fixture.capabilities.issueForRun(fixture.agentOfA, "run-1");
+    const capability = fixture.capabilities.issueNamespaceRead(fixture.agentOfA, "run-1");
     expect(agentPrincipalFor(capability)).toEqual(fixture.agentOfA);
   });
 });
@@ -229,7 +229,7 @@ describe("default-deny when the guard itself fails", () => {
       },
     };
     const fixture = await makeFixture(brokenPdp);
-    const capability = fixture.capabilities.issueForRun(fixture.agentOfA, "run-1");
+    const capability = fixture.capabilities.issueNamespaceRead(fixture.agentOfA, "run-1");
 
     const result = await fixture.gate.access({
       principal: fixture.agentOfA,
@@ -254,7 +254,7 @@ describe("default-deny when the guard itself fails", () => {
       },
     } as unknown as PolicyDecisionPoint;
     const fixture = await makeFixture(nonsensePdp);
-    const capability = fixture.capabilities.issueForRun(fixture.agentOfA, "run-1");
+    const capability = fixture.capabilities.issueNamespaceRead(fixture.agentOfA, "run-1");
 
     const result = await fixture.gate.access({
       principal: fixture.agentOfA,

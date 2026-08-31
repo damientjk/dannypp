@@ -39,6 +39,23 @@ export interface AgentRun {
   output: string | null;
   error: string | null;
   usage: RunUsage | null;
+  /**
+   * The Run is started but held at the authorization gate, waiting for its
+   * owner to grant a keycard. Surfaced so the Playground can say so instead of
+   * claiming Codex is busy working -- nothing is running yet.
+   */
+  awaitingCapability: boolean;
+  /**
+   * How many resources the gate evaluated and withheld.
+   *
+   * A count, not a list: the gate sweeps the owner's whole namespace at run
+   * start, so the withheld set is "everything you did not grant" -- naming a
+   * thousand files nobody asked for would bury the one that matters. What the
+   * Agent could NOT see is a quantity; what it COULD see is the interesting part.
+   */
+  withheldCount: number;
+  /** Resources the gate placed in the workspace, by name. */
+  stagedResources: string[];
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentPrincipal } from "../types.js";
+import { scopeAllows, scopeAllowsAction } from "./scope.js";
 import {
   agentPrincipalFor,
   capabilityStore,
@@ -23,17 +24,36 @@ const agentB: AgentPrincipal = {
 };
 
 describe("capability issuance", () => {
-  it("mints a live keycard scoped to the owner", () => {
+  it("mints a live keycard carrying its owner, agent and run", () => {
     const store = new CapabilityStore();
     const capability = store.issueForRun(agentA, "run-1");
 
     expect(capability.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(capability.scope).toBe("read:res://user-a/*");
     expect(capability.revokedAt).toBeNull();
     expect(capability.ownerId).toBe("user-a");
     expect(capability.agentId).toBe("agent-1");
     expect(capability.runId).toBe("run-1");
     expect(Date.parse(capability.expiresAt)).toBeGreaterThan(Date.now());
+  });
+
+  it("gives a Run permission to EXECUTE and no data access at all", () => {
+    // The whole point of an explicit grant: if starting a Run handed out
+    // `read:res://user-a/*`, the owner's decision to grant would mean nothing.
+    const store = new CapabilityStore();
+    const runCard = store.issueForRun(agentA, "run-1");
+
+    expect(runCard.scope).toBe("owner:user-a");
+    expect(scopeAllows(runCard.scope, "read", "res://user-a/notes.md")).toBe(false);
+    expect(scopeAllowsAction(runCard.scope, "read")).toBe(false);
+  });
+
+  it("mints a namespace-wide READ keycard only when the owner asks for one", () => {
+    const store = new CapabilityStore();
+    const granted = store.issueNamespaceRead(agentA, "run-1");
+
+    expect(granted.scope).toBe("read:res://user-a/*");
+    expect(scopeAllows(granted.scope, "read", "res://user-a/notes.md")).toBe(true);
+    expect(scopeAllows(granted.scope, "read", "res://user-b/notes.md")).toBe(false);
   });
 
   it("refuses to cut a keycard for someone else's house", () => {

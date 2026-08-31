@@ -31,6 +31,7 @@ vi.mock("../api", async () => {
       capabilities: vi.fn(),
       issueCapability: vi.fn(),
       revokeCapability: vi.fn(),
+      denyCapability: vi.fn().mockResolvedValue({ denied: true }),
       readResource: vi.fn(),
     },
     setSessionToken: vi.fn(),
@@ -339,8 +340,6 @@ describe("WorldView", () => {
   // real keycard is scoped to the owner's whole namespace, so a live record
   // covers every room that owner owns.
   it("shows a keycard for every protected room, held or not (task 4)", async () => {
-    const room = agentAssignedRoom(AGENT_A.id, AGENT_A.ownerId);
-    await issueCapability(AGENT_A.id, room.id);
     vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
     vi.mocked(api.capabilities).mockResolvedValue({
       capabilities: [liveCapabilityFor(AGENT_A.id, AGENT_A.ownerId)],
@@ -359,6 +358,54 @@ describe("WorldView", () => {
     expect(screen.getAllByText("another owner").length).toBe(foreign.length);
   });
 
+  // The keycard a Run holds authorises execution, not data (scope
+  // "owner:user-a"). Treating any live card as opening every room made the
+  // owner's grant meaningless on screen.
+  it("shows no rooms held for an Agent carrying only its run keycard", async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    vi.mocked(api.capabilities).mockResolvedValue({
+      capabilities: [{ ...liveCapabilityFor(AGENT_A.id), scope: "owner:user-a" }],
+    });
+    await login();
+
+    fireEvent.click(screen.getByText("Robot A"));
+
+    expect(screen.queryAllByText("keycard held")).toHaveLength(0);
+    expect(screen.getAllByText("no keycard").length).toBeGreaterThan(0);
+  });
+
+  // A shredded Agent is suspended: its next run is refused at execution, so it
+  // never walks to a door and never asks. Without a direct grant there is no
+  // way back, and the demo strands.
+  it("lets the owner grant a keycard with no request pending", async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    await login();
+
+    fireEvent.click(screen.getByText("Robot A"));
+    expect(screen.queryAllByText("keycard held")).toHaveLength(0);
+
+    fireEvent.click(screen.getAllByText("Grant")[0]!);
+
+    await waitFor(() => {
+      expect(api.issueCapability).toHaveBeenCalled();
+    });
+    await screen.findAllByText("keycard held");
+  });
+
+  it("shows only the room a single-file grant opens", async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    vi.mocked(api.capabilities).mockResolvedValue({
+      capabilities: [
+        { ...liveCapabilityFor(AGENT_A.id), scope: "read:res://user-a/secret-recipe.txt" },
+      ],
+    });
+    await login();
+
+    fireEvent.click(screen.getByText("Robot A"));
+
+    expect(await screen.findAllByText("keycard held")).toHaveLength(1);
+  });
+
   it("shows no keycard once the backend capability is revoked", async () => {
     vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
     vi.mocked(api.capabilities).mockResolvedValue({
@@ -370,6 +417,27 @@ describe("WorldView", () => {
 
     expect(screen.queryAllByText("keycard held")).toHaveLength(0);
     expect(screen.getAllByText("no keycard").length).toBeGreaterThan(0);
+  });
+
+  // Regression: the keycard the backend issues at run start is scoped to the
+  // owner's whole namespace, which is not any one room. Shredding used to walk
+  // the per-room cache, match nothing, and still log "3 rooms revoked".
+  it("shreds the namespace-wide keycard the panel is showing", async () => {
+    fakeCapabilities = [liveCapabilityFor(AGENT_A.id, AGENT_A.ownerId)];
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    await login();
+
+    fireEvent.click(screen.getByText("Robot A"));
+    expect((await screen.findAllByText("keycard held")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByText("Shred this agent's keycard"));
+
+    await waitFor(() => {
+      expect(api.revokeCapability).toHaveBeenCalledWith("cap-" + AGENT_A.id);
+    });
+    await waitFor(() => {
+      expect(screen.queryAllByText("keycard held")).toHaveLength(0);
+    });
   });
 
   it("claims a different desk for each of two same-room agents busy in the same poll (finding 1)", async () => {

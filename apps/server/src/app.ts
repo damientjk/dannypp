@@ -186,6 +186,14 @@ export async function createApp(
     return { agent: await service.stopAgent(caller, id) };
   });
 
+  /** The owner refusing the keycard this Agent's Run is waiting for. */
+  app.post("/api/agents/:id/deny-capability", async (request) => {
+    const caller = requireCaller(request);
+    const { id } = agentIdParams.parse(request.params);
+    await service.denyCapabilityRequest(caller, id);
+    return { denied: true };
+  });
+
   app.get("/api/agents/:id/messages", async (request) => {
     const caller = requireCaller(request);
     const { id } = agentIdParams.parse(request.params);

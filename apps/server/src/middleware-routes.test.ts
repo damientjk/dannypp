@@ -95,8 +95,8 @@ describe("capability routes", () => {
 
   it("lists only the signed-in user's own capabilities", async () => {
     const { app, capabilities } = await makeApp();
-    capabilities.issueForRun(agentOfA, "run-1");
-    capabilities.issueForRun(
+    capabilities.issueNamespaceRead(agentOfA, "run-1");
+    capabilities.issueNamespaceRead(
       { kind: "agent", id: "agent:other", agentId: AGENT_ID, ownerId: "user-b" },
       "run-2",
     );
@@ -114,7 +114,7 @@ describe("capability routes", () => {
 
   it("lets the owner shred their keycard and returns the updated record", async () => {
     const { app, capabilities } = await makeApp();
-    const capability = capabilities.issueForRun(agentOfA, "run-1");
+    const capability = capabilities.issueNamespaceRead(agentOfA, "run-1");
     const tokenA = await login(app, "user-a", "demo-a");
 
     const response = await app.inject({
@@ -132,7 +132,7 @@ describe("capability routes", () => {
   it("REFUSES user B shredding user A's keycard", async () => {
     // Revocation is itself an authorization decision, not bookkeeping.
     const { app, capabilities } = await makeApp();
-    const capability = capabilities.issueForRun(agentOfA, "run-1");
+    const capability = capabilities.issueNamespaceRead(agentOfA, "run-1");
     const tokenB = await login(app, "user-b", "demo-b");
 
     const response = await app.inject({
@@ -205,7 +205,7 @@ describe("capability routes", () => {
 describe("resource routes -- the agent read path", () => {
   it("permits a read of the owner's resource and returns the decision", async () => {
     const { app, capabilities } = await makeApp();
-    const capability = capabilities.issueForRun(agentOfA, "run-1");
+    const capability = capabilities.issueNamespaceRead(agentOfA, "run-1");
 
     const response = await app.inject({
       method: "POST",
@@ -224,7 +224,7 @@ describe("resource routes -- the agent read path", () => {
 
   it("DENIES user A's agent reading user B -- the blessed proof, over HTTP", async () => {
     const { app, capabilities } = await makeApp();
-    const capability = capabilities.issueForRun(agentOfA, "run-1");
+    const capability = capabilities.issueNamespaceRead(agentOfA, "run-1");
 
     const response = await app.inject({
       method: "POST",
@@ -244,7 +244,7 @@ describe("resource routes -- the agent read path", () => {
 
   it("denies the same read once the keycard is shredded", async () => {
     const { app, capabilities } = await makeApp();
-    const capability = capabilities.issueForRun(agentOfA, "run-1");
+    const capability = capabilities.issueNamespaceRead(agentOfA, "run-1");
     const payload = {
       uri: "res://user-a/secret-recipe.txt",
       capabilityId: capability.id,
@@ -312,7 +312,7 @@ describe("resource routes -- the agent read path", () => {
 
   it("rejects a traversing URI", async () => {
     const { app, capabilities } = await makeApp();
-    const capability = capabilities.issueForRun(agentOfA, "run-1");
+    const capability = capabilities.issueNamespaceRead(agentOfA, "run-1");
 
     const response = await app.inject({
       method: "POST",
@@ -374,7 +374,7 @@ describe("resource routes -- the human read path", () => {
 describe("resource decisions reach the audit trail", () => {
   it("records a permitted agent read, attributed to the owner", async () => {
     const { app, capabilities, recorded } = await makeApp();
-    const capability = capabilities.issueForRun(agentOfA, "run-1");
+    const capability = capabilities.issueNamespaceRead(agentOfA, "run-1");
 
     const response = await app.inject({
       method: "POST",
@@ -396,7 +396,7 @@ describe("resource decisions reach the audit trail", () => {
 
   it("records the cross-owner refusal, not just the permit", async () => {
     const { app, capabilities, recorded } = await makeApp();
-    const capability = capabilities.issueForRun(agentOfA, "run-1");
+    const capability = capabilities.issueNamespaceRead(agentOfA, "run-1");
 
     const response = await app.inject({
       method: "POST",

@@ -40,6 +40,11 @@ vi.mock("pixi.js", async () => {
   };
 });
 
+// Root-relative fetch, no origin under Node -- see WorldView.test.tsx.
+vi.mock("./world/roomDecor", () => ({
+  loadRoomDecor: vi.fn().mockResolvedValue({ decor: [], equipment: [] }),
+}));
+
 vi.mock("./world/engineMap", async () => {
   const { TiledMapRenderer } = await import("./world/engine/TiledMapRenderer");
   const { Texture } = await import("pixi.js");
@@ -118,7 +123,9 @@ describe("App view toggle", () => {
       id: "run-1",
       agentId: AGENT_A.id,
       status: "running" as const,
-      prompt: "read the recipe",
+      // Names the file, so the room (and therefore the scope) is resolved
+      // from the task rather than falling back to the agent's home room.
+      prompt: "head -n 1 inbox/secret-recipe.txt",
       output: null,
       error: null,
       usage: null,
@@ -136,13 +143,13 @@ describe("App view toggle", () => {
     await screen.findByText("waiting for your permission");
     expect(screen.queryByText(/Codex is reading, editing/)).toBeNull();
 
-    // Both answers are reachable from here. The World only raises a
-    // grant/deny toast for rooms you own, so an Agent reaching into another
-    // owner's namespace produces no request there to answer.
-    fireEvent.click(screen.getByText("Refuse"));
-    await waitFor(() => expect(api.denyCapability).toHaveBeenCalledWith(AGENT_A.id));
+    // Deciding happens in the World, where the room the Agent is standing at
+    // is visible. This panel's job is to say a decision is waiting, and to get
+    // the owner there.
+    expect(screen.queryByText("Grant keycard")).toBeNull();
+    expect(screen.queryByText("Refuse")).toBeNull();
 
-    fireEvent.click(screen.getByText("Give it a keycard"));
+    fireEvent.click(screen.getByText("Go to World view"));
     await screen.findByText("Enter the world");
   });
 

@@ -303,14 +303,6 @@ export default function App() {
   };
 
   /** Refuse the keycard a held Run is waiting for; it continues without one. */
-  const denyKeycard = async (agentId: string) => {
-    try {
-      await api.denyCapability(agentId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not refuse the request");
-    }
-  };
-
   if (authRequired === null) {
     return (
       <main className="auth-screen">
@@ -612,21 +604,14 @@ export default function App() {
                     <div className="thinking-row">
                       <Spinner />
                       {selected.name} holds no keycard, so nothing was placed in its
-                      workspace. Give it one to continue, or refuse and let it run
-                      without.
+                      workspace. Grant or refuse it in the World to continue.
                     </div>
-                    {/* Refusing has to be possible from HERE. The World only
-                        offers a grant/deny toast for rooms you own, so an Agent
-                        reaching into another owner's namespace raises no
-                        request you could answer -- and pointing at the World
-                        for a decision that is not there strands the run until
-                        it times out. */}
+                    {/* Deciding happens in the World, where you can see WHICH
+                        room the Agent is standing at. This panel's job is to
+                        say a decision is waiting and get you there. */}
                     <div className="awaiting-actions">
                       <button className="button button-primary" onClick={() => setView("world")}>
-                        Give it a keycard
-                      </button>
-                      <button className="button" onClick={() => void denyKeycard(selected.id)}>
-                        Refuse
+                        Go to World view
                       </button>
                     </div>
                   </article>

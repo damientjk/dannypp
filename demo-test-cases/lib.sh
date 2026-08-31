@@ -1,59 +1,70 @@
 #!/usr/bin/env bash
-# Shared helpers for the demo test cases.
+# Shared helpers for the gate demo.
 #
-# Sourced by 01-what-works.sh and 02-what-does-not-work.sh. Kept in one place
-# so the two scripts read as a list of cases rather than a list of plumbing.
+# Every scenario in this folder is a PAIR: the same agent, at the same door,
+# with only the permission changed in between. These helpers exist so the
+# scripts read as that contrast rather than as curl plumbing.
 
 BASE="${BASE:-http://localhost:3000}"
 PASS=0
 FAIL=0
 
 blue()  { printf '\033[1;34m%s\033[0m\n' "$*"; }
-green() { printf '\033[0;32m  OK    %s\033[0m\n' "$*"; }
-red()   { printf '\033[0;31m  BAD   %s\033[0m\n' "$*"; }
-grey()  { printf '\033[0;90m        %s\033[0m\n' "$*"; }
+step()  { printf '\033[0;90m      %s\033[0m\n' "$*"; }
+note()  { printf '\033[1;33m      ^ %s\033[0m\n' "$*"; }
+ok()    { printf '\033[0;32m  %-9s %s\033[0m\n' "$1" "$2"; }
+bad()   { printf '\033[0;31m  %-9s %s\033[0m\n' "$1" "$2"; }
 
 json() { curl -sS -H 'content-type: application/json' "$@"; }
 
-# case <description> <expected-status> <expected-substring> <curl args...>
-#
-# Prints OK when the server answered exactly as the case predicts. The
-# expected status is part of the assertion on purpose: "refused" and "crashed"
-# are different outcomes and a demo that blurs them proves nothing.
-case_is() {
-  local description="$1" want_status="$2" want_body="$3"; shift 3
+# Internal. Runs the request and compares status + body against the prediction.
+_attempt() {
+  local verdict="$1" description="$2" want_status="$3" want_body="$4"; shift 4
   local response status body
   response="$(curl -sS -w $'\n%{http_code}' "$@")"
   status="${response##*$'\n'}"
   body="${response%$'\n'*}"
 
   if [[ "$status" == "$want_status" && "$body" == *"$want_body"* ]]; then
-    green "$description"
-    grey "HTTP $status  ·  $want_body"
+    ok "$verdict" "$description"
+    step "$want_body"
     PASS=$((PASS + 1))
   else
-    red "$description"
-    grey "expected HTTP $want_status containing '$want_body'"
-    grey "got HTTP $status: $body"
+    bad "UNEXPECTED" "$description"
+    step "expected $verdict: HTTP $want_status containing '$want_body'"
+    step "got HTTP $status: $body"
     FAIL=$((FAIL + 1))
   fi
 }
 
-# case_absent <description> <forbidden-substring> <curl args...>
-#
-# For the cases where the whole point is that something is NOT in the answer.
-# A status code cannot show that a secret stayed put; only reading the body can.
-case_absent() {
+# goes_through <description> <expected-substring> <curl args...>
+#   The agent has permission and the gate opens.
+goes_through() { _attempt "GOES IN" "$1" 200 "$2" "${@:3}"; }
+
+# stopped_at_gate <description> <expected-reason> <curl args...>
+#   The agent does not have permission and the backend refuses. 403 is the
+#   assertion, not just "an error": being refused and crashing are different
+#   outcomes and a demo that blurs them proves nothing.
+stopped_at_gate() { _attempt "BLOCKED" "$1" 403 "$2" "${@:3}"; }
+
+# turned_away <description> <expected-status> <curl args...>
+#   Not a gate decision -- no session, bad input, unknown id.
+turned_away() { _attempt "REFUSED" "$1" "$2" "" "${@:3}"; }
+
+# stays_hidden <description> <forbidden-substring> <curl args...>
+#   Some refusals can only be proven by reading the body: a status code cannot
+#   show that a secret stayed where it was.
+stays_hidden() {
   local description="$1" forbidden="$2"; shift 2
   local body
   body="$(curl -sS "$@")"
   if [[ "$body" != *"$forbidden"* ]]; then
-    green "$description"
-    grey "no '$forbidden' anywhere in the response"
+    ok "UNSEEN" "$description"
+    step "no '$forbidden' anywhere in the response"
     PASS=$((PASS + 1))
   else
-    red "$description"
-    grey "leaked '$forbidden': $body"
+    bad "LEAKED" "$description"
+    step "found '$forbidden': $body"
     FAIL=$((FAIL + 1))
   fi
 }
@@ -74,9 +85,9 @@ require_server() {
 report() {
   echo
   if [[ "$FAIL" -eq 0 ]]; then
-    blue "== $1: $PASS of $PASS cases behaved as predicted =="
+    blue "== $1: the gate behaved correctly in all $PASS checks =="
   else
-    blue "== $1: $PASS behaved as predicted, $FAIL did NOT =="
+    blue "== $1: $PASS correct, $FAIL WRONG =="
   fi
   [[ "$FAIL" -eq 0 ]]
 }

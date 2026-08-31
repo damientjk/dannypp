@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs both halves of the demo and saves a plain-text transcript next to them.
+# Runs both halves of the gate demo and saves a transcript next to them.
 #
 # This is the one command to run before showing the project to anyone, and the
 # transcript it writes is the artefact to hand over afterwards.
@@ -23,14 +23,15 @@ if ! curl -sS -o /dev/null --max-time 5 "$BASE/api/health" 2>/dev/null; then
 fi
 
 {
-  printf 'Volc Agent Launchpad -- demo test cases\n'
+  printf 'Volc Agent Launchpad -- the gate, demonstrated\n'
   printf 'Backend: %s\n' "$BASE"
-  printf 'Part 1 shows what the app does. Part 2 shows what it refuses,\n'
-  printf 'and where it genuinely stops working.\n'
+  printf 'Every scenario is a pair: the same request sent twice, with only\n'
+  printf 'the permission changed in between. BLOCKED then GOES IN (or the\n'
+  printf 'other way round) is the permission doing the work.\n'
   printf '%s\n' '----------------------------------------------------------'
 } > "$TRANSCRIPT"
 
-for script in 01-what-works.sh 02-what-does-not-work.sh; do
+for script in 01-the-gate.sh 02-the-same-rule-for-agents.sh; do
   printf '\n### %s\n\n' "$script" | tee -a "$TRANSCRIPT"
   # Captured once, printed once, saved once, so the transcript is exactly what
   # was on screen and cannot drift from it.

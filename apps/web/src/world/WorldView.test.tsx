@@ -295,4 +295,36 @@ describe("WorldView", () => {
     const permitEntries = screen.getAllByText(new RegExp(`${room.displayName}: permit`));
     expect(permitEntries).toHaveLength(2);
   });
+
+  it("teleports an agent to the Jail when its task reaches for another owner's room", async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [{ ...AGENT_A, status: "busy" }] });
+    // The realistic overreach: the run's prompt names a folder user-a does
+    // not own. roomForTask resolves it ownership-blind; the guard denies it,
+    // and instead of queueing a request the agent is jailed on the spot.
+    vi.mocked(api.runs).mockResolvedValue({
+      runs: [
+        {
+          id: "run-1",
+          agentId: AGENT_A.id,
+          status: "running",
+          prompt: "fix the deploy config",
+          output: null,
+          error: null,
+          usage: null,
+          createdAt: "",
+        },
+      ],
+    });
+
+    await login();
+
+    await screen.findByText(
+      new RegExp(`${AGENT_A.name} was caught touching Deploy Config → thrown in the Jail`),
+    );
+    // Straight to jail: no access-request toast for a foreign room, the
+    // JAILED badge is in the log, and the roster pill shows the sentence.
+    expect(screen.queryByText(/wants access to Deploy Config/)).toBeNull();
+    expect(screen.getByText("JAILED")).toBeTruthy();
+    expect(screen.getByText("in jail")).toBeTruthy();
+  });
 });

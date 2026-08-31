@@ -194,12 +194,12 @@ export function WorldCanvas({
 }
 
 /**
- * Per-room overlay: an owner-tinted outline plus a name plate.
+ * Per-room overlay: a name plate per room, its text owner-tinted.
  *
- * The outline is what makes ownership legible on the map itself — without it
- * every protected room looks alike, and "this agent may not touch another
- * owner's room" is invisible outside the keycard panel. Blue is yours, red is
- * somebody else's, and unprotected rooms get no outline at all.
+ * The tint is what keeps ownership legible on the map — blue is yours, red
+ * is somebody else's, plain ink needs no permission at all. The accent
+ * *rectangle* that used to accompany it is gone by user request: it sliced
+ * across doorways, the jail's bars, and the furniture.
  *
  * Presentation only: nothing here gates movement or decides access.
  */
@@ -222,13 +222,6 @@ function buildRoomOverlay(
         ? OWNER_OTHER
         : OWNER_SELF;
 
-    if (accent !== null) {
-      layer.addChild(
-        new Graphics()
-          .rect(zone.x * tile, zone.y * tile, zone.width * tile, zone.height * tile)
-          .stroke({ color: accent, width: 2, alignment: 1 }),
-      );
-    }
 
     const label = new Text({
       // Trailing slash marks the room as a folder. Whether it is protected,
@@ -248,18 +241,12 @@ function buildRoomOverlay(
     const topY = (zone.y - 0.5) * renderer.tileSize;
     label.position.set(centreX, topY);
 
-    // Bottom edge is clamped to reach past the zone's own top edge -- the
-    // accent rectangle below draws its top stroke right there, and without
-    // this the plate falls a few px short of it, leaving a sliver of the
-    // colored outline peeking out under the label text.
-    const plateTop = topY - label.height / 2 - 3;
-    const plateBottom = Math.max(topY + label.height / 2 + 3, zone.y * tile + 2);
     const plate = new Graphics()
       .roundRect(
         centreX - label.width / 2 - 6,
-        plateTop,
+        topY - label.height / 2 - 3,
         label.width + 12,
-        plateBottom - plateTop,
+        label.height + 6,
         4,
       )
       .fill({ color: LABEL_PLATE, alpha: 0.85 });

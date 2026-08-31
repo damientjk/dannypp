@@ -115,6 +115,27 @@ def main() -> None:
             else:
                 floor_fill[(x, y)] = floor_gid
 
+        # Wall-covered interior rows (fix round, 2026-08-31): the decor
+        # overlays paint the tall wall's bottom tile -- and, on the top
+        # row, the 2-tile front wall's top tile -- over what the map
+        # considers plain interior floor, so agents pathing there stood
+        # visibly "on" the wall art (user-reported via a plant sitting on
+        # analytics' front wall). Block those rows in the collision layer
+        # only: the floor tile underneath stays, GID_BLOCKED is pure
+        # logic (the same trick as the between-room gap columns below),
+        # and the door column keeps its corridor open on the side the
+        # door actually punches through.
+        door_x, door_y = door
+        wall_rows = [y0 + 1]                    # tall wall's bottom tile
+        if room["row"] == "top":
+            wall_rows.append(y1 - 1)            # front wall's top tile
+        door_side_row = y1 - 1 if room["row"] == "top" else y0 + 1
+        for wy in wall_rows:
+            for x in range(x0 + 1, x1):
+                if x == door_x and wy == door_side_row:
+                    continue
+                collision_fill[(x, wy)] = GID_BLOCKED
+
         # Wall-cap rows: the wall above this room's own room_y0 row grown
         # CAP_H tiles taller, outside the room's own footprint, for visual
         # depth (and, above this, room for the shadow/corner-bevel overlay
@@ -127,7 +148,6 @@ def main() -> None:
         # hallway -> cap-row gap -> door -> room interior uninterrupted.
         cap_x0, cap_ys, cap_x1 = cap_rows(room)
         cap_gid = CAP_GID[room["id"]]
-        door_x, door_y = door
         door_on_cap_side = door_y == y0
         for cap_y in cap_ys:
             for x in range(cap_x0, cap_x1 + 1):

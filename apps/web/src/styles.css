@@ -1581,7 +1581,8 @@ textarea:focus {
 }
 
 .log-row.effect-deny,
-.log-row.effect-denied {
+.log-row.effect-denied,
+.log-row.effect-jailed {
   border-left-color: var(--red);
 }
 
@@ -1617,7 +1618,8 @@ textarea:focus {
 }
 
 .log-badge-deny,
-.log-badge-denied {
+.log-badge-denied,
+.log-badge-jailed {
   background: rgba(224, 122, 116, 0.16);
   color: var(--red);
 }
@@ -1695,7 +1697,8 @@ textarea:focus {
 }
 
 .effect-deny,
-.effect-denied {
+.effect-denied,
+.effect-jailed {
   color: var(--red);
 }
 

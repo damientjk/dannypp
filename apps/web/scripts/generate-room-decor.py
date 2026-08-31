@@ -138,8 +138,11 @@ def build_wall_border_overlay(room, floor_crop):
     - the back wall's body left transparent so the real textured wall tiles
       (and build_wall_shade()'s corner wedges) show through, with a NAVY
       floor-seam line under it;
-    - floor_crop tiled over the front ring row above its top face, since the
-      reference's front wall is nothing but that face;
+    - the front wall: for bottom-row rooms the reference's near-absent
+      exterior treatment (floor to the outer edge, 12px top face); for
+      top-row rooms a full-width partition as tall as the back wall, the
+      side walls terminating on its back edge; for the jail no wall, just
+      white end-pillars its bars decor runs between, flush;
     - the doorway: a one-tile opening at DOOR_COL cut clean through
       whichever wall the door is in (the front face for top-row rooms, the
       whole tall wall for bottom-row rooms -- the same rule as
@@ -153,8 +156,25 @@ def build_wall_border_overlay(room, floor_crop):
     body_x = face_side + LINE               # where a side wall's body starts
     edge_x = body_x + SIDE_STRIP            # NAVY line where that body meets the floor
     seam = back_h - LINE                    # NAVY line under the back wall's body
-    front = h - FRONT_H                     # top of the front wall's face
+    jail = room["theme"] == "jail"
+    top_row = room["row"] == "top"
+    # Front wall height: bottom-row rooms front the map's outer edge, where
+    # the reference keeps a near-absent wall (the 12px top face only).
+    # Other top-row rooms front the hallway with a partition wall as tall
+    # as the back wall, spanning the room's FULL width -- the side walls
+    # stop against its back edge, rather than the partition butting in
+    # between them (user request, matching the pack's castle-wall
+    # reference). The jail has no front wall at all: its earlier kerb read
+    # as a flat strip that dampened the 3D effect (user), so the bars
+    # decor alone is the front, floor running to the outer edge behind it.
+    front = h if jail else h - (back_h if top_row else FRONT_H)
+    # The jail's side walls end in white pillars over the bars' span (the
+    # pack's own jail design terminates its bars into pillars -- user
+    # reference): the bands stop on the pillars' tops and the bars butt
+    # the pillars' inner edges, flush.
+    pillar_top = h - 2 * TILE
     color = side_wall_color(room)
+    face_color = _darken(color, GRADIENT_SHADE)  # matches the side bands' bottom shade
 
     img = Image.new("RGBA", (w, h))
     for y in range(0, h, TILE):
@@ -163,29 +183,48 @@ def build_wall_border_overlay(room, floor_crop):
     d = ImageDraw.Draw(img)
 
     # Side wall bodies, one row at a time for the gradient (PIL has no
-    # linear-gradient fill).
-    for y in range(seam, front):
-        row_color = _darken(color, round(GRADIENT_SHADE * (y - seam) / (front - 1 - seam)))
+    # linear-gradient fill). They stop where the front wall begins -- they
+    # connect to its back -- or, with no front wall (the jail), run to the
+    # outer outline at the map edge.
+    band_end = pillar_top if jail else front
+    for y in range(seam, band_end):
+        row_color = _darken(color, round(GRADIENT_SHADE * (y - seam) / (band_end - 1 - seam)))
         d.rectangle([body_x, y, edge_x - 1, y], fill=row_color)
         d.rectangle([w - edge_x, y, w - body_x - 1, y], fill=row_color)
 
-    # Top faces: WHITE bands, the outer NAVY outline, then the inner
-    # outlines (full-length, so they cross at the corners).
+    # The front wall, then the top faces: WHITE bands, the outer NAVY
+    # outline, and the inner outlines. A top-row front wall spans the
+    # room's FULL width, and everything vertical -- the side walls' bands,
+    # top faces, and outlines -- terminates on its back edge in a
+    # T-junction, like the reference: the wall in front runs unbroken, the
+    # walls behind connect into it.
     d.rectangle([0, 0, w - 1, face_end - 1], fill=WHITE)
-    d.rectangle([0, h - face_end, w - 1, h - 1], fill=WHITE)
-    d.rectangle([0, 0, face_side - 1, h - 1], fill=WHITE)
-    d.rectangle([w - face_side, 0, w - 1, h - 1], fill=WHITE)
+    if top_row and not jail:
+        d.rectangle([0, front, w - 1, front + LINE - 1], fill=NAVY)
+        d.rectangle([0, front + LINE, w - 1, front + LINE + FACE_END - 1], fill=WHITE)
+        d.rectangle([0, front + FRONT_H - LINE, w - 1, front + FRONT_H - 1], fill=NAVY)
+        d.rectangle([0, front + FRONT_H, w - 1, h - 1], fill=face_color)
+    elif not top_row:
+        d.rectangle([0, h - face_end, w - 1, h - 1], fill=WHITE)
+        d.rectangle([0, front, w - 1, front + LINE - 1], fill=NAVY)
+    if jail:
+        for px0 in (0, w - TILE):
+            d.rectangle([px0, pillar_top, px0 + TILE - 1, h - 1], fill=WHITE)
+            d.rectangle([px0, pillar_top, px0 + TILE - 1, h - 1], outline=NAVY, width=LINE)
+    vert_end = (pillar_top if jail else front if top_row else h) - 1
+    d.rectangle([0, 0, face_side - 1, vert_end], fill=WHITE)
+    d.rectangle([w - face_side, 0, w - 1, vert_end], fill=WHITE)
     d.rectangle([0, 0, w - 1, h - 1], outline=NAVY, width=LINE)
-    d.rectangle([face_side, 0, body_x - 1, h - 1], fill=NAVY)
-    d.rectangle([w - body_x, 0, w - face_side - 1, h - 1], fill=NAVY)
+    d.rectangle([face_side, 0, body_x - 1, vert_end], fill=NAVY)
+    d.rectangle([w - body_x, 0, w - face_side - 1, vert_end], fill=NAVY)
     d.rectangle([0, face_end, w - 1, face_end + LINE - 1], fill=NAVY)
-    d.rectangle([0, front, w - 1, front + LINE - 1], fill=NAVY)
 
     # Floor outline: the seam under the back wall's body, and the side
-    # bodies' inner edges down to the front wall.
+    # bodies' inner edges down to wherever the bands end -- the front
+    # wall's back, or the map edge when there is no front wall.
     d.rectangle([edge_x, seam, w - edge_x - 1, seam + LINE - 1], fill=NAVY)
-    d.rectangle([edge_x, seam, edge_x + LINE - 1, front - 1], fill=NAVY)
-    d.rectangle([w - edge_x - LINE, seam, w - edge_x - 1, front - 1], fill=NAVY)
+    d.rectangle([edge_x, seam, edge_x + LINE - 1, band_end - 1], fill=NAVY)
+    d.rectangle([w - edge_x - LINE, seam, w - edge_x - 1, band_end - 1], fill=NAVY)
 
     # Back wall body: transparent, the map's own wall tiles show through.
     d.rectangle([body_x, face_end + LINE, w - body_x - 1, seam - 1], fill=(0, 0, 0, 0))
@@ -199,11 +238,16 @@ def build_wall_border_overlay(room, floor_crop):
         d.rectangle([dx0, 0, dx1 - 1, seam + LINE - 1], fill=(0, 0, 0, 0))
         d.rectangle([dx0 - LINE, 0, dx0 - 1, seam + LINE - 1], fill=NAVY)
         d.rectangle([dx1, 0, dx1 + LINE - 1, seam + LINE - 1], fill=NAVY)
-    else:
-        # Through the front face: floor runs out over it, jambs either side.
+    elif not jail:
+        # Through the front wall: floor runs out through the wall's full
+        # two-tile depth, jambs either side -- the same corridor passage
+        # the bottom rooms' tall wall gets, mirrored.
+        img.paste(floor_crop, (dx0, h - 2 * TILE))
         img.paste(floor_crop, (dx0, h - TILE))
         d.rectangle([dx0 - LINE, front, dx0 - 1, h - 1], fill=NAVY)
         d.rectangle([dx1, front, dx1 + LINE - 1, h - 1], fill=NAVY)
+    # jail: no doorway in the wall at all -- the cell door in the bars decor
+    # is the way in, visually; agents are teleported (agentSim.jailAgent).
 
     return img
 

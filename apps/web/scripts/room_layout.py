@@ -76,7 +76,7 @@ ROOMS = [
          floor=("Room_Builder_Floors", 0, 13), wall=13),   # tan vertical wood-plank paneling
     dict(id="analytics", owner="user-a", row="top", x0=12, theme="sports",
          floor=("Room_Builder_Floors", 5, 12), wall=2),    # flat painted grey, gymnasium wall
-    dict(id="database", owner="user-b", row="top", x0=24, theme="japanese",
+    dict(id="database", owner="user-b", row="top", x0=24, theme="jail",
          floor=("Room_Builder_Floors", 1, 15), wall=16),   # muted mauve-grey, washi-paper-adjacent
     dict(id="billing", owner="user-a", row="bottom", x0=0, theme="gym",
          floor=("Room_Builder_Floors", 13, 17), wall=15),  # grey stone/concrete texture
@@ -93,14 +93,19 @@ assert len(ROOMS) == 6
 assert all(r["x0"] + ROOM_W <= WIDTH for r in ROOMS)
 
 # Interior-relative (col 0-8, row 0-5) desk spawn positions, in
-# desk-<id>-1/-2/... order. living-room has none -- it's the one
-# unprotected, deskless common room (FILE_ROOMS.deskIds == []).
+# desk-<id>-1/-2/... order. living-room has none (the one unprotected
+# common room), and neither does database -- it's the jail cell now, and
+# nobody works in a jail (FILE_ROOMS.deskIds == [] for both).
 DESKS = {
     "auth-module": [(3, 2), (5, 2)],
     "analytics": [(3, 2), (6, 3)],
-    "database": [(3, 2), (5, 2)],
     "billing": [(3, 3), (5, 3)],
-    "deploy-config": [(2, 4), (6, 3)],
+    # desk 0 is the keyboard player's spot: (1,2) stands the agent right
+    # below the keyboard decor at (0.5, 0.5) (the piano it replaced is gone
+    # -- user request). desk 1 (the animated amplifier) moved up to (6,1)
+    # so the amp sits in the backline slot between the two wall-leaning
+    # guitars, its base one stage-depth step in front of theirs.
+    "deploy-config": [(1, 2), (6, 1)],
 }
 
 # Which desk index (0-based) in DESKS gets an animated equipment sprite, and
@@ -111,7 +116,7 @@ DESKS = {
 # Desks not listed here still work exactly the same in agentSim.ts --
 # behaviorMode still flips to "working" -- they just don't get an animated
 # prop. No plain "sit and use" equivalent exists in the pack for
-# analytics-desk-1 (ping-pong table) or database-desk-1 (chabudai table);
+# analytics-desk-1 (ping-pong table);
 # auth-module's two reading desks are the disclosed Library gap from the
 # design spec §5 (no non-Halloween reading/book animation exists at all).
 # Those three become static DECOR entries instead -- see Tasks 7, 8, 9.
@@ -126,9 +131,14 @@ EQUIPMENT = {
     # plain static DECOR entries instead (see DECOR["billing"]) until the
     # underlying animation bug is fixed properly. DESKS["billing"] is
     # unchanged -- agents still route to and work at (3,3)/(5,3).
-    ("analytics", 1): ("animated_TV_reportage_32x32.png", 72),
-    ("database", 1): ("animated_incense_burner_4_10_loop_32x32.png", 13),
-    ("deploy-config", 0): ("animated_wall_piano_32x32.png", 16),
+    # ("analytics", 1) TV-reportage binding removed (fix round 5,
+    # 2026-08-31): the user flagged its sprite as "a weird clipped
+    # drawing" and asked for it gone; desk 1 keeps working like every
+    # other unlisted desk (billing precedent).
+    # ("deploy-config", 0) piano binding removed (fix round, 2026-08-31):
+    # the user swapped the animated wall-piano for their own static
+    # Music/Piano.png (see DECOR); the desk keeps working like every other
+    # unlisted desk.
     ("deploy-config", 1): ("animated_amplifier_32x32.png", 3),
 }
 
@@ -171,7 +181,7 @@ DECOR = {
              src=REPO_ROOT / "Library" / "Classroom_and_Library_Singles_Shadowless_32x32_5.png"),
         dict(col=5, row=2, dest="table-book-2.png",
              src=REPO_ROOT / "Library" / "Classroom_and_Library_Singles_Shadowless_32x32_7.png"),
-        dict(col=1, row=4, dest="plant.png",
+        dict(col=0, row=3, dest="plant.png",  # clear of the 2-tile front wall
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_16.png"),
     ],
     # 6_Music_and_Sport_32x32's Singles folder turned out to be almost
@@ -185,123 +195,75 @@ DECOR = {
     # ping-pong table comes from 14_Basement_Singles_32x32, which has a
     # proper top-down table-tennis sprite with a net.
     "analytics": [
-        # Fix round 3: full rebuild from the user's reorganized Sports Room/
-        # folder. "trophy.png"/"trophy 2.png" are byte-identical to the old
-        # Music_and_Sport_Singles_32x32_157/158.png two-person scene this
-        # room already used and dropped -- flagged that round, since the
-        # byte-match looked like a mislabel. Fix round 4: the user directly
-        # confirmed these ARE the intended trophy crop regardless of the
-        # byte-match (they deliberately chose this source file), so they're
-        # in now -- see the pair below. Not literally "top-left" (col=1):
-        # that spot has been open since fix round 2, but fix round 3's
-        # table-tennis-table now covers cols 0-2 for rows 0-3, and each
-        # trophy's real 96px height (3 tiles) reaches from row=-1 down to
-        # row=1 regardless of which column it's placed in -- so any
-        # col=0-2 placement here would overlap the table. Cols 5-8 is the
-        # ONLY collision-free side-by-side span left in that row=-1..1
-        # band (checked all 9 possible column starts programmatically) --
-        # see the report for the full search.
-        #
-        # hoop.png/basketball.png are byte-identical to this room's already-
-        # correct existing assets (_76/_79) -- re-sourced to Sports Room/
-        # per the fix request anyway, positions unchanged (col=4, row=-1
-        # and col=4, row=1 respectively; hoop's 48px height only reaches
-        # row -0.5, so row=1 keeps clear daylight, as established in fix
-        # round 2).
-        dict(col=4, row=-1, dest="basketball-hoop.png",
-             src=REPO_ROOT / "Sports Room" / "hoop.png"),
-        dict(col=4, row=1, dest="basketball.png",
-             src=REPO_ROOT / "Sports Room" / "basketball.png"),
-        # Trophy pair (64x96 each, fix round 4 -- see the leading comment
-        # above for why cols 5-8, not col=1). Placed side by side, flush
-        # against each other (col=5 trophy's right edge lands exactly on
-        # col=7's left edge, no gap) and flush against the room's right
-        # interior edge (col=7 + 2 tiles = col 9, the exact boundary).
-        # Both sit right beside the hoop at col=4 with no gap either.
-        dict(col=5, row=-1, dest="trophy-left.png",
+        # Fix round 5 (user's circled screenshot): the table-tennis table
+        # moves to the room's centre -- freeing the top-left corner fix
+        # round 4 proved impossible while the table lived at cols 0-2 --
+        # so the trophy pair now stands side by side at the top left
+        # (cols 0-3, flush), the basketball + hoop shift right to col 7
+        # (same clear-daylight vertical pair as before), the racket lies
+        # ON the table (listed after it, draw-order-on-top), the plant is
+        # gone (it stood on the front wall face -- the same report drove
+        # the wall-collision fix in generate-world-map.py), and the
+        # TV-reportage EQUIPMENT binding is removed below (user: "weird
+        # clipped drawing"; desk 1 keeps working unlisted, billing
+        # precedent).
+        dict(col=0, row=-1, dest="trophy-left.png",
              src=REPO_ROOT / "Sports Room" / "trophy.png"),
-        dict(col=7, row=-1, dest="trophy-right.png",
+        dict(col=2, row=-1, dest="trophy-right.png",
              src=REPO_ROOT / "Sports Room" / "trophy 2.png"),
-        # racket 1.png (32x32) -- used ONCE, not duplicated into a pair.
-        # This is the same file fix round 2 used twice as "racquet-1"/
-        # "racquet-2" (then read as "a pair of crossed paddles"); this
-        # round's request re-describes it as "a single racquet/paddle" and
-        # explicitly leaves the 1-vs-2 call to me. Placed once, beside the
-        # table, since duplicating a single-item asset into a fake pair
-        # was the thing that needed correcting last round in the first
-        # place.
-        dict(col=3, row=1, dest="racket.png",
-             src=REPO_ROOT / "Sports Room" / "racket 1.png"),
-        # table tennis table.png (80x128, real 2.5x4-tile footprint --
-        # this room's largest item by far). Placement forced by geometry,
-        # not aesthetics: this item's 4-tile height means ANY vertical
-        # position spans rows 2 AND 3 (both desks' rows) in this 6-row
-        # interior -- proven by checking all 3 tile-aligned Y options, see
-        # report. That leaves column placement as the only lever, and the
-        # only column gap wide enough for 80px (96px clear at col=0-2,
-        # avoiding desk-analytics-1's col=3 and desk-analytics-2's col=6)
-        # is the left side, not literally "the middle" the request asked
-        # for -- there's no collision-free way to center an item this
-        # size between two desks 3 columns apart in a 9-column room.
-        # row=0 is legitimate floor here (database's old shoji screens
-        # used it too), not the wall itself.
-        dict(col=0, row=0, dest="table-tennis-table.png",
+        dict(col=7, row=-1.5, dest="basketball-hoop.png",
+             src=REPO_ROOT / "Sports Room" / "hoop.png"),
+        dict(col=7, row=1, dest="basketball.png",
+             src=REPO_ROOT / "Sports Room" / "basketball.png"),
+        # Centred: 80x128 canvas, opaque (14,6)-(80,110), so paste (96,40)
+        # -> opaque centre (143,98) vs the interior's own (144,96). Its
+        # left edge brushes desk-analytics-1's tile (3,2) -- deliberate:
+        # the working agent reads as standing at the table.
+        dict(col=3, row=1.25, dest="table-tennis-table.png",
              src=REPO_ROOT / "Sports Room" / "table tennis table.png"),
-        # plant.png: kept at its last-committed position (col=1, row=4),
-        # NOT the (col=0, row=3) this line had picked up from an unrelated
-        # concurrent edit (a "2-tile front wall" comment, apparently a
-        # side effect of the other session's jail-cell work landing inside
-        # this room's block too). Reverted deliberately, not just left
-        # alone: (0,3) makes the table above geometrically unplaceable
-        # anywhere in this room (proven -- every Y position's clear x-gap
-        # tops out at 64px against the table's 80px need once col=0 is
-        # blocked), while (1,4) leaves a clean 96px gap. This fix request's
-        # own "plant: unchanged, keep as-is" reads as relative to this
-        # room's last commit, not a same-named line another room's task
-        # happened to also touch. Flagged in the report.
-        dict(col=1, row=4, dest="plant.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_16.png"),
+        dict(col=3.5, row=2.75, dest="racket.png",
+             src=REPO_ROOT / "Sports Room" / "racket 1.png"),
+        # Two more loose balls (user request), scattered bottom-right at
+        # the circled spot: _77 (yellow) and _78 (blue-green) from the
+        # same sports singles folder as the basketball. Staggered
+        # diagonally; ball-2's opaque bottom (162) kisses the front
+        # wall's top line (160) by 2px -- resting against the wall base.
+        dict(col=7, row=3.75, dest="ball-yellow.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_77.png"),
+        dict(col=8, row=4.25, dest="ball-blue.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_78.png"),
     ],
-    # 20_Japanese_Interiors_Singles_32x32/ has a shoji screen, several
-    # kotatsu-style low tables, and two distinct potted bonsai as clean
-    # Singles files. It does NOT have a plain flat floor cushion (zabuton)
-    # -- the only cushion-shaped Singles items are either an L-backed
-    # zaisu chair or a stacked pile of round poufs -- but the category's
-    # composite sheet (20_Japanese_interiors_32x32.png, note lowercase
-    # "interiors" in that filename vs. the Singles folder's capitalized
-    # one) has a clean row of 5 flat square cushions that never got split
-    # out, same lesson as Tasks 7/8's cropped items (see task-9-report.md).
-    # _61 and _62 (the two shoji files) are byte-identical, so shoji-right
-    # just reuses _61 rather than copying a pointless duplicate under a
-    # different source name.
+    # Jail cell (was the Japanese room -- see git history for that decor).
+    # Every src below is the exact 18_Jail_Singles_32x32 file the user's
+    # hand-picked jail/ crops at the repo root byte-match (verified by
+    # pixel-comparing all five against every Singles file in the pack):
+    # _44 toilet (1x2 tiles), _48 toilet-paper roll, _38 bunk bed (1x3),
+    # _19 a full-bleed 1x2 front-facing bars segment, _20 the same bars
+    # with a lock plate (the cell door). Layout per the user's marked-up
+    # screenshot: toilet + paper in the top-left corner, two beds top-right,
+    # and the bars standing across the interior's last row, bottom rail
+    # flush with the room's outer edge (no kerb under them -- its flat
+    # strip dampened the 3D effect; see build_wall_border_overlay's
+    # front-wall note), the door segment on the room's own DOOR_COL
+    # column, bars everywhere else. Agents are teleported in, never walk in -- see
+    # jailAgent in src/world/agentSim.ts.
     "database": [
-        dict(col=1, row=0, dest="shoji-left.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/20_Japanese_Interiors_Singles_32x32/Japanese_Interiors_Singles_32x32_61.png"),
-        dict(col=7, row=0, dest="shoji-right.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/20_Japanese_Interiors_Singles_32x32/Japanese_Interiors_Singles_32x32_61.png"),
-        # Matches desk index 0 (desk-database-1) exactly, same pattern as
-        # auth-module's reading desks and analytics's ping-pong table --
-        # this IS that desk's visual reskin. 64x64 (2x2 tiles), so it
-        # occupies cols 3-4 / rows 2-3 and leaves desk index 1 at (5,2)
-        # (the animated incense burner, a single 32x32 tile) untouched.
-        dict(col=3, row=2, dest="chabudai.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/20_Japanese_Interiors_Singles_32x32/Japanese_Interiors_Singles_32x32_51.png"),
-        # Cropped from the composite sheet, not a Singles file -- see the
-        # block comment above. Both are 26x24px, well inside a single
-        # tile. Placed at col 2 / col 5 (not the brief's draft col
-        # 3/col 5) so neither sits under the chabudai's own cols 3-4
-        # footprint; each lands directly beside one of the table's two
-        # front corners instead.
-        dict(col=2, row=3, dest="cushion-1.png",
-             src="1_Interiors/32x32/Theme_Sorter_32x32/20_Japanese_interiors_32x32.png",
-             crop=(354, 404, 380, 428)),
-        dict(col=5, row=3, dest="cushion-2.png",
-             src="1_Interiors/32x32/Theme_Sorter_32x32/20_Japanese_interiors_32x32.png",
-             crop=(450, 404, 476, 428)),
-        dict(col=1, row=4, dest="bonsai-left.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/20_Japanese_Interiors_Singles_32x32/Japanese_Interiors_Singles_32x32_56.png"),
-        dict(col=7, row=4, dest="bonsai-right.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/20_Japanese_Interiors_Singles_32x32/Japanese_Interiors_Singles_32x32_57.png"),
+        dict(col=0, row=0, dest="toilet.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/18_Jail_Singles_32x32/Jail_Singles_32x32_44.png"),
+        dict(col=1, row=0, dest="toilet-paper.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/18_Jail_Singles_32x32/Jail_Singles_32x32_48.png"),
+        # col 6.5, not 7: a half-tile gap between the two beds (the right
+        # one stays flush against the wall), per the user's review.
+        dict(col=6.5, row=0, dest="bed-left.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/18_Jail_Singles_32x32/Jail_Singles_32x32_38.png"),
+        dict(col=8, row=0, dest="bed-right.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/18_Jail_Singles_32x32/Jail_Singles_32x32_38.png"),
+        *[dict(col=col, row=5,
+               dest="cell-door.png" if col == DOOR_COL - 1 else f"bars-{col}.png",
+               src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/18_Jail_Singles_32x32/"
+                   + ("Jail_Singles_32x32_20.png" if col == DOOR_COL - 1
+                      else "Jail_Singles_32x32_19.png"))
+          for col in range(9)],
     ],
     # Fix round (2026-08-31): full redo with the user's own "Gym Room/"
     # photo-real asset set (repo-root/Gym Room/, native 32px scale -- no
@@ -390,11 +352,11 @@ DECOR = {
              src=REPO_ROOT / "Gym Room" / "floor bottom middle.png"),
         dict(col=2, row=5, dest="floor-bottom-right.png",
              src=REPO_ROOT / "Gym Room" / "floor bottom right.png"),
-        dict(col=0, row=3, dest="dumbbell-rack.png",
+        dict(col=0, row=2.5, dest="dumbbell-rack.png",  # bottom clears the mats (opaque ends y=126 < 128)
              src=REPO_ROOT / "Gym Room" / "Dumbbell rack.png"),
-        dict(col=2, row=4, dest="yoga-ball.png",
+        dict(col=3, row=4, dest="yoga-ball.png",  # right of the mats (opaque starts x=108 > 96)
              src=REPO_ROOT / "Gym Room" / "Yoga ball, put this near the flooring.png"),
-        dict(col=1, row=-2, dest="punching-bag-1.png",
+        dict(col=0.5, row=-2, dest="punching-bag-1.png",  # half-tile gap to bag-2
              src=REPO_ROOT / "Gym Room" / "Punching bag.png"),
         dict(col=2, row=-2, dest="punching-bag-2.png",
              src=REPO_ROOT / "Gym Room" / "Punching bag.png"),
@@ -471,14 +433,11 @@ DECOR = {
     # round) so it still sits directly under tv-console -- now genuinely
     # closer to the wall than its old row=4, just not literally touching
     # it, which the numbers don't support without overlapping the arcade
-    # or tv-console. All three segments are flipped vertically
-    # (flip=True, Image.FLIP_TOP_BOTTOM) as of this round -- the reviewer
-    # found the un-flipped sprite's striped cushion bands (its backrest, by
-    # the pack's own art convention) were on top, seat slab on the bottom,
-    # meaning the seat faced south (away from the TV) before the flip. Not
-    # independently re-confirmed with a screenshot this round (browser
-    # unavailable) -- flip applied on the reviewer's structural read, not
-    # verified live.
+    # or tv-console. A previous round flipped all three segments
+    # vertically (flip=True) on a reviewer's structural read, never
+    # verified live; the user's screenshot showed the result upside down
+    # (feet on top, trim on the floor). Flip removed -- the pieces render
+    # exactly as they sit in sofa/, per the user.
     #
     # Pool table + balls: "middle-left, avoid the door column." A 3-tile/
     # 96px table at cols 1-3 (the brief's own suggested area) would abut the
@@ -508,26 +467,10 @@ DECOR = {
     # doorway (y 608-672 vs. the door's own y 416-480), decor doesn't gate
     # movement, and nothing here reads as blocking the entrance.
     #
-    # chair-reversed.png used to flank the table on the immediate left at
-    # this same row (col=3/row=4, touching the table) -- a fix round moved
-    # it per the user's marked-up screenshot, wanting it out of that tight
-    # flanking spot. The dot pointed roughly south of the table/chair-right
-    # gap, but row=5 was checked first (per this fix's own instruction to
-    # verify, not assume) and genuinely overflows: y=640, +64px height =
-    # 704, 32px past the interior's own bottom edge (672) -- there is no
-    # row=5 room in this room at all, confirmed, not assumed. With south
-    # off the table, col=3 is still the only fully clear column in this
-    # part of the room (immediately west of the door, one tile east of the
-    # pool table) -- moved there but to row=2 instead of row=4, so it's
-    # no longer touching the table (previously flush at x=576; now a full
-    # row separates their y-ranges, x=[512,576) vs the snack cluster's own
-    # y=[608,672)) and sits in the same open floor band as the pool table
-    # and sofa rather than pinned to the room's very back row. This is a
-    # shift *north*, not literally "down" -- flagged here and in the fix
-    # report, since south genuinely isn't available and "toward the open
-    # floor, decoupled from flanking the table" was the closest honest
-    # reading of a hand-drawn, non-exact instruction once the real numbers
-    # ruled out the literal one.
+    # chair-reversed.png has moved twice (flanking the table at col=3/
+    # row=4, then parked mid-room at col=3/row=2); this round the user
+    # marked its spot directly, south of the snack table at the room's
+    # bottom edge -- see the entry's own comment for the exact numbers.
     "living-room": [
         dict(col=1, row=-1, dest="arcade-1.png",
              src=REPO_ROOT / "arcade" / "arcade machine 1.png"),
@@ -542,17 +485,29 @@ DECOR = {
         dict(col=1, row=3, dest="pool-balls.png",
              src=REPO_ROOT / "arcade" / "pool balls.png"),
         dict(col=6, row=2, dest="sofa-left.png",
-             src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_51.png", scale=2/3, flip=True),
+             src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_51.png", scale=2/3),
         dict(col=7, row=2, dest="sofa-mid.png",
-             src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_52.png", scale=2/3, flip=True),
+             src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_52.png", scale=2/3),
         dict(col=8, row=2, dest="sofa-right.png",
-             src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_53.png", scale=2/3, flip=True),
-        dict(col=3, row=2, dest="chair-reversed.png",
-             src=REPO_ROOT / "arcade" / "chair reversed.png"),
+             src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_53.png", scale=2/3),
         dict(col=5, row=4, dest="snack-table.png",
              src=REPO_ROOT / "arcade" / "snack table.png"),
-        dict(col=7, row=4, dest="chair-right.png",
+        # row=3.5: opaque bottom (dy 62 -> abs 654) lines up with the
+        # barrel's (656), per the user -- "in line with the table".
+        dict(col=7, row=3.5, dest="chair-right.png",
              src=REPO_ROOT / "arcade" / "chari right.png"),
+        # col=5 centres its opaque part (dx 10..54) under the barrel and
+        # keeps it clear of the door span (opaque x>=586 vs door end 576).
+        # row=5.125 is the practical floor: the user asked for air between
+        # chair and table, and the floor visually runs past the nominal
+        # interior edge (672) to the front wall's NAVY line at abs 692 --
+        # opaque bottom lands at 688, 4px above it. The barrel's opaque
+        # bottom (656) vs the chair's top (650) still overlap 6px; a full
+        # gap doesn't fit (barrel bottom to front line is 36px, the chair's
+        # opaque part is 38px tall). Listed after snack-table so the
+        # residual overlap draws chair-over-barrel.
+        dict(col=5, row=5.125, dest="chair-reversed.png",
+             src=REPO_ROOT / "arcade" / "chair reversed.png"),
     ],
     # Fix round: swapped in the user's fresh Music/ crops (repo-root/Music/,
     # native 32px-tier -- no scale needed) over the original picks, piano and
@@ -572,8 +527,10 @@ DECOR = {
     #   straight-pole microphone stand (companion to _64's boom stand) --
     #   not a stool, not used here since one mic stand is enough, flagged in
     #   the report for the coordinator.
-    # - _4.png is a market/shop stall (canopy + counter) as guessed --
-    #   architecture-scale and thematically wrong for a room prop, dropped.
+    # - _4.png's "market/shop stall (canopy + counter)" read was wrong
+    #   too: viewed again, it's an upright piano (red lid over sheet music
+    #   + a full keyboard). The user relabelled it Piano.png and it now
+    #   replaces the animated wall-piano as the room's corner piano.
     # _51.png (existing guitar-electric) is byte-identical to Music/_51.png,
     # so its src stays pointed at the original moderninteriors-win path.
     # No acoustic-guitar file exists in the new set, so guitar-acoustic is
@@ -589,19 +546,38 @@ DECOR = {
     # unused) instead of col=1/col=7, and the new mic-stand took col=7's
     # freed-up lower half (row=4, below speaker-2, clear of the amplifier).
     "deploy-config": [
-        dict(col=1, row=2, dest="speaker-1.png",
-             src=REPO_ROOT / "Music" / "Music_and_Sport_Singles_32x32_43.png"),
-        dict(col=7, row=2, dest="speaker-2.png",
-             src=REPO_ROOT / "Music" / "Music_and_Sport_Singles_32x32_44.png"),
-        dict(col=0, row=2, dest="guitar-electric.png",
+        # Fix round: spread the band across the top of the room ("occupy
+        # more of the top so it looks fuller" -- user). The backline (blue
+        # guitar / amp equipment at desk (6,1) / speaker / red guitar)
+        # leans against the tall top wall, flanking the door span (col 4)
+        # on its right -- speaker at row=-1 (the arcade-cabinet
+        # convention), guitars half a tile lower (row=-0.5, fix nudge). The
+        # user's keyboard.png replaces the corner piano (removed, same
+        # round) in the upper-left, and the drums moved up under it.
+        dict(col=5, row=-0.5, dest="guitar-electric.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_51.png"),
-        dict(col=8, row=2, dest="guitar-electric-2.png",
+        dict(col=7, row=-1, dest="speaker.png",
+             src=REPO_ROOT / "Music" / "Music_and_Sport_Singles_32x32_43.png"),
+        dict(col=8, row=-0.5, dest="guitar-electric-2.png",
              src=REPO_ROOT / "Music" / "Music_and_Sport_Singles_32x32_52.png"),
-        dict(col=4, row=4, dest="drum-kit.png",
-             src=REPO_ROOT / "Music" / "Music_and_Sport_Singles_32x32_39.png"),
-        dict(col=3, row=4, dest="drum-stand.png",
-             src=REPO_ROOT / "Music" / "Music_and_Sport_Singles_32x32_40.png"),
-        dict(col=7, row=4, dest="mic-stand.png",
+        # The keyboard (64x64, opaque dy 14..56): upper-left, "left and
+        # above of the drum" -- its player is desk 0 at (1,2), directly
+        # under its centre (opaque centre x=49 vs the tile's 48).
+        dict(col=0.5, row=0.5, dest="keyboard.png",
+             src=REPO_ROOT / "Music" / "keyboard.png"),
+        # Drums per the user's relabelled crops: "Drum LEFT.png" (the kit,
+        # 64px) left, "Drum Right.png" (the cymbal stand) right, opaque
+        # edges flush at the shared boundary (stand col = kit col + 2).
+        # row=2.5 lifts the whole setup into the room's middle band, below
+        # -right of the keyboard, as part of the same spread-toward-the-top
+        # round.
+        dict(col=2.5, row=2.5, dest="drum-kit.png",
+             src=REPO_ROOT / "Music" / "Drum LEFT.png"),
+        dict(col=4.5, row=2.5, dest="drum-stand.png",
+             src=REPO_ROOT / "Music" / "Drum Right.png"),
+        # (5.5, 3.5): pulled in beside the drums (the stand's opaque ends
+        # x=174, the mic's starts 176), front-right of the kit, per the user.
+        dict(col=5.5, row=3.5, dest="mic-stand.png",
              src=REPO_ROOT / "Music" / "Music_and_Sport_Singles_32x32_64.png"),
     ],
 }
@@ -609,7 +585,7 @@ DECOR = {
 # Always-animating props not gated on any desk occupancy (col, row, dest,
 # src, frames, room_id). Empty until Task 7 adds Library's ambient candle.
 AMBIENT = [
-    dict(room_id="auth-module", col=7, row=5, dest="animated_wall_candle_32x32.png",
+    dict(room_id="auth-module", col=7, row=4, dest="animated_wall_candle_32x32.png",
          src="3_Animated_objects/32x32/spritesheets/animated_wall_candle_32x32.png", frames=3),
     # billing's second-treadmill ambient entry (added in a prior fix round)
     # was removed here per the same controller ruling that pulled the

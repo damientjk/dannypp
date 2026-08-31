@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, setSessionToken } from "../api";
 import type { Agent, AgentRun, HumanPrincipal, Message, PolicyRequestLike } from "../types";
-import { beginHeadingToDesk, endWorking, spawnWorldAgents } from "./agentSim";
+import { beginHeadingToDesk, endWorking, jailAgent, releaseAgent, spawnWorldAgents } from "./agentSim";
 import {
   decideRoomEntry,
   getCapability,
@@ -53,6 +53,7 @@ const LOG_BADGE_LABELS: Record<LogEntry["category"], string> = {
   requested: "REQUESTED",
   granted: "GRANTED",
   denied: "DENIED",
+  jailed: "JAILED",
 };
 
 export function WorldView() {
@@ -149,8 +150,9 @@ export function WorldView() {
 
   // The task-visit orchestration: for every agent that's really busy and
   // still just roaming, ask the seam whether it may enter its assigned
-  // room. Permit -> walk to a desk. Deny -> queue an access request; the
-  // agent's movement is left completely alone either way (spec §4 — "same
+  // room. Permit -> walk to a desk. Deny on another owner's room -> caught
+  // red-handed, teleported to the Jail (jailAgent). Deny on its own owner's
+  // room -> queue an access request, movement left alone (spec §4 — "same
   // animation is kept"). For agents that stopped being busy while working,
   // release the desk back to roaming.
   useEffect(() => {
@@ -229,6 +231,31 @@ export function WorldView() {
             }
             // else: every desk is occupied, agent keeps roaming and waits
             // (spec §4) — nothing changed, so nothing new to log.
+          } else if (room.ownerId !== null && room.ownerId !== agent.ownerId) {
+            // Caught reaching for another owner's room: no request toast, no
+            // negotiation — straight to jail. Flipping behaviorMode off
+            // "roaming" is also what keeps this branch from re-firing (and
+            // re-logging) on every later poll of the same busy run.
+            setWorldAgents((current) =>
+              current.map((wa) => (wa.agentId === agent.id ? jailAgent(wa, mapRenderer) : wa)),
+            );
+            setEvents((current) => [
+              {
+                id: newId(),
+                agentId: agent.id,
+                category: "jailed",
+                message: `${agent.name} was caught touching ${room.displayName} → thrown in the Jail`,
+                timestamp: decision.decidedAt,
+              },
+              {
+                id: requestId,
+                agentId: agent.id,
+                category: "deny",
+                message: `${agent.name} → ${room.displayName}: deny (${decision.reason})`,
+                timestamp: decision.decidedAt,
+              },
+              ...current,
+            ]);
           } else {
             const queued = queueRequest({
               agentId: agent.id,
@@ -267,6 +294,11 @@ export function WorldView() {
           if (worldAgent.behaviorMode === "working") {
             setWorldAgents((current) =>
               current.map((wa) => (wa.agentId === agent.id ? endWorking(wa) : wa)),
+            );
+          } else if (worldAgent.behaviorMode === "jailed") {
+            // Sentence served — the run that got it caught is over. Walk free.
+            setWorldAgents((current) =>
+              current.map((wa) => (wa.agentId === agent.id ? releaseAgent(wa, mapRenderer) : wa)),
             );
           }
         }
@@ -449,11 +481,13 @@ export function WorldView() {
             {agents.map((agent) => {
               const worldAgent = worldAgents.find((wa) => wa.agentId === agent.id);
               const modeLabel =
-                worldAgent?.behaviorMode === "working"
-                  ? "working"
-                  : worldAgent?.behaviorMode === "heading-to-desk"
-                    ? "heading to desk"
-                    : worldAgent?.assignedRoomId && hasPendingRequest(agent.id, worldAgent.assignedRoomId)
+                worldAgent?.behaviorMode === "jailed"
+                  ? "in jail"
+                  : worldAgent?.behaviorMode === "working"
+                    ? "working"
+                    : worldAgent?.behaviorMode === "heading-to-desk"
+                      ? "heading to desk"
+                      : worldAgent?.assignedRoomId && hasPendingRequest(agent.id, worldAgent.assignedRoomId)
                       ? "awaiting access"
                       : "roaming";
               return (

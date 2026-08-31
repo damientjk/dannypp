@@ -1,7 +1,7 @@
 import type { Agent } from "../types";
 import type { TiledMapRenderer } from "./engine/TiledMapRenderer";
 import { findPath } from "./engine/pathfinding";
-import { assignedRoomFor, isGatedTile } from "./resources";
+import { JAIL_ROOM_ID, assignedRoomFor, isGatedTile } from "./resources";
 import type { FileRoom } from "./resources";
 import type { Facing, WorldAgent } from "./types";
 
@@ -55,6 +55,24 @@ function openRoamAdapter(renderer: TiledMapRenderer) {
   };
 }
 
+function jailRoamAdapter(renderer: TiledMapRenderer) {
+  const zone = renderer.getZone(JAIL_ROOM_ID);
+  return {
+    width: renderer.width,
+    height: renderer.height,
+    // Pace the cell: only jail-zone tiles, minus the zone's last row --
+    // that's where the bars decor stands, and an agent there would be
+    // drawn on top of the bars, reading as outside the cell.
+    isWalkable: (x: number, y: number) =>
+      zone !== undefined &&
+      renderer.isWalkable(x, y) &&
+      x >= zone.x &&
+      x < zone.x + zone.width &&
+      y >= zone.y &&
+      y < zone.y + zone.height - 1,
+  };
+}
+
 function pathWaypoints(
   renderer: TiledMapRenderer,
   agent: WorldAgent,
@@ -83,14 +101,17 @@ function beginPath(agent: WorldAgent, waypoints: Array<{ x: number; y: number }>
 }
 
 /** Only re-picks a roam target when idle (no path left to walk) and still
- *  meant to be roaming — heading-to-desk/working agents are untouched;
+ *  meant to be wandering — roaming, or jailed (pacing its cell) —
+ *  heading-to-desk/working agents are untouched;
  *  their transitions are driven by settleAgent or by the caller's async
  *  task-visit orchestration (decideRoomEntry can't run inside a
  *  synchronous per-frame function). */
 export function advanceBehavior(agent: WorldAgent, renderer: TiledMapRenderer): WorldAgent {
-  if (agent.behaviorMode !== "roaming" || agent.path.length > 0) return agent;
+  const wandering = agent.behaviorMode === "roaming" || agent.behaviorMode === "jailed";
+  if (!wandering || agent.path.length > 0) return agent;
 
-  const adapter = openRoamAdapter(renderer);
+  const adapter =
+    agent.behaviorMode === "jailed" ? jailRoamAdapter(renderer) : openRoamAdapter(renderer);
   const startTile = renderer.pixelToTile(agent.x, agent.y);
   for (let attempt = 0; attempt < ROAM_PICK_ATTEMPTS; attempt++) {
     const dx = Math.floor(Math.random() * (ROAM_RADIUS_TILES * 2 + 1)) - ROAM_RADIUS_TILES;
@@ -130,6 +151,56 @@ export function endWorking(agent: WorldAgent): WorldAgent {
     occupiedDeskId: null,
     path: [],
     pathIndex: 0,
+  };
+}
+
+/** Teleports an agent into the jail cell (JAIL_ROOM_ID's zone centre) and
+ *  flips it to "jailed", where it paces the cell (jailRoamAdapter) until
+ *  released. A teleport, not a walk — the punishment for getting caught
+ *  touching another owner's room is instant. */
+export function jailAgent(agent: WorldAgent, renderer: TiledMapRenderer): WorldAgent {
+  const zone = renderer.getZone(JAIL_ROOM_ID);
+  if (!zone) return agent; // no jail on this map; nothing to do
+  const cell = renderer.tileToPixel(
+    zone.x + Math.floor(zone.width / 2),
+    zone.y + Math.floor(zone.height / 2),
+  );
+  return {
+    ...agent,
+    x: cell.x,
+    y: cell.y,
+    originX: cell.x,
+    originY: cell.y,
+    targetX: cell.x,
+    targetY: cell.y,
+    facing: "down",
+    progress: 1,
+    path: [],
+    pathIndex: 0,
+    behaviorMode: "jailed",
+    occupiedDeskId: null,
+  };
+}
+
+/** Ends a jail sentence: teleports the agent back to the common spawn and
+ *  returns it to ordinary roaming. */
+export function releaseAgent(agent: WorldAgent, renderer: TiledMapRenderer): WorldAgent {
+  const spawnTile = renderer.getSpawnPoint("common") ?? { x: 0, y: 0 };
+  const spawn = renderer.tileToPixel(spawnTile.x, spawnTile.y);
+  return {
+    ...agent,
+    x: spawn.x,
+    y: spawn.y,
+    originX: spawn.x,
+    originY: spawn.y,
+    targetX: spawn.x,
+    targetY: spawn.y,
+    facing: "down",
+    progress: 1,
+    path: [],
+    pathIndex: 0,
+    behaviorMode: "roaming",
+    occupiedDeskId: null,
   };
 }
 

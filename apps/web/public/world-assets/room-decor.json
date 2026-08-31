@@ -42,8 +42,8 @@
     },
     {
       "image": "decor/auth-module/plant.png",
-      "x": 64,
-      "y": 192
+      "x": 32,
+      "y": 160
     },
     {
       "image": "decor/analytics/wall-shade.png",
@@ -56,39 +56,44 @@
       "y": 0
     },
     {
-      "image": "decor/analytics/basketball-hoop.png",
-      "x": 544,
-      "y": 32
-    },
-    {
-      "image": "decor/analytics/basketball.png",
-      "x": 544,
-      "y": 96
-    },
-    {
       "image": "decor/analytics/trophy-left.png",
-      "x": 576,
+      "x": 416,
       "y": 32
     },
     {
       "image": "decor/analytics/trophy-right.png",
-      "x": 640,
+      "x": 480,
       "y": 32
     },
     {
-      "image": "decor/analytics/racket.png",
-      "x": 512,
+      "image": "decor/analytics/basketball-hoop.png",
+      "x": 640,
+      "y": 16.0
+    },
+    {
+      "image": "decor/analytics/basketball.png",
+      "x": 640,
       "y": 96
     },
     {
       "image": "decor/analytics/table-tennis-table.png",
-      "x": 416,
-      "y": 64
+      "x": 512,
+      "y": 104.0
     },
     {
-      "image": "decor/analytics/plant.png",
-      "x": 448,
-      "y": 192
+      "image": "decor/analytics/racket.png",
+      "x": 528.0,
+      "y": 152.0
+    },
+    {
+      "image": "decor/analytics/ball-yellow.png",
+      "x": 640,
+      "y": 184.0
+    },
+    {
+      "image": "decor/analytics/ball-blue.png",
+      "x": 672,
+      "y": 200.0
     },
     {
       "image": "decor/database/wall-shade.png",
@@ -101,39 +106,69 @@
       "y": 0
     },
     {
-      "image": "decor/database/shoji-left.png",
+      "image": "decor/database/toilet.png",
+      "x": 800,
+      "y": 64
+    },
+    {
+      "image": "decor/database/toilet-paper.png",
       "x": 832,
       "y": 64
     },
     {
-      "image": "decor/database/shoji-right.png",
-      "x": 1024,
+      "image": "decor/database/bed-left.png",
+      "x": 1008.0,
       "y": 64
     },
     {
-      "image": "decor/database/chabudai.png",
-      "x": 896,
-      "y": 128
+      "image": "decor/database/bed-right.png",
+      "x": 1056,
+      "y": 64
     },
     {
-      "image": "decor/database/cushion-1.png",
+      "image": "decor/database/bars-0.png",
+      "x": 800,
+      "y": 224
+    },
+    {
+      "image": "decor/database/bars-1.png",
+      "x": 832,
+      "y": 224
+    },
+    {
+      "image": "decor/database/bars-2.png",
       "x": 864,
-      "y": 160
+      "y": 224
     },
     {
-      "image": "decor/database/cushion-2.png",
+      "image": "decor/database/bars-3.png",
+      "x": 896,
+      "y": 224
+    },
+    {
+      "image": "decor/database/cell-door.png",
+      "x": 928,
+      "y": 224
+    },
+    {
+      "image": "decor/database/bars-5.png",
       "x": 960,
-      "y": 160
+      "y": 224
     },
     {
-      "image": "decor/database/bonsai-left.png",
-      "x": 832,
-      "y": 192
+      "image": "decor/database/bars-6.png",
+      "x": 992,
+      "y": 224
     },
     {
-      "image": "decor/database/bonsai-right.png",
+      "image": "decor/database/bars-7.png",
       "x": 1024,
-      "y": 192
+      "y": 224
+    },
+    {
+      "image": "decor/database/bars-8.png",
+      "x": 1056,
+      "y": 224
     },
     {
       "image": "decor/billing/wall-shade.png",
@@ -178,16 +213,16 @@
     {
       "image": "decor/billing/dumbbell-rack.png",
       "x": 32,
-      "y": 576
+      "y": 560.0
     },
     {
       "image": "decor/billing/yoga-ball.png",
-      "x": 96,
+      "x": 128,
       "y": 608
     },
     {
       "image": "decor/billing/punching-bag-1.png",
-      "x": 64,
+      "x": 48.0,
       "y": 416
     },
     {
@@ -266,11 +301,6 @@
       "y": 544
     },
     {
-      "image": "decor/living-room/chair-reversed.png",
-      "x": 512,
-      "y": 544
-    },
-    {
       "image": "decor/living-room/snack-table.png",
       "x": 576,
       "y": 608
@@ -278,7 +308,12 @@
     {
       "image": "decor/living-room/chair-right.png",
       "x": 640,
-      "y": 608
+      "y": 592.0
+    },
+    {
+      "image": "decor/living-room/chair-reversed.png",
+      "x": 576,
+      "y": 644.0
     },
     {
       "image": "decor/deploy-config/wall-shade.png",
@@ -291,75 +326,54 @@
       "y": 416
     },
     {
-      "image": "decor/deploy-config/speaker-1.png",
-      "x": 832,
-      "y": 544
-    },
-    {
-      "image": "decor/deploy-config/speaker-2.png",
-      "x": 1024,
-      "y": 544
-    },
-    {
       "image": "decor/deploy-config/guitar-electric.png",
-      "x": 800,
-      "y": 544
+      "x": 960,
+      "y": 464.0
+    },
+    {
+      "image": "decor/deploy-config/speaker.png",
+      "x": 1024,
+      "y": 448
     },
     {
       "image": "decor/deploy-config/guitar-electric-2.png",
       "x": 1056,
-      "y": 544
+      "y": 464.0
+    },
+    {
+      "image": "decor/deploy-config/keyboard.png",
+      "x": 816.0,
+      "y": 496.0
     },
     {
       "image": "decor/deploy-config/drum-kit.png",
-      "x": 928,
-      "y": 608
+      "x": 880.0,
+      "y": 560.0
     },
     {
       "image": "decor/deploy-config/drum-stand.png",
-      "x": 896,
-      "y": 608
+      "x": 944.0,
+      "y": 560.0
     },
     {
       "image": "decor/deploy-config/mic-stand.png",
-      "x": 1024,
-      "y": 608
+      "x": 976.0,
+      "y": 592.0
     }
   ],
   "equipment": [
     {
-      "image": "equipment/animated_TV_reportage_32x32.png",
-      "frames": 72,
-      "x": 608,
-      "y": 160,
-      "spawnPoint": "desk-analytics-2"
-    },
-    {
-      "image": "equipment/animated_incense_burner_4_10_loop_32x32.png",
-      "frames": 13,
-      "x": 960,
-      "y": 128,
-      "spawnPoint": "desk-database-2"
-    },
-    {
-      "image": "equipment/animated_wall_piano_32x32.png",
-      "frames": 16,
-      "x": 864,
-      "y": 608,
-      "spawnPoint": "desk-deploy-config-1"
-    },
-    {
       "image": "equipment/animated_amplifier_32x32.png",
       "frames": 3,
       "x": 992,
-      "y": 576,
+      "y": 512,
       "spawnPoint": "desk-deploy-config-2"
     },
     {
       "image": "equipment/animated_wall_candle_32x32.png",
       "frames": 3,
       "x": 256,
-      "y": 224,
+      "y": 192,
       "spawnPoint": null
     }
   ]

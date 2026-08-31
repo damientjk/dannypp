@@ -14,6 +14,13 @@ const envSchema = z.object({
     .enum(["read-only", "workspace-write", "danger-full-access"])
     .default("workspace-write"),
   CODEX_TIMEOUT_MS: z.coerce.number().int().min(1_000).default(600_000),
+  /**
+   * How long a Run waits for its owner to grant a keycard before starting with
+   * an empty inbox. Staging is the only moment a resource can physically reach
+   * the workspace, so without this window the World's request -> grant exchange
+   * could never affect the run that provoked it. 0 disables the wait.
+   */
+  CAPABILITY_WAIT_MS: z.coerce.number().int().min(0).max(300_000).default(45_000),
   CODEX_MAX_OUTPUT_BYTES: z.coerce.number().int().min(65_536).default(2_097_152),
   RUNTIME_PROVIDER: z.enum(["local-process", "container", "mock"]).default("local-process"),
   CONTAINER_ENGINE: z.string().min(1).default("docker"),
@@ -74,6 +81,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     codexBin: env.CODEX_BIN,
     codexSandboxMode: env.CODEX_SANDBOX_MODE,
     codexTimeoutMs: env.CODEX_TIMEOUT_MS,
+    capabilityWaitMs: env.CAPABILITY_WAIT_MS,
     codexMaxOutputBytes: env.CODEX_MAX_OUTPUT_BYTES,
     runtimeProvider: env.RUNTIME_PROVIDER,
     containerEngine: env.CONTAINER_ENGINE,

@@ -36,6 +36,13 @@ export interface AgentRun {
     cachedInputTokens?: number;
     outputTokens?: number;
   } | null;
+  /** Held at the authorization gate, waiting for the owner to grant a keycard. */
+  awaitingCapability: boolean;
+  /** How many resources the gate evaluated and withheld. A count, not a list:
+   *  the withheld set is "everything you did not grant". */
+  withheldCount: number;
+  /** Resources the gate placed in the workspace, by name. */
+  stagedResources: string[];
   createdAt: string;
 }
 
@@ -72,6 +79,16 @@ export interface Capability {
   revokedAt: string | null;
 }
 
+/** A capability as the backend stores it, with the provenance the UI needs to
+ *  attribute it to an Agent. */
+export interface CapabilityRecord extends Capability {
+  agentId: string;
+  ownerId: string;
+  runId: string | null;
+  issuedAt: string;
+  revokedBy: string | null;
+}
+
 export type PolicyEffect = "permit" | "deny";
 
 export interface PolicyRequestLike {
@@ -87,4 +104,34 @@ export interface PolicyDecision {
   reason: string;
   requestId: string;
   decidedAt: string;
+}
+
+/** A capability as the backend stores it -- richer than the PDP's view. */
+export interface CapabilityRecord extends Capability {
+  agentId: string;
+  ownerId: string;
+  runId: string | null;
+  issuedAt: string;
+  revokedBy: string | null;
+}
+
+/** One protected resource's metadata. Listing is not reading. */
+export interface ResourceRef {
+  uri: string;
+  ownerId: string;
+  name: string;
+}
+
+/** One decision as recorded by the backend audit log. */
+export interface AuditEntry {
+  id: string;
+  requestId: string;
+  decidedAt: string;
+  humanId: string;
+  agentId: string;
+  principalKind: "human" | "agent";
+  action: string;
+  resource: string;
+  effect: PolicyEffect;
+  reason: string;
 }

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Agent } from "../types";
-import { api } from "../api";
+import type { Agent, AuditEntry, CapabilityRecord } from "../types";
+import { api, PolicyDeniedError } from "../api";
 import { FILE_ROOMS } from "./resources";
 import { issueCapability, resetCapabilities } from "./decision";
 import { resetRequests } from "./requests";
@@ -15,15 +15,28 @@ vi.mock("./agentSim", async () => {
   return { ...actual, beginHeadingToDesk: vi.fn(actual.beginHeadingToDesk) };
 });
 
-vi.mock("../api", () => ({
-  api: {
-    login: vi.fn(),
-    listAgents: vi.fn(),
-    runs: vi.fn(),
-    messages: vi.fn(),
-  },
-  setSessionToken: vi.fn(),
-}));
+// Only `api` is replaced: PolicyDeniedError stays the real class, so the
+// instanceof check inside decision.ts sees the same constructor the fake
+// backend below throws.
+vi.mock("../api", async () => {
+  const actual = await vi.importActual<typeof import("../api")>("../api");
+  return {
+    ...actual,
+    api: {
+      login: vi.fn(),
+      listAgents: vi.fn(),
+      runs: vi.fn(),
+      messages: vi.fn(),
+      audit: vi.fn(),
+      capabilities: vi.fn(),
+      issueCapability: vi.fn(),
+      revokeCapability: vi.fn(),
+      denyCapability: vi.fn().mockResolvedValue({ denied: true }),
+      readResource: vi.fn(),
+    },
+    setSessionToken: vi.fn(),
+  };
+});
 
 vi.mock("pixi.js", async () => {
   const actual = await vi.importActual<typeof import("pixi.js")>("pixi.js");
@@ -100,10 +113,118 @@ function agentAssignedRoom(agentId: string, ownerId: string) {
   return owned[hash % owned.length];
 }
 
+
+/**
+ * A small stand-in for the middleware backend.
+ *
+ * These tests are about what WorldView *renders* given what the server said, so
+ * the fake has to behave like the server on the two axes the UI depends on:
+ * scope decides permit/deny, and every decision lands in the audit trail that
+ * the Security Log reads back. Deliberately not a policy engine -- the real one
+ * is tested server-side; this is just enough to keep the seam honest.
+ */
+let fakeCapabilities: CapabilityRecord[] = [];
+let fakeAudit: AuditEntry[] = [];
+let fakeSequence = 0;
+
+function resetFakeBackend(): void {
+  fakeCapabilities = [];
+  fakeAudit = [];
+  fakeSequence = 0;
+}
+
+function isLiveCapability(capability: CapabilityRecord): boolean {
+  if (capability.revokedAt) return false;
+  return new Date(capability.expiresAt).getTime() >= Date.now();
+}
+
+function recordDecision(
+  effect: "permit" | "deny",
+  reason: string,
+  resource: string,
+  agentId: string,
+) {
+  fakeSequence += 1;
+  const decision = {
+    effect,
+    reason,
+    requestId: "req-" + fakeSequence,
+    decidedAt: new Date(Date.now() + fakeSequence).toISOString(),
+  };
+  fakeAudit = [
+    {
+      id: "audit-" + fakeSequence,
+      requestId: decision.requestId,
+      decidedAt: decision.decidedAt,
+      humanId: "user-a",
+      agentId,
+      principalKind: "agent",
+      action: "resource:read",
+      resource,
+      effect,
+      reason,
+    },
+    ...fakeAudit,
+  ];
+  return decision;
+}
+
+function installFakeBackend(): void {
+  vi.mocked(api.audit).mockImplementation(async () => ({ entries: fakeAudit }));
+  vi.mocked(api.capabilities).mockImplementation(async () => ({
+    capabilities: fakeCapabilities,
+  }));
+  vi.mocked(api.issueCapability).mockImplementation(async ({ agentId, scope }) => {
+    fakeSequence += 1;
+    const capability: CapabilityRecord = {
+      id: "cap-" + fakeSequence,
+      scope: scope ?? "read:res://user-a/*",
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      revokedAt: null,
+      agentId,
+      ownerId: "user-a",
+      runId: null,
+      issuedAt: new Date().toISOString(),
+      revokedBy: null,
+    };
+    fakeCapabilities = [...fakeCapabilities, capability];
+    return { capability };
+  });
+  vi.mocked(api.revokeCapability).mockImplementation(async (id: string) => {
+    const found = fakeCapabilities.find((candidate) => candidate.id === id);
+    if (!found) throw new Error("Capability not found");
+    const revoked = { ...found, revokedAt: new Date().toISOString(), revokedBy: "user-a" };
+    fakeCapabilities = fakeCapabilities.map((c) => (c.id === id ? revoked : c));
+    return { capability: revoked };
+  });
+  vi.mocked(api.readResource).mockImplementation(async (uri: string, capabilityId: string) => {
+    const capability = fakeCapabilities.find(
+      (candidate) => candidate.id === capabilityId && isLiveCapability(candidate),
+    );
+    if (!capability) {
+      const decision = recordDecision("deny", "capability-unknown", uri, "");
+      throw new PolicyDeniedError("Denied: capability-unknown", decision);
+    }
+    if (capability.scope !== "read:" + uri) {
+      const decision = recordDecision("deny", "out-of-scope", uri, capability.agentId);
+      throw new PolicyDeniedError("Denied: out-of-scope", decision);
+    }
+    const decision = recordDecision("permit", "capability-in-scope", uri, capability.agentId);
+    const name = uri.slice(uri.lastIndexOf("/") + 1);
+    return {
+      decision,
+      resource: { uri, ownerId: "user-a", name },
+      content: "demo content",
+    };
+  });
+}
+
 describe("WorldView", () => {
   beforeEach(() => {
     resetCapabilities();
     resetRequests();
+    resetFakeBackend();
+    installFakeBackend();
     vi.mocked(beginHeadingToDesk).mockClear();
     vi.mocked(api.login).mockResolvedValue({
       sessionToken: "tok",
@@ -112,6 +233,21 @@ describe("WorldView", () => {
     vi.mocked(api.runs).mockResolvedValue({ runs: [] });
     vi.mocked(api.messages).mockResolvedValue({ messages: [] });
   });
+
+  /** A live backend capability for `agentId`, scoped to its owner's namespace. */
+  function liveCapabilityFor(agentId: string, ownerId = "user-a") {
+    return {
+      id: "cap-" + agentId,
+      scope: `read:res://${ownerId}/*`,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      revokedAt: null,
+      agentId,
+      ownerId,
+      runId: null,
+      issuedAt: new Date().toISOString(),
+      revokedBy: null,
+    };
+  }
 
   async function login() {
     render(<WorldView />);
@@ -129,7 +265,7 @@ describe("WorldView", () => {
 
   it("logs a permit and moves the agent off roaming when it already has a capability for its assigned room", async () => {
     const room = agentAssignedRoom(AGENT_A.id, AGENT_A.ownerId);
-    issueCapability(AGENT_A.id, room.id);
+    await issueCapability(AGENT_A.id, room.id);
     vi.mocked(api.listAgents).mockResolvedValue({ agents: [{ ...AGENT_A, status: "busy" }] });
 
     await login();
@@ -200,10 +336,14 @@ describe("WorldView", () => {
     await screen.findByText(new RegExp(`denied ${AGENT_A.name} access to ${room.displayName}`));
   });
 
+  // The wall reads the BACKEND capability store, not the in-browser mock: the
+  // real keycard is scoped to the owner's whole namespace, so a live record
+  // covers every room that owner owns.
   it("shows a keycard for every protected room, held or not (task 4)", async () => {
-    const room = agentAssignedRoom(AGENT_A.id, AGENT_A.ownerId);
-    issueCapability(AGENT_A.id, room.id);
     vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    vi.mocked(api.capabilities).mockResolvedValue({
+      capabilities: [liveCapabilityFor(AGENT_A.id, AGENT_A.ownerId)],
+    });
     await login();
 
     fireEvent.click(screen.getByText("Robot A"));
@@ -212,10 +352,92 @@ describe("WorldView", () => {
     for (const candidate of gated) {
       expect(screen.getAllByText(candidate.displayName).length).toBeGreaterThan(0);
     }
-    // The granted room reads as held; a room owned by somebody else can never be.
-    expect(screen.getAllByText("keycard held").length).toBe(1);
+    const owned = gated.filter((candidate) => candidate.ownerId === "user-a");
     const foreign = gated.filter((candidate) => candidate.ownerId !== "user-a");
+    expect(await screen.findAllByText("keycard held")).toHaveLength(owned.length);
     expect(screen.getAllByText("another owner").length).toBe(foreign.length);
+  });
+
+  // The keycard a Run holds authorises execution, not data (scope
+  // "owner:user-a"). Treating any live card as opening every room made the
+  // owner's grant meaningless on screen.
+  it("shows no rooms held for an Agent carrying only its run keycard", async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    vi.mocked(api.capabilities).mockResolvedValue({
+      capabilities: [{ ...liveCapabilityFor(AGENT_A.id), scope: "owner:user-a" }],
+    });
+    await login();
+
+    fireEvent.click(screen.getByText("Robot A"));
+
+    expect(screen.queryAllByText("keycard held")).toHaveLength(0);
+    expect(screen.getAllByText("no keycard").length).toBeGreaterThan(0);
+  });
+
+  // A shredded Agent is suspended: its next run is refused at execution, so it
+  // never walks to a door and never asks. Without a direct grant there is no
+  // way back, and the demo strands.
+  it("lets the owner grant a keycard with no request pending", async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    await login();
+
+    fireEvent.click(screen.getByText("Robot A"));
+    expect(screen.queryAllByText("keycard held")).toHaveLength(0);
+
+    fireEvent.click(screen.getAllByText("Grant")[0]!);
+
+    await waitFor(() => {
+      expect(api.issueCapability).toHaveBeenCalled();
+    });
+    await screen.findAllByText("keycard held");
+  });
+
+  it("shows only the room a single-file grant opens", async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    vi.mocked(api.capabilities).mockResolvedValue({
+      capabilities: [
+        { ...liveCapabilityFor(AGENT_A.id), scope: "read:res://user-a/secret-recipe.txt" },
+      ],
+    });
+    await login();
+
+    fireEvent.click(screen.getByText("Robot A"));
+
+    expect(await screen.findAllByText("keycard held")).toHaveLength(1);
+  });
+
+  it("shows no keycard once the backend capability is revoked", async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    vi.mocked(api.capabilities).mockResolvedValue({
+      capabilities: [{ ...liveCapabilityFor(AGENT_A.id), revokedAt: new Date().toISOString() }],
+    });
+    await login();
+
+    fireEvent.click(screen.getByText("Robot A"));
+
+    expect(screen.queryAllByText("keycard held")).toHaveLength(0);
+    expect(screen.getAllByText("no keycard").length).toBeGreaterThan(0);
+  });
+
+  // Regression: the keycard the backend issues at run start is scoped to the
+  // owner's whole namespace, which is not any one room. Shredding used to walk
+  // the per-room cache, match nothing, and still log "3 rooms revoked".
+  it("shreds the namespace-wide keycard the panel is showing", async () => {
+    fakeCapabilities = [liveCapabilityFor(AGENT_A.id, AGENT_A.ownerId)];
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [AGENT_A] });
+    await login();
+
+    fireEvent.click(screen.getByText("Robot A"));
+    expect((await screen.findAllByText("keycard held")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByText("Shred this agent's keycard"));
+
+    await waitFor(() => {
+      expect(api.revokeCapability).toHaveBeenCalledWith("cap-" + AGENT_A.id);
+    });
+    await waitFor(() => {
+      expect(screen.queryAllByText("keycard held")).toHaveLength(0);
+    });
   });
 
   it("claims a different desk for each of two same-room agents busy in the same poll (finding 1)", async () => {
@@ -227,8 +449,8 @@ describe("WorldView", () => {
     // owned room, or this test isn't exercising the collision at all.
     expect(room0.id).toBe(room2.id);
 
-    issueCapability(AGENT_A0.id, room0.id);
-    issueCapability(AGENT_A3.id, room2.id);
+    await issueCapability(AGENT_A0.id, room0.id);
+    await issueCapability(AGENT_A3.id, room2.id);
     vi.mocked(api.listAgents).mockResolvedValue({
       agents: [{ ...AGENT_A0, status: "busy" }, { ...AGENT_A3, status: "busy" }],
     });
@@ -255,7 +477,7 @@ describe("WorldView", () => {
     expect(new Set(claimedDeskIds).size).toBe(2);
   });
 
-  it("does not log a permit for the agent left waiting when every desk is full (finding 6)", async () => {
+  it("logs all three permits but seats only two when the room runs out of desks", async () => {
     // agent-a0/a3/a6 all hash to the same owned room ("billing", 2 desks) —
     // see the hash table derived in the finding-1 test above.
     const A0: Agent = { ...AGENT_A, id: "agent-a0", name: "Robot A0" };
@@ -266,9 +488,9 @@ describe("WorldView", () => {
     expect(agentAssignedRoom(A6.id, A6.ownerId).id).toBe(room.id);
     expect(room.deskIds).toHaveLength(2);
 
-    issueCapability(A0.id, room.id);
-    issueCapability(A3.id, room.id);
-    issueCapability(A6.id, room.id);
+    await issueCapability(A0.id, room.id);
+    await issueCapability(A3.id, room.id);
+    await issueCapability(A6.id, room.id);
     vi.mocked(api.listAgents).mockResolvedValue({
       agents: [
         { ...A0, status: "busy" },
@@ -283,8 +505,8 @@ describe("WorldView", () => {
     await screen.findByText("Robot A3");
     await screen.findByText("Robot A6");
 
-    // Both desks get claimed (2 successful calls); the third agent's call
-    // returns null and must not produce a third "permit" log line.
+    // Both desks get claimed; the third agent's call returns null and it
+    // keeps roaming.
     await waitFor(() => {
       const successes = vi
         .mocked(beginHeadingToDesk)
@@ -292,8 +514,17 @@ describe("WorldView", () => {
       expect(successes.length).toBe(2);
     });
 
-    const permitEntries = screen.getAllByText(new RegExp(`${room.displayName}: permit`));
-    expect(permitEntries).toHaveLength(2);
+    // All three permits are logged, because all three really happened: the PDP
+    // was asked three times and allowed access three times. A room with no
+    // free desk is a constraint of the world, not a refusal by the policy
+    // engine, and the Security Log is a view of the audit trail rather than a
+    // record of who got a seat. Suppressing the third row here would put the
+    // log out of step with the backend it claims to be showing.
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(new RegExp(`${room.displayName}: permit`)),
+      ).toHaveLength(3);
+    });
   });
 
   it("teleports an agent to the Jail when its task reaches for another owner's room", async () => {
@@ -311,6 +542,9 @@ describe("WorldView", () => {
           output: null,
           error: null,
           usage: null,
+          awaitingCapability: false,
+          withheldCount: 0,
+          stagedResources: [],
           createdAt: "",
         },
       ],
@@ -327,4 +561,5 @@ describe("WorldView", () => {
     expect(screen.getByText("JAILED")).toBeTruthy();
     expect(screen.getByText("in jail")).toBeTruthy();
   });
+
 });

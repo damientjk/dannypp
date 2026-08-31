@@ -11,6 +11,11 @@ import { authenticate, findUser } from "./auth/users.js";
 import { issueSession, resolveSession } from "./auth/session.js";
 import type { CallerContext } from "./policy/pep.js";
 import type { HumanPrincipal } from "./types.js";
+import { capabilityRoutes } from "./capability/routes.js";
+import { resourceRoutes } from "./resources/routes.js";
+import type { CapabilityStore } from "./capability/store.js";
+import type { ResourceStore } from "./resources/store.js";
+import type { AuditSink, ResourceAccessGate } from "./resources/access.js";
 
 declare module "fastify" {
   interface FastifyRequest { principal?: HumanPrincipal | undefined; }
@@ -42,9 +47,25 @@ const loginBody = z.object({
   password: z.string().min(1),
 });
 
+/**
+ * Identity & Authorization middleware dependencies (Person 3).
+ *
+ * Optional so that Person 1's existing HTTP tests keep constructing an app with
+ * two arguments and are not disturbed. `index.ts` always supplies it, so the
+ * running server always has the middleware routes.
+ */
+export interface MiddlewareDependencies {
+  capabilities: CapabilityStore;
+  resources: ResourceStore;
+  gate: ResourceAccessGate;
+  /** Optional so tests can build an app without one; the server always passes it. */
+  audit?: AuditSink | undefined;
+}
+
 export async function createApp(
   config: AppConfig,
   service: AgentService,
+  middleware?: MiddlewareDependencies,
 ): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
@@ -66,7 +87,10 @@ export async function createApp(
       !config.authToken ||
       !request.url.startsWith("/api/") ||
       request.url === "/api/health" ||
-      request.url === "/api/auth"
+      // Prefix, not equality: /api/auth/login must stay reachable, or the token
+      // gate locks out the endpoint that exists to issue a session in the first
+      // place. /api/auth and /api/auth/me are covered by the same prefix.
+      request.url.startsWith("/api/auth")
     ) {
       return;
     }
@@ -162,6 +186,14 @@ export async function createApp(
     return { agent: await service.stopAgent(caller, id) };
   });
 
+  /** The owner refusing the keycard this Agent's Run is waiting for. */
+  app.post("/api/agents/:id/deny-capability", async (request) => {
+    const caller = requireCaller(request);
+    const { id } = agentIdParams.parse(request.params);
+    await service.denyCapabilityRequest(caller, id);
+    return { denied: true };
+  });
+
   app.get("/api/agents/:id/messages", async (request) => {
     const caller = requireCaller(request);
     const { id } = agentIdParams.parse(request.params);
@@ -188,20 +220,12 @@ export async function createApp(
     return { run: await service.getRun(caller, id) };
   });
 
-  if (config.nodeEnv === "production") {
-    const webRoot = fileURLToPath(new URL("../../web/dist", import.meta.url));
-    await app.register(fastifyStatic, {
-      root: webRoot,
-      prefix: "/",
-    });
-    app.setNotFoundHandler((request, reply) => {
-      if (request.url.startsWith("/api/")) {
-        return reply.code(404).send({ error: "API route not found" });
-      }
-      return reply.sendFile("index.html");
-    });
-  }
-
+  // Registered BEFORE the production static block below. Awaiting a `register`
+  // boots the plugin tree, and every route context built up to that point keeps
+  // whichever error handler existed when it was built. With this call after the
+  // static registration, the routes above fell back to Fastify's default error
+  // body in production only -- generic messages instead of the real reason, and
+  // 500 instead of 400 for validation failures -- while dev looked correct.
   app.setErrorHandler((error, request, reply) => {
     const appError = error instanceof Error ? error : new Error(String(error));
     const validationError = error instanceof z.ZodError;
@@ -225,6 +249,30 @@ export async function createApp(
       ...(validationError ? { details: error.issues } : {}),
     });
   });
+
+  if (config.nodeEnv === "production") {
+    const webRoot = fileURLToPath(new URL("../../web/dist", import.meta.url));
+    await app.register(fastifyStatic, {
+      root: webRoot,
+      prefix: "/",
+    });
+    app.setNotFoundHandler((request, reply) => {
+      if (request.url.startsWith("/api/")) {
+        return reply.code(404).send({ error: "API route not found" });
+      }
+      return reply.sendFile("index.html");
+    });
+  }
+
+  // Registered AFTER setErrorHandler: these routes live in an encapsulated
+  // plugin context, and a child context only inherits the error handler that
+  // exists at registration time. Registering earlier makes them fall back to
+  // Fastify's default error body, so their failures would have a different
+  // shape from every other endpoint.
+  if (middleware) {
+    await app.register(capabilityRoutes({ capabilities: middleware.capabilities }));
+    await app.register(resourceRoutes(middleware));
+  }
 
   return app;
 }

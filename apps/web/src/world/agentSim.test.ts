@@ -4,7 +4,7 @@ import type { Agent } from "../types";
 import { TiledMapRenderer } from "./engine/TiledMapRenderer";
 import type { TiledMap } from "./engine/TiledMapRenderer";
 import { TILE_SIZE } from "./engineMap";
-import { roomById } from "./resources";
+import { isGatedTile, roomById } from "./resources";
 import {
   advanceBehavior,
   beginHeadingToDesk,
@@ -198,6 +198,30 @@ describe("beginHeadingToDesk", () => {
       renderer,
     );
     expect(started).toBeNull();
+  });
+});
+
+describe("leaving a room after working", () => {
+  it("walks an Agent released at a desk back out of the gated room", () => {
+    const renderer = testRenderer();
+    const room = roomById("auth-module");
+    const [spawned] = spawnWorldAgents([AGENT], renderer);
+    const heading = beginHeadingToDesk(spawned!, room, new Set(), renderer);
+    expect(heading).not.toBeNull();
+
+    // Walk it all the way to the desk, so it is genuinely inside the room.
+    const { agent: seated } = runToRest(heading!);
+    const deskTile = renderer.pixelToTile(seated.x, seated.y);
+    expect(deskTile.y).toBe(0); // auth-module's interior row
+
+    // Released, it must find its way back out rather than standing there
+    // (the escape runs before any rest roll, so no dice-pinning needed).
+    const released = advanceBehavior(endWorking(seated), renderer);
+    expect(released.path.length).toBeGreaterThan(1);
+
+    const { agent: settled } = runToRest(released);
+    const endTile = renderer.pixelToTile(settled.x, settled.y);
+    expect(isGatedTile(renderer, endTile.x, endTile.y)).toBe(false);
   });
 });
 

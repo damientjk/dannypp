@@ -32,6 +32,9 @@ function StatusPill({ status }: { status: Agent["status"] }) {
   );
 }
 
+/** Named files shown before the panel falls back to "and N more". */
+const GATE_LIST_LIMIT = 8;
+
 function Spinner() {
   return <span className="spinner" aria-label="Loading" />;
 }
@@ -50,11 +53,16 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [authRequired, setAuthRequired] = useState<boolean | null>(null);
   const [authInput, setAuthInput] = useState("");
+  const [signedOut, setSignedOut] = useState(false);
   const [view, setView] = useState<"dashboard" | "world">("dashboard");
+  /** Sticky: once the World has been opened it stays mounted (see worldShell). */
+  const worldOpened = useRef(false);
+  if (view === "world") worldOpened.current = true;
   const messageEnd = useRef<HTMLDivElement>(null);
   const selectedIdRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   const pollingRunIds = useRef(new Set<string>());
+  const previousViewRef = useRef(view);
   selectedIdRef.current = selectedId;
 
   const selected = useMemo(
@@ -83,6 +91,17 @@ export default function App() {
     await Promise.all([refreshAgents(), api.system().then(setSystem)]);
   }, [refreshAgents]);
 
+  // A 401 here is not an error the user can act on by reading it -- signing in
+  // lives in the World view, so say that instead of surfacing "Sign in required"
+  // from the API and leaving them to guess where the door is.
+  const reportLoadFailure = useCallback((reason: unknown) => {
+    if (reason instanceof ApiError && reason.status === 401) {
+      setSignedOut(true);
+      return;
+    }
+    setError(reason instanceof Error ? reason.message : String(reason));
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
     void api
@@ -92,11 +111,27 @@ export default function App() {
         setAuthRequired(required);
         if (!required) await bootstrap();
       })
-      .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)));
+      .catch(reportLoadFailure);
     return () => {
       mountedRef.current = false;
     };
   }, [bootstrap]);
+
+  // Coming back from the World means a sign-in may have happened while this
+  // view was unmounted -- the session token lives in the API client, not in
+  // React state, so nothing here re-renders when it changes. Without this the
+  // dashboard keeps showing the empty list from the unauthenticated fetch on
+  // mount, and the first successful load only happens as a side effect of
+  // creating an Agent.
+  useEffect(() => {
+    const cameBackFromWorld = previousViewRef.current === "world" && view === "dashboard";
+    previousViewRef.current = view;
+    if (!cameBackFromWorld) return;
+    setError(null);
+    void bootstrap()
+      .then(() => setSignedOut(false))
+      .catch(reportLoadFailure);
+  }, [view, bootstrap, reportLoadFailure]);
 
   useEffect(() => {
     setActiveRun(null);
@@ -308,25 +343,38 @@ export default function App() {
     );
   }
 
-  if (view === "world") {
-    return (
-      <div className="world-shell pixel-theme">
-        <header className="world-header">
-          <div className="brand">
-            <div className="brand-mark">A</div>
-            <strong>Agent Launchpad — World</strong>
-          </div>
-          <button className="button" onClick={() => setView("dashboard")}>
-            ← Dashboard
-          </button>
-        </header>
-        <WorldView />
-      </div>
-    );
-  }
+  /**
+   * The World stays MOUNTED once it has been opened, and is hidden rather than
+   * unmounted when you switch back to the dashboard.
+   *
+   * Unmounting tore down the Pixi application, the roster poll and every
+   * agent's position, so re-opening it mid-task dropped everyone back on their
+   * spawn tile and asked you to enter the world again -- the simulation
+   * appeared to restart in the middle of a run. Keeping it mounted lets it keep
+   * ticking in the background, so returning shows the world you left.
+   *
+   * It is not rendered at all until first opened: no Pixi app, no poll, and no
+   * cost for anyone who never visits it.
+   */
+  const worldShell = worldOpened.current ? (
+    <div className="world-shell pixel-theme" hidden={view !== "world"}>
+      <header className="world-header">
+        <div className="brand">
+          <div className="brand-mark">A</div>
+          <strong>Agent Launchpad — World</strong>
+        </div>
+        <button className="button" onClick={() => setView("dashboard")}>
+          ← Dashboard
+        </button>
+      </header>
+      <WorldView />
+    </div>
+  ) : null;
 
   return (
-    <div className="app-shell">
+    <>
+      {worldShell}
+      <div className="app-shell" hidden={view === "world"}>
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">A</div>
@@ -543,7 +591,25 @@ export default function App() {
                     </article>
                   ))
                 )}
-                {activeRun && ["queued", "running"].includes(activeRun.status) && (
+                {activeRun?.awaitingCapability ? (
+                  /* Nothing is running yet: the Run is held at the gate. Saying
+                     "Codex is working" here would be a lie, and would leave the
+                     owner waiting for an answer only they can give. */
+                  <article className="message message-assistant awaiting-grant">
+                    <div className="message-meta">
+                      <strong>{selected.name}</strong>
+                      <span>waiting for your permission</span>
+                    </div>
+                    <div className="thinking-row">
+                      <Spinner />
+                      {selected.name} is asking for a keycard. Grant it in the World
+                      and this run continues.
+                    </div>
+                    <button className="button button-primary" onClick={() => setView("world")}>
+                      Review the request in the World
+                    </button>
+                  </article>
+                ) : activeRun && ["queued", "running"].includes(activeRun.status) ? (
                   <article className="message message-assistant thinking">
                     <div className="message-meta">
                       <strong>{selected.name}</strong>
@@ -554,7 +620,45 @@ export default function App() {
                       Codex is reading, editing, or running commands…
                     </div>
                   </article>
-                )}
+                ) : null}
+                {activeRun?.status === "completed" &&
+                  activeRun.withheldCount > 0 &&
+                  (() => {
+                    /* Two different stories share one panel. If nothing was
+                       staged, the Agent could only report a missing file and
+                       the owner has something to do about it. If it got what it
+                       asked for, the withheld set is least privilege working as
+                       intended -- worth a count, but not an error, and never a
+                       list: "everything you did not grant" can be thousands of
+                       files nobody asked for. */
+                    const staged = activeRun.stagedResources ?? [];
+                    const withheld = activeRun.withheldCount;
+                    const files = (n: number) => `${n} ${n === 1 ? "file" : "files"}`;
+                    return (
+                      <article className={staged.length > 0 ? "run-gate" : "run-gate run-gate-empty"}>
+                        <strong>
+                          {staged.length > 0
+                            ? "Only what you granted reached the workspace"
+                            : "Nothing reached the workspace"}
+                        </strong>
+                        {staged.length > 0 && (
+                          <ul className="gate-permitted">
+                            {staged.slice(0, GATE_LIST_LIMIT).map((entry) => (
+                              <li key={entry}>{entry}</li>
+                            ))}
+                            {staged.length > GATE_LIST_LIMIT && (
+                              <li>and {files(staged.length - GATE_LIST_LIMIT)} more</li>
+                            )}
+                          </ul>
+                        )}
+                        <span>
+                          {staged.length > 0
+                            ? `${files(withheld)} in your namespace were withheld. The gate asks about every resource at run start — it cannot know in advance what an Agent will reach for — and this Agent never saw the rest, so it cannot act on them or even know they exist.`
+                            : `No keycard covered any of the ${files(withheld)} in your namespace, so the Agent reported the file as missing rather than refused. Grant a keycard in the World and run again.`}
+                        </span>
+                      </article>
+                    );
+                  })()}
                 {activeRun?.status === "failed" && (
                   <article className="run-error">
                     <strong>Run failed</strong>
@@ -606,6 +710,19 @@ export default function App() {
               </form>
             </section>
           </>
+        ) : signedOut ? (
+          /* Signing in happens in the World, so when there is no session that
+             is the only thing worth offering. Leading with "create an Agent"
+             here just routes the visitor into a 401. */
+          <div className="no-agent">
+            <div className="no-agent-art">A</div>
+            <span className="eyebrow">Agent Launchpad</span>
+            <h1>Sign in to manage your Agents.</h1>
+            <p>Signing in happens in the World. Come back here once you are in.</p>
+            <button className="button button-primary" onClick={() => setView("world")}>
+              Go to the World
+            </button>
+          </div>
         ) : (
           <div className="no-agent">
             <div className="no-agent-art">A</div>
@@ -688,6 +805,7 @@ export default function App() {
           </form>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

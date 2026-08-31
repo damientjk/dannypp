@@ -1,0 +1,160 @@
+/**
+ * Capability scope grammar and the single canonical matcher.
+ *
+ *   scope   := "<actions>:<pattern>"
+ *   actions := comma-separated, non-empty subset of { read, write }
+ *   pattern := "res://<ownerId>/<glob>"
+ *   glob    := a resource name in which "*" matches any run of characters
+ *
+ * Examples:
+ *   read:res://user-a/*                read anything of user A's
+ *   read,write:res://user-a/notes.md   a single writable file
+ *
+ * There is exactly ONE scope matcher in this codebase and it is `scopeAllows`.
+ * Person 2's PDP imports it rather than re-implementing the check -- two
+ * enforcement paths would drift apart and disagree by demo day.
+ */
+
+import { OWNER_PATTERN, parseResourceUri, RESOURCE_SCHEME } from "../resources/uri.js";
+
+export const KNOWN_ACTIONS = ["read", "write"] as const;
+export type ResourceAction = (typeof KNOWN_ACTIONS)[number];
+
+export interface ParsedScope {
+  actions: ResourceAction[];
+  ownerId: string;
+  /** The glob portion, e.g. "*" or "notes.md". */
+  glob: string;
+}
+
+/** Same shape as a resource segment, but "*" is additionally allowed. */
+const GLOB_SEGMENT_PATTERN = /^[A-Za-z0-9*][A-Za-z0-9._*-]{0,63}$/;
+const MAX_SCOPE_LENGTH = 512;
+
+function isKnownAction(value: string): value is ResourceAction {
+  return (KNOWN_ACTIONS as readonly string[]).includes(value);
+}
+
+/** Returns the parsed scope, or null if the scope string is malformed. */
+export function parseScope(input: unknown): ParsedScope | null {
+  if (typeof input !== "string") return null;
+  if (input.length === 0 || input.length > MAX_SCOPE_LENGTH) return null;
+
+  const separator = input.indexOf(":");
+  if (separator <= 0) return null;
+
+  const actions = parseActions(input.slice(0, separator));
+  if (!actions) return null;
+
+  const pattern = input.slice(separator + 1);
+  if (!pattern.startsWith(RESOURCE_SCHEME)) return null;
+
+  const rest = pattern.slice(RESOURCE_SCHEME.length);
+  const slash = rest.indexOf("/");
+  if (slash <= 0) return null;
+
+  const ownerId = rest.slice(0, slash);
+  const glob = rest.slice(slash + 1);
+  if (!OWNER_PATTERN.test(ownerId)) return null;
+  if (!isValidGlob(glob)) return null;
+
+  return { actions, ownerId, glob };
+}
+
+function parseActions(input: string): ResourceAction[] | null {
+  const actions: ResourceAction[] = [];
+  for (const raw of input.split(",")) {
+    const action = raw.trim();
+    if (!isKnownAction(action)) return null;
+    if (!actions.includes(action)) actions.push(action);
+  }
+  return actions.length > 0 ? actions : null;
+}
+
+/**
+ * A glob is validated with the same rules as a resource name (see uri.ts) plus
+ * "*". In particular ".." is still rejected, so a wildcard cannot be used to
+ * smuggle traversal into a scope that a resource URI would have refused.
+ */
+function isValidGlob(glob: string): boolean {
+  if (glob.length === 0) return false;
+  if (glob.includes("%") || glob.includes("\\")) return false;
+  if (glob.includes("\0")) return false;
+  if (glob.startsWith("/") || glob.endsWith("/")) return false;
+
+  for (const segment of glob.split("/")) {
+    if (!GLOB_SEGMENT_PATTERN.test(segment)) return false;
+    if (segment === "." || segment === "..") return false;
+  }
+  return true;
+}
+
+function globToRegExp(glob: string): RegExp {
+  const escaped = glob
+    .split("*")
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join(".*");
+  return new RegExp("^" + escaped + "$");
+}
+
+/**
+ * The one authorization predicate for capability scope.
+ *
+ * Returns true only when `scope` grants `action` on `resource`. Any malformed
+ * input returns false -- fail closed, never throw.
+ */
+export function scopeAllows(
+  scope: unknown,
+  action: unknown,
+  resource: unknown,
+): boolean {
+  const parsedScope = parseScope(scope);
+  if (!parsedScope) return false;
+
+  if (typeof action !== "string" || !isKnownAction(action)) return false;
+  if (!parsedScope.actions.includes(action)) return false;
+
+  const parsedResource = parseResourceUri(resource);
+  if (!parsedResource) return false;
+
+  // Ownership isolation lives here: a scope names exactly one owner's
+  // namespace, so user A's capability can never match user B's URI.
+  if (parsedResource.ownerId !== parsedScope.ownerId) return false;
+
+  return globToRegExp(parsedScope.glob).test(parsedResource.name);
+}
+
+/** Whether the scope grants the action at all, ignoring which resource. */
+export function scopeAllowsAction(scope: unknown, action: unknown): boolean {
+  const parsed = parseScope(scope);
+  if (!parsed) return false;
+  if (typeof action !== "string" || !isKnownAction(action)) return false;
+  return parsed.actions.includes(action);
+}
+
+/** The default run capability: read-only over the agent owner's namespace. */
+export function defaultRunScope(ownerId: string): string {
+  return "read:" + RESOURCE_SCHEME + ownerId + "/*";
+}
+
+/**
+ * The owner a capability's scope is bound to, understanding BOTH scope
+ * grammars in the repo:
+ *
+ *   read:res://user-a/*   (Person 3, resource namespaces)
+ *   owner:user-a          (Person 2, Agent objects)
+ *
+ * The two halves of the middleware protect different resource families, so
+ * both grammars are legitimate. What matters for isolation is the same in
+ * either case: which human's namespace does this keycard belong to? This is
+ * the one function that answers that, so the PDP never has to care which
+ * grammar it is looking at.
+ */
+export function capabilityOwner(scope: unknown): string | null {
+  const parsed = parseScope(scope);
+  if (parsed) return parsed.ownerId;
+
+  if (typeof scope !== "string") return null;
+  const legacy = /^owner:([a-z0-9][a-z0-9-]{0,31})$/.exec(scope);
+  return legacy?.[1] ?? null;
+}

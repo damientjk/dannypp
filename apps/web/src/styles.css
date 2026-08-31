@@ -1099,6 +1099,79 @@ textarea:focus {
   }
 }
 
+/* The World is hidden, not unmounted, when you switch to the dashboard, so its
+   simulation keeps running. Layout displays (flex/grid) beat the UA's
+   [hidden] rule, so state it explicitly. */
+/* A Run held at the authorization gate. Amber rather than the neutral
+   "thinking" treatment: this one is waiting on the person reading it. */
+/* The gate's side of the story, alongside a run whose Agent could only report
+   a missing file. Neutral when the run got what it asked for -- refusals are
+   least privilege working, not a failure -- and red only when nothing got
+   through and the owner has something to do about it. */
+.run-gate {
+  border: 1px solid #2f3646;
+  background: #12161f;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.run-gate > strong {
+  color: #8fb7e8;
+}
+
+.run-gate ul {
+  margin: 0;
+  padding-left: 18px;
+  font-family: monospace;
+}
+
+.gate-permitted {
+  color: #7fd39b;
+}
+
+.gate-refused {
+  color: #c8798a;
+}
+
+.run-gate > span {
+  color: #9aa0ad;
+}
+
+.run-gate-empty {
+  border-color: #6b3a3a;
+  background: #241010;
+}
+
+.run-gate-empty > strong {
+  color: #e2687a;
+}
+
+.awaiting-grant {
+  border: 1px solid #6b5a24;
+  background: #241d09;
+}
+
+.awaiting-grant .message-meta span {
+  color: #e8c979;
+}
+
+.awaiting-grant > button {
+  margin-top: 12px;
+  color: #000;
+  background: #e8c979;
+}
+
+.awaiting-grant > button:hover {
+  background: #f2d68e;
+}
+
+[hidden] {
+  display: none !important;
+}
+
 .world-shell {
   min-height: 100vh;
   display: flex;
@@ -1583,6 +1656,7 @@ textarea:focus {
 .log-row.effect-deny,
 .log-row.effect-denied,
 .log-row.effect-jailed {
+.log-row.effect-denied {
   border-left-color: var(--red);
 }
 
@@ -1620,6 +1694,7 @@ textarea:focus {
 .log-badge-deny,
 .log-badge-denied,
 .log-badge-jailed {
+.log-badge-denied {
   background: rgba(224, 122, 116, 0.16);
   color: var(--red);
 }
@@ -1699,6 +1774,7 @@ textarea:focus {
 .effect-deny,
 .effect-denied,
 .effect-jailed {
+.effect-denied {
   color: var(--red);
 }
 
@@ -1820,6 +1896,23 @@ textarea:focus {
 .keycard-held .keycard-state,
 .keycard-held .keycard-mark {
   color: var(--w-permit, #57c785);
+}
+
+.keycard-grant {
+  flex: none;
+  border: 1px solid #4c7a52;
+  background: #1d2c1f;
+  color: #9fe0a6;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+
+.keycard-grant:hover {
+  background: #263b29;
+  color: #c6f2cb;
 }
 
 .keycard-missing {

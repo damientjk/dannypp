@@ -1,0 +1,150 @@
+Volc Agent Launchpad -- the gate, demonstrated
+Backend: http://localhost:3000
+Every scenario is a pair: the same request sent twice, with only
+the permission changed in between. BLOCKED then GOES IN (or the
+other way round) is the permission doing the work.
+----------------------------------------------------------
+
+### 01-the-gate.sh
+
+== SCENARIO 1: the owner grants permission, and the door opens ==
+      Agent 965f5b59-5a1d-45cd-ae09-c895bb0578fa is walking up to Auth Module (res://user-a/notes.md)
+
+  BLOCKED   with no keycard at all, it is stopped
+      "reason":"capability-unknown"
+      the owner now grants it a keycard for this room
+      keycard e6586305-9203-47e7-9773-44e20756c31d  ·  scope read:res://user-a/notes.md
+
+  GOES IN   the very same request now passes
+      "effect":"permit"
+  GOES IN   and it really read the file behind the door
+      User A notes
+      ^ same agent, same door. Only the permission changed.
+
+== SCENARIO 2: the owner takes permission away, and the door shuts ==
+      the same keycard still opens the same door right now
+  GOES IN   before revoking
+      "effect":"permit"
+      the owner shreds the keycard
+
+  BLOCKED   the identical request is now stopped
+      "reason":"capability-revoked"
+      ^ nothing about the agent or the door changed. The permission did.
+
+== SCENARIO 3: permission that runs out on its own ==
+      a keycard was issued for this door, but its time has passed
+
+  BLOCKED   an out-of-date keycard does not open it
+      "reason":"capability-expired"
+      ^ permission is time-bound, so nobody has to remember to take it back.
+
+== SCENARIO 4: a keycard opens ONE door, not every door ==
+      the agent is holding a fresh keycard for Auth Module
+
+  GOES IN   at the door it was given
+      "effect":"permit"
+  BLOCKED   at Billing, holding that same keycard
+      "reason":"out-of-scope"
+      ^ one keycard, one room. Being let in somewhere is not being let in anywhere.
+
+== SCENARIO 5: THE PROOF -- a door in somebody else's house ==
+      the agent belongs to User A and is carrying User A's keycard
+
+  GOES IN   at its own owner's door
+      "effect":"permit"
+  BLOCKED   at User B's door
+      "reason":"out-of-scope"
+  UNSEEN    and B's file stays behind the door
+      no 'SECRET-TAX-99' anywhere in the response
+      ^ User A's agent cannot reach User B's resource. This is the whole point.
+
+== SCENARIO 6: the gate cannot be walked around ==
+  BLOCKED   sneaking sideways out of the namespace
+      "reason":"resource-unknown"
+  REFUSED   asking for a keycard to another owner's house
+      
+  REFUSED   a stranger trying to shred User A's keycard
+      
+      ^ permission cannot be forged, widened, or taken away by the wrong person.
+
+== EVERY ONE OF THOSE DECISIONS WAS WRITTEN DOWN ==
+  GOES IN   the openings are in the audit trail
+      "effect":"permit"
+  GOES IN   so are the refusals, with the reason given
+      "effect":"deny"
+  GOES IN   attributed to the human the agent acted for
+      "humanId":"user-a"
+      ^ the Security Log in the world is a view of exactly this.
+
+== THE GATE: the gate behaved correctly in all 17 checks ==
+
+### 02-the-same-rule-for-agents.sh
+
+== SCENARIO 1: you have to say who you are before anything else ==
+      the same listing, asked three ways
+
+  REFUSED   with no identity at all
+      
+  REFUSED   with an invented session token
+      
+  GOES IN   signed in as User A
+      "agents"
+      ^ identity first. The gate has nothing to decide about a stranger.
+
+== SCENARIO 2: the owner can work with their Agent; nobody else can ==
+      Agent 5dd5dfd8-ff90-4939-b8fc-65051635820d belongs to User A. Every pair below is the same request.
+
+      --- look at it ---
+  GOES IN   User A, its owner
+      5dd5dfd8-ff90-4939-b8fc-65051635820d
+  BLOCKED   User B, who does not own it
+      "error":"not-owner"
+      --- rename it ---
+  GOES IN   User A
+      "name":"Renamed By Its Owner"
+  BLOCKED   User B
+      "error":"not-owner"
+      --- start it ---
+  GOES IN   User A
+      "status"
+  BLOCKED   User B
+      "error":"not-owner"
+      --- read its conversation ---
+  GOES IN   User A
+      "messages"
+  BLOCKED   User B
+      "error":"not-owner"
+      --- give it a task ---
+  BLOCKED   User B trying to put it to work
+      "error":"not-owner"
+      --- delete it ---
+  BLOCKED   User B
+      "error":"not-owner"
+      ^ six different doors, one rule: ownership decides, and the server checks.
+
+== SCENARIO 3: what you cannot open, you cannot even see ==
+  GOES IN   User A's own list contains it
+      5dd5dfd8-ff90-4939-b8fc-65051635820d
+  UNSEEN    User B's list does not mention it at all
+      no '5dd5dfd8-ff90-4939-b8fc-65051635820d' anywhere in the response
+      ^ not a hidden button. It is not in the answer B receives.
+
+== SCENARIO 4: the record of who was refused is private too ==
+      User B has just been turned away several times above
+
+  GOES IN   B's own log shows B being refused
+      "humanId":"user-b"
+  UNSEEN    and none of it appears in A's log
+      no '"humanId":"user-b"' anywhere in the response
+      ^ the audit trail is split the same way the resources are.
+
+== SCENARIO 5: where this demo stops, stated plainly ==
+  REFUSED   the owner asking their Agent to do real work
+      
+      ARK_API_KEY and ARK_MODEL are unset, so there is no model to run.
+      ^ note WHERE it stops: every permission check above still worked. The
+        gate runs before the model is ever reached, so the middleware is
+        demonstrable on a machine that could not run an Agent at all.
+
+== THE SAME RULE FOR AGENTS: the gate behaved correctly in all 18 checks ==
+Every case behaved as predicted.

@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, setSessionToken } from "../api";
-import type { Agent, AgentRun, HumanPrincipal, Message, PolicyRequestLike } from "../types";
+import type {
+  Agent,
+  AgentRun,
+  CapabilityRecord,
+  AuditEntry,
+  HumanPrincipal,
+  Message,
+  PolicyRequestLike,
+} from "../types";
 import { beginHeadingToDesk, endWorking, jailAgent, releaseAgent, spawnWorldAgents } from "./agentSim";
 import {
   decideRoomEntry,
@@ -8,7 +16,7 @@ import {
   grantedRoomsFor,
   issueCapability,
   newId,
-  revokeCapability,
+  refreshCapabilities,
 } from "./decision";
 import { WorldCanvas } from "./WorldCanvas";
 import { loadWorldMap } from "./engineMap";
@@ -21,8 +29,9 @@ import {
   pendingRequestsFor,
   queueRequest,
   resolveRequest,
+  wasDenied,
 } from "./requests";
-import { FILE_ROOMS, roomById, roomForTask } from "./resources";
+import { FILE_ROOMS, roomById, roomForTask, roomsForScope } from "./resources";
 import { cssColorForAgent } from "./agentAppearance";
 import type { LogEntry, WorldAgent } from "./types";
 
@@ -34,7 +43,18 @@ import type { LogEntry, WorldAgent } from "./types";
  */
 const OWNER = { userId: "user-a", password: "demo-a", label: "Enter the world" };
 
-const AGENT_POLL_MS = 3000;
+const AGENT_POLL_MS = 1000;
+
+/**
+ * How long a room visit stays on screen once it starts.
+ *
+ * A real run can finish in well under one poll, so sampling alone would flip an
+ * Agent from "roaming" to "roaming" and the walk would never be drawn. The
+ * decision is not slowed down or faked by this -- the PDP has already answered
+ * and the audit row is already written; this only keeps the *rendering* of that
+ * answer on screen long enough to be watchable.
+ */
+const MIN_VISIT_MS = 6000;
 
 /** Wall-clock time of the decision, so the log reads as an audit trail. */
 function formatDecisionTime(iso: string): string {
@@ -59,11 +79,17 @@ const LOG_BADGE_LABELS: Record<LogEntry["category"], string> = {
 export function WorldView() {
   const [principal, setPrincipal] = useState<HumanPrincipal | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
+  // The real capabilities from the backend store — not the in-browser mock.
+  const [capabilities, setCapabilities] = useState<CapabilityRecord[]>([]);
   const [worldAgents, setWorldAgents] = useState<WorldAgent[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  // Owner-side narration only (requested / granted / denied). Every
+  // permit and deny row comes from the backend audit trail below, so the
+  // Security Log cannot show a verdict the server did not record.
   const [events, setEvents] = useState<LogEntry[]>([]);
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mapRenderer, setMapRenderer] = useState<TiledMapRenderer | null>(null);
   const [, setRequestVersion] = useState(0);
@@ -77,6 +103,41 @@ export function WorldView() {
   selectedIdRef.current = selectedId;
   const worldAgentsRef = useRef<WorldAgent[]>([]);
   worldAgentsRef.current = worldAgents;
+  /** When each Agent's current room visit began, keyed by agent id. */
+  const visitStartedAtRef = useRef(new Map<string, number>());
+  /**
+   * Which Agent asked, keyed by the requestId of the decision it got back.
+   *
+   * A refusal for an unknown keycard has no holder to build a principal from,
+   * so the backend honestly records no agentId -- it cannot name an Agent it
+   * could not identify, and inventing one from a client-supplied hint would put
+   * forgeable data in the audit trail. But the browser knows perfectly well who
+   * it just asked on behalf of, and the decision carries the same requestId
+   * that was written to the log, so the two can be matched here for display.
+   */
+  const askedByRef = useRef(new Map<string, string>());
+  /** Bounded: the Security Log only ever renders a recent window of entries. */
+  const rememberAsker = useCallback((requestId: string, agentId: string) => {
+    const asked = askedByRef.current;
+    asked.set(requestId, agentId);
+    if (asked.size > 500) {
+      for (const key of [...asked.keys()].slice(0, asked.size - 500)) asked.delete(key);
+    }
+  }, []);
+
+  /**
+   * Pulls the backend audit trail. Called on the roster poll and again right
+   * after a decision, so the Security Log reflects a permit or deny as it
+   * happens instead of up to one poll interval later.
+   */
+  const refreshAudit = useCallback(async () => {
+    try {
+      const { entries } = await api.audit();
+      setAuditEntries(entries);
+    } catch {
+      // transient failure; the last good trail stays on screen
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,10 +179,23 @@ export function WorldView() {
     let cancelled = false;
     const poll = async () => {
       try {
-        const { agents: nextAgents } = await api.listAgents();
-        if (!cancelled) setAgents(nextAgents);
+        const [{ agents: nextAgents }, { capabilities: nextCapabilities }] = await Promise.all([
+          api.listAgents(),
+          api.capabilities(),
+        ]);
+        if (cancelled) return;
+        setAgents(nextAgents);
+        setCapabilities(nextCapabilities);
       } catch {
         // transient poll failure; try again next interval
+      }
+      // The Security Log is a view of the backend audit trail, not a
+      // parallel record kept by the browser.
+      if (!cancelled) await refreshAudit();
+      try {
+        await refreshCapabilities();
+      } catch {
+        // keycard cache keeps its previous contents until the next poll
       }
     };
     poll();
@@ -130,7 +204,7 @@ export function WorldView() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [principal]);
+  }, [principal, refreshAudit]);
 
   // Keep worldAgents in sync with the polled roster: spawn newcomers,
   // drop agents that disappeared, leave everyone else's position/behavior
@@ -150,9 +224,8 @@ export function WorldView() {
 
   // The task-visit orchestration: for every agent that's really busy and
   // still just roaming, ask the seam whether it may enter its assigned
-  // room. Permit -> walk to a desk. Deny on another owner's room -> caught
-  // red-handed, teleported to the Jail (jailAgent). Deny on its own owner's
-  // room -> queue an access request, movement left alone (spec §4 — "same
+  // room. Permit -> walk to a desk. Deny -> queue an access request; the
+  // agent's movement is left completely alone either way (spec §4 — "same
   // animation is kept"). For agents that stopped being busy while working,
   // release the desk back to roaming.
   useEffect(() => {
@@ -183,7 +256,14 @@ export function WorldView() {
           // guard below is the thing that refuses.
           const room = roomForTask(await activePromptFor(agent.id), agent);
           if (!room) continue;
+          // Already asked this busy cycle: a pending request is waiting on the
+          // owner, and a refusal has been given. Re-asking would put an
+          // identical decision in the audit trail every poll -- once a second,
+          // for as long as the Agent stays busy -- burying the one decision
+          // that actually happened under its own echoes. clearDeniedForAgent
+          // lifts this when the task cycle ends, so a later run asks afresh.
           if (hasPendingRequest(agent.id, room.id)) continue;
+          if (wasDenied(agent.id, room.id)) continue;
           if (room.id !== worldAgent.assignedRoomId) {
             setWorldAgents((current) =>
               current.map((wa) =>
@@ -206,6 +286,9 @@ export function WorldView() {
           };
           const decision = await decideRoomEntry(request);
           if (cancelled) return;
+          rememberAsker(decision.requestId, agent.id);
+          // The backend has just recorded this decision; show it now.
+          void refreshAudit();
 
           // Log the raw PDP decision only once it represents an actual state
           // change, not on every re-decided-but-nothing-changed poll — see
@@ -215,27 +298,21 @@ export function WorldView() {
             const updated = beginHeadingToDesk(worldAgent, room, claimed, mapRenderer);
             if (updated) {
               claimed.add(updated.occupiedDeskId!);
+              visitStartedAtRef.current.set(agent.id, Date.now());
               setWorldAgents((current) =>
                 current.map((wa) => (wa.agentId === agent.id ? updated : wa)),
               );
-              setEvents((current) => [
-                {
-                  id: requestId,
-                  agentId: agent.id,
-                  category: "permit",
-                  message: `${agent.name} → ${room.displayName}: permit (${decision.reason})`,
-                  timestamp: decision.decidedAt,
-                },
-                ...current,
-              ]);
             }
+            // No log push here: the permit is already an entry in the backend
+            // audit trail, and that trail is what the Security Log renders.
             // else: every desk is occupied, agent keeps roaming and waits
             // (spec §4) — nothing changed, so nothing new to log.
           } else if (room.ownerId !== null && room.ownerId !== agent.ownerId) {
-            // Caught reaching for another owner's room: no request toast, no
-            // negotiation — straight to jail. Flipping behaviorMode off
-            // "roaming" is also what keeps this branch from re-firing (and
-            // re-logging) on every later poll of the same busy run.
+            // Another owner's room: no request to file, no waiting -- the
+            // agent is caught red-handed and thrown in the Jail (teleport,
+            // jailAgent). Released when its run ends. The backend's deny is
+            // already in the audit trail; these rows are the world-facing
+            // consequence.
             setWorldAgents((current) =>
               current.map((wa) => (wa.agentId === agent.id ? jailAgent(wa, mapRenderer) : wa)),
             );
@@ -245,13 +322,6 @@ export function WorldView() {
                 agentId: agent.id,
                 category: "jailed",
                 message: `${agent.name} was caught touching ${room.displayName} → thrown in the Jail`,
-                timestamp: decision.decidedAt,
-              },
-              {
-                id: requestId,
-                agentId: agent.id,
-                category: "deny",
-                message: `${agent.name} → ${room.displayName}: deny (${decision.reason})`,
                 timestamp: decision.decidedAt,
               },
               ...current,
@@ -264,14 +334,10 @@ export function WorldView() {
               roomOwnerId: room.ownerId!,
             });
             if (queued) {
+              // The deny itself is in the audit trail; this row is the
+              // owner-facing consequence of it, which the backend has no
+              // opinion about.
               setEvents((current) => [
-                {
-                  id: requestId,
-                  agentId: agent.id,
-                  category: "deny",
-                  message: `${agent.name} → ${room.displayName}: deny (${decision.reason})`,
-                  timestamp: decision.decidedAt,
-                },
                 {
                   id: newId(),
                   agentId: agent.id,
@@ -291,14 +357,20 @@ export function WorldView() {
           // ask again (spec §5), regardless of whether the agent ever made
           // it to a desk (a denied agent stays "roaming", never "working").
           clearDeniedForAgent(agent.id);
-          if (worldAgent.behaviorMode === "working") {
-            setWorldAgents((current) =>
-              current.map((wa) => (wa.agentId === agent.id ? endWorking(wa) : wa)),
-            );
-          } else if (worldAgent.behaviorMode === "jailed") {
-            // Sentence served — the run that got it caught is over. Walk free.
+          if (worldAgent.behaviorMode === "jailed") {
+            // Sentence served: the run that earned the jailing is over.
             setWorldAgents((current) =>
               current.map((wa) => (wa.agentId === agent.id ? releaseAgent(wa, mapRenderer) : wa)),
+            );
+          } else if (worldAgent.behaviorMode === "working" || worldAgent.behaviorMode === "heading-to-desk") {
+            // Hold the desk for MIN_VISIT_MS. A run that finished before the
+            // walk did would otherwise turn the Agent around mid-corridor and
+            // the visit would never be seen; the next poll retries.
+            const startedAt = visitStartedAtRef.current.get(agent.id);
+            if (startedAt !== undefined && Date.now() - startedAt < MIN_VISIT_MS) continue;
+            visitStartedAtRef.current.delete(agent.id);
+            setWorldAgents((current) =>
+              current.map((wa) => (wa.agentId === agent.id ? endWorking(wa) : wa)),
             );
           }
         }
@@ -316,7 +388,7 @@ export function WorldView() {
     // Without depending on the roster size, this effect would never get a
     // second chance to see a freshly-spawned agent's assignedRoomId.
     // ponytail: length as a cheap "roster changed" signal, not a deep dep
-  }, [agents, mapRenderer, worldAgents.length]);
+  }, [agents, mapRenderer, worldAgents.length, refreshAudit]);
 
   // Re-fetch whenever the selected agent's polled status changes (not just
   // on selection) — otherwise a run that starts *after* the agent is already
@@ -358,9 +430,17 @@ export function WorldView() {
     }
   }, []);
 
-  const grantRequest = useCallback((request: AccessRequest) => {
+  const grantRequest = useCallback(async (request: AccessRequest) => {
     setPendingDecision(null);
-    issueCapability(request.agentId, request.roomId);
+    try {
+      // A real keycard, minted by the backend and scoped to this room's
+      // resource. If the backend refuses, no access is granted and the
+      // request stays pending rather than the UI pretending otherwise.
+      await issueCapability(request.agentId, request.roomId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not issue the keycard");
+      return;
+    }
     resolveRequest(request.id);
     setRequestVersion((v) => v + 1);
     setEvents((current) => [
@@ -379,6 +459,13 @@ export function WorldView() {
     setPendingDecision(null);
     resolveRequest(request.id);
     markDenied(request.agentId, request.roomId);
+    // "No" is an answer, and the Run is holding at the gate waiting for it.
+    // Without this it would sit out the rest of its wait and start with an
+    // empty inbox anyway -- the same outcome, but reached by a timeout rather
+    // than by the decision the owner just made.
+    void api.denyCapability(request.agentId).catch(() => {
+      // The Run times out on its own; a failed refusal must not break the UI.
+    });
     setRequestVersion((v) => v + 1);
     setEvents((current) => [
       {
@@ -425,26 +512,140 @@ export function WorldView() {
   const selectedAgent = agents.find((agent) => agent.id === selectedId) ?? null;
   const selectedWorldAgent = worldAgents.find((wa) => wa.agentId === selectedId) ?? null;
   const selectedRoom = selectedWorldAgent?.assignedRoomId ? roomById(selectedWorldAgent.assignedRoomId) : null;
-  const selectedGrantedRooms = selectedAgent ? grantedRoomsFor(selectedAgent.id) : [];
+  /**
+   * Every keycard this Agent really holds right now. Expiry is checked here
+   * rather than trusted from the poll, since a capability can lapse between
+   * polls.
+   */
+  const liveCapabilities = selectedAgent
+    ? capabilities.filter(
+        (record) =>
+          record.agentId === selectedAgent.id &&
+          record.revokedAt === null &&
+          Date.parse(record.expiresAt) > Date.now(),
+      )
+    : [];
+  const liveCapability = liveCapabilities[0] ?? null;
+
+  /**
+   * Rooms those keycards open -- derived per room from each card's scope, not
+   * from "holds something, therefore holds everything". A Run's own keycard
+   * grants execution and no data scope at all, so an Agent that was never
+   * granted anything correctly shows an empty wall.
+   */
+  const selectedGrantedRooms = liveCapabilities
+    .flatMap((record) => roomsForScope(record.scope))
+    .filter((room) => room.requiresPermission)
+    .map((room) => room.id);
   const activeRun = runs.find((run) => run.status === "running" || run.status === "queued") ?? null;
   const myRequests = pendingRequestsFor(principal.id);
-  // Attempts the policy engine refused, counted over the whole session. NOT a
+  /** Name of an Agent as the roster knows it, for rendering an audit row. */
+  const agentNameFor = (agentId: string): string =>
+    agents.find((agent) => agent.id === agentId)?.name ?? "An agent";
+
+  /** The Agent an audit row is about, falling back to who the World asked for. */
+  const askerNameFor = (entry: AuditEntry): string =>
+    agentNameFor(entry.agentId || askedByRef.current.get(entry.requestId) || "");
+
+  /** The room a recorded resource URI belongs to, so a row reads as a place. */
+  const roomLabelFor = (resourceUri: string): string =>
+    FILE_ROOMS.find((room) => room.resourceUri === resourceUri)?.displayName ??
+    resourceUri;
+
+  // Every permit/deny row is a backend audit entry, rendered rather than
+  // authored here. The owner's own grant/deny/request narration is merged in
+  // around it -- those are UI consequences the PDP has no opinion about.
+  const auditRows: LogEntry[] = auditEntries
+    .filter((entry) => entry.action.startsWith("resource:"))
+    .map((entry) => ({
+      id: entry.id,
+      agentId: entry.agentId,
+      category: entry.effect === "permit" ? "permit" : "deny",
+      message: `${askerNameFor(entry)} → ${roomLabelFor(entry.resource)}: ${entry.effect} (${entry.reason})`,
+      timestamp: entry.decidedAt,
+    }));
+
+  const logRows = [...auditRows, ...events].sort((a, b) =>
+    b.timestamp.localeCompare(a.timestamp),
+  );
+
+  // Attempts the policy engine refused, counted over the whole trail. NOT a
   // live "how many agents are blocked right now": granting access does not
   // decrement it, and an owner's own refusal is category "denied", not "deny".
-  const blockedCount = events.filter((event) => event.category === "deny").length;
+  const blockedCount = auditRows.filter((row) => row.category === "deny").length;
 
-  // Revokes every room this agent currently holds, in one action — the
-  // detail panel just lists what it has, it never offers a per-room undo.
-  const shredKeycard = () => {
-    if (!selectedAgent || selectedGrantedRooms.length === 0) return;
-    for (const roomId of selectedGrantedRooms) revokeCapability(selectedAgent.id, roomId);
+  /**
+   * Shreds every keycard this Agent really holds, in one action — the detail
+   * panel just lists what it has, it never offers a per-room undo.
+   *
+   * The records come from the backend store (the same list the panel renders),
+   * NOT from the world's per-room cache. That cache is keyed by room, and the
+   * keycard the backend issues at run start is scoped to the owner's whole
+   * namespace (`read:res://<ownerId>/*`), which is not any single room — so
+   * revoking room by room silently matched nothing and shredding did nothing.
+   */
+  const shredKeycard = async () => {
+    if (!selectedAgent) return;
+    const doomed = capabilities.filter(
+      (record) =>
+        record.agentId === selectedAgent.id &&
+        record.revokedAt === null &&
+        Date.parse(record.expiresAt) > Date.now(),
+    );
+    if (doomed.length === 0) return;
+    const revokedRooms = selectedGrantedRooms.length;
+    try {
+      for (const record of doomed) {
+        await api.revokeCapability(record.id);
+      }
+      // Re-read rather than patch: revoking also suspends the Agent, so the
+      // backend is the only thing that knows what it now holds.
+      const { capabilities: fresh } = await api.capabilities();
+      setCapabilities(fresh);
+      await refreshCapabilities();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not revoke the keycard");
+      return;
+    }
     setRequestVersion((v) => v + 1);
     setEvents((current) => [
       {
         id: newId(),
         agentId: selectedAgent.id,
         category: "denied",
-        message: `${principal.displayName} shredded ${selectedAgent.name}'s keycard (${selectedGrantedRooms.length} room${selectedGrantedRooms.length === 1 ? "" : "s"} revoked)`,
+        message: `${principal.displayName} shredded ${selectedAgent.name}'s keycard (${revokedRooms} room${revokedRooms === 1 ? "" : "s"} revoked)`,
+        timestamp: new Date().toISOString(),
+      },
+      ...current,
+    ]);
+  };
+
+  /**
+   * The owner handing this Agent a keycard for one room, unprompted.
+   *
+   * Not every grant answers a request. An Agent whose keycard was shredded is
+   * SUSPENDED: its next run is refused at execution, so it never walks to a
+   * door and never asks -- and without a way to grant directly there would be
+   * no way back. Issuing a keycard is exactly what lifts that suspension.
+   */
+  const grantRoom = async (roomId: string) => {
+    if (!selectedAgent) return;
+    try {
+      await issueCapability(selectedAgent.id, roomId);
+      const { capabilities: fresh } = await api.capabilities();
+      setCapabilities(fresh);
+      await refreshCapabilities();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not issue the keycard");
+      return;
+    }
+    setRequestVersion((v) => v + 1);
+    setEvents((current) => [
+      {
+        id: newId(),
+        agentId: selectedAgent.id,
+        category: "granted",
+        message: `${principal.displayName} gave ${selectedAgent.name} a keycard for ${roomById(roomId).displayName}`,
         timestamp: new Date().toISOString(),
       },
       ...current,
@@ -485,9 +686,9 @@ export function WorldView() {
                   ? "in jail"
                   : worldAgent?.behaviorMode === "working"
                     ? "working"
-                    : worldAgent?.behaviorMode === "heading-to-desk"
-                      ? "heading to desk"
-                      : worldAgent?.assignedRoomId && hasPendingRequest(agent.id, worldAgent.assignedRoomId)
+                  : worldAgent?.behaviorMode === "heading-to-desk"
+                    ? "heading to desk"
+                    : worldAgent?.assignedRoomId && hasPendingRequest(agent.id, worldAgent.assignedRoomId)
                       ? "awaiting access"
                       : "roaming";
               return (
@@ -546,14 +747,23 @@ export function WorldView() {
                       <span className="keycard-room">{room.displayName}</span>
                       <span className="keycard-state">{stateLabel}</span>
                     </span>
-                    <span className="keycard-mark" aria-hidden="true">
-                      {foreign ? "✕" : held ? "✓" : "–"}
-                    </span>
+                    {state === "missing" ? (
+                      <button
+                        className="keycard-grant"
+                        onClick={() => void grantRoom(room.id)}
+                      >
+                        Grant
+                      </button>
+                    ) : (
+                      <span className="keycard-mark" aria-hidden="true">
+                        {foreign ? "✕" : "✓"}
+                      </span>
+                    )}
                   </li>
                 );
               })}
             </ul>
-            <button className="revoke-button" onClick={shredKeycard} disabled={selectedGrantedRooms.length === 0}>
+            <button className="revoke-button" onClick={shredKeycard} disabled={!liveCapability}>
               Shred this agent&apos;s keycard
             </button>
           </section>
@@ -574,13 +784,13 @@ export function WorldView() {
         <section className="panel-block security-log">
           <div className="panel-head">
             <h4>Security log</h4>
-            <span className="panel-count">{events.length}</span>
+            <span className="panel-count">{logRows.length}</span>
           </div>
-          {events.length === 0 ? (
+          {logRows.length === 0 ? (
             <p className="security-log-empty">No access attempts yet.</p>
           ) : (
             <ul>
-              {events.map((event) => (
+              {logRows.map((event) => (
                 <li key={event.id} className={"log-row effect-" + event.category}>
                   <span className="log-head">
                     {event.agentId && (

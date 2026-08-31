@@ -1,8 +1,12 @@
 import type {
   Agent,
   AgentRun,
+  AuditEntry,
+  CapabilityRecord,
   HumanPrincipal,
   Message,
+  PolicyDecision,
+  ResourceRef,
   SystemInfo,
 } from "./types";
 
@@ -26,6 +30,22 @@ export function setSessionToken(token: string): void {
   sessionToken = token.trim();
 }
 
+/**
+ * A refusal that still carries the decision that caused it.
+ *
+ * The resource routes answer a denial with HTTP 403 *and* the PolicyDecision.
+ * That decision is the payload the UI actually wants -- losing it to a generic
+ * error would put the UI back in the business of guessing why access failed.
+ */
+export class PolicyDeniedError extends ApiError {
+  constructor(
+    message: string,
+    public readonly decision: PolicyDecision,
+  ) {
+    super(message, 403);
+  }
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const headers = {
     ...(options?.body ? { "Content-Type": "application/json" } : {}),
@@ -37,8 +57,14 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     ...options,
     headers,
   });
-  const data = (await response.json().catch(() => ({}))) as T & { error?: string };
+  const data = (await response.json().catch(() => ({}))) as T & {
+    error?: string;
+    decision?: PolicyDecision;
+  };
   if (!response.ok) {
+    if (response.status === 403 && data.decision) {
+      throw new PolicyDeniedError(data.error ?? "Denied", data.decision);
+    }
     throw new ApiError(data.error ?? "Request failed", response.status);
   }
   return data;
@@ -83,6 +109,11 @@ export const api = {
     request<{ agent: Agent }>("/api/agents/" + id + "/stop", {
       method: "POST",
     }),
+  /** The owner refusing the keycard this Agent's Run is waiting for. */
+  denyCapability: (id: string) =>
+    request<{ denied: boolean }>("/api/agents/" + id + "/deny-capability", {
+      method: "POST",
+    }),
   messages: (id: string) =>
     request<{ messages: Message[] }>("/api/agents/" + id + "/messages"),
   runs: (id: string) =>
@@ -96,4 +127,51 @@ export const api = {
       },
     ),
   run: (id: string) => request<{ run: AgentRun }>("/api/runs/" + id),
+
+  // --- Identity & Authorization middleware ------------------------------
+  // Everything below reaches the PDP. None of these decisions are made in the
+  // browser: the UI asks, renders what the backend answered, and nothing else.
+
+  /** The attributed decision log for the signed-in human. */
+  audit: () => request<{ entries: AuditEntry[] }>("/api/audit"),
+
+  /** Keycards this human owns, optionally narrowed to one Agent. */
+  capabilities: (agentId?: string) =>
+    request<{ capabilities: CapabilityRecord[] }>(
+      "/api/capabilities" + (agentId ? "?agentId=" + encodeURIComponent(agentId) : ""),
+    ),
+
+  /** Mint a scoped keycard for one of this human's Agents. */
+  issueCapability: (body: { agentId: string; scope?: string; ttlMs?: number }) =>
+    request<{ capability: CapabilityRecord }>("/api/capabilities", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** Shred a keycard. Only its owner may do this; the backend enforces that. */
+  revokeCapability: (id: string) =>
+    request<{ capability: CapabilityRecord }>(
+      "/api/capabilities/" + id + "/revoke",
+      { method: "POST" },
+    ),
+
+  /** Metadata for every namespace. `skipped` names files the URI grammar refused. */
+  resources: () =>
+    request<{ resources: ResourceRef[]; skipped: string[] }>("/api/resources"),
+
+  /** A human reading their own namespace. Throws PolicyDeniedError on refusal. */
+  resourceContent: (uri: string) =>
+    request<{ decision: PolicyDecision; resource: ResourceRef; content: string }>(
+      "/api/resources/content?uri=" + encodeURIComponent(uri),
+    ),
+
+  /**
+   * The Agent-facing read: the capability IS the credential, so no session is
+   * involved. Throws PolicyDeniedError carrying the backend's decision.
+   */
+  readResource: (uri: string, capabilityId: string) =>
+    request<{ decision: PolicyDecision; resource: ResourceRef; content: string }>(
+      "/api/resources/read",
+      { method: "POST", body: JSON.stringify({ uri, capabilityId }) },
+    ),
 };

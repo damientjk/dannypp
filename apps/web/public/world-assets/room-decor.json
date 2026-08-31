@@ -66,6 +66,16 @@
       "y": 96
     },
     {
+      "image": "decor/analytics/trophy-left.png",
+      "x": 576,
+      "y": 32
+    },
+    {
+      "image": "decor/analytics/trophy-right.png",
+      "x": 640,
+      "y": 32
+    },
+    {
       "image": "decor/analytics/racket.png",
       "x": 512,
       "y": 96

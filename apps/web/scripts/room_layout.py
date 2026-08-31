@@ -186,14 +186,21 @@ DECOR = {
     # proper top-down table-tennis sprite with a net.
     "analytics": [
         # Fix round 3: full rebuild from the user's reorganized Sports Room/
-        # folder. Verified every file myself before use -- "trophy.png" and
-        # "trophy 2.png" turned out to be byte-identical to the old
+        # folder. "trophy.png"/"trophy 2.png" are byte-identical to the old
         # Music_and_Sport_Singles_32x32_157/158.png two-person scene this
-        # room already used and dropped (not a trophy at all -- the same
-        # "people flanking a table" render, just relabeled). Did NOT use
-        # them as a trophy cluster; col=1 (top-left, row=-1) stays empty
-        # pending real trophy art, same as fix round 2. Flagged in the
-        # report for the coordinator/user to resolve.
+        # room already used and dropped -- flagged that round, since the
+        # byte-match looked like a mislabel. Fix round 4: the user directly
+        # confirmed these ARE the intended trophy crop regardless of the
+        # byte-match (they deliberately chose this source file), so they're
+        # in now -- see the pair below. Not literally "top-left" (col=1):
+        # that spot has been open since fix round 2, but fix round 3's
+        # table-tennis-table now covers cols 0-2 for rows 0-3, and each
+        # trophy's real 96px height (3 tiles) reaches from row=-1 down to
+        # row=1 regardless of which column it's placed in -- so any
+        # col=0-2 placement here would overlap the table. Cols 5-8 is the
+        # ONLY collision-free side-by-side span left in that row=-1..1
+        # band (checked all 9 possible column starts programmatically) --
+        # see the report for the full search.
         #
         # hoop.png/basketball.png are byte-identical to this room's already-
         # correct existing assets (_76/_79) -- re-sourced to Sports Room/
@@ -205,6 +212,16 @@ DECOR = {
              src=REPO_ROOT / "Sports Room" / "hoop.png"),
         dict(col=4, row=1, dest="basketball.png",
              src=REPO_ROOT / "Sports Room" / "basketball.png"),
+        # Trophy pair (64x96 each, fix round 4 -- see the leading comment
+        # above for why cols 5-8, not col=1). Placed side by side, flush
+        # against each other (col=5 trophy's right edge lands exactly on
+        # col=7's left edge, no gap) and flush against the room's right
+        # interior edge (col=7 + 2 tiles = col 9, the exact boundary).
+        # Both sit right beside the hoop at col=4 with no gap either.
+        dict(col=5, row=-1, dest="trophy-left.png",
+             src=REPO_ROOT / "Sports Room" / "trophy.png"),
+        dict(col=7, row=-1, dest="trophy-right.png",
+             src=REPO_ROOT / "Sports Room" / "trophy 2.png"),
         # racket 1.png (32x32) -- used ONCE, not duplicated into a pair.
         # This is the same file fix round 2 used twice as "racquet-1"/
         # "racquet-2" (then read as "a pair of crossed paddles"); this

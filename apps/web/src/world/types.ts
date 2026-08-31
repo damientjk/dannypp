@@ -18,6 +18,10 @@ export interface WorldAgent {
   behaviorMode: BehaviorMode;
   assignedRoomId: string | null;
   occupiedDeskId: string | null;
+  /** While wandering, agents occasionally pause to read or check their
+   *  phone (restUntil is a Date.now() deadline; null anim = not resting). */
+  restAnim: "read" | "phone" | null;
+  restUntil: number;
 }
 
 // Security log entry. Covers both raw PDP decisions (permit/deny, from

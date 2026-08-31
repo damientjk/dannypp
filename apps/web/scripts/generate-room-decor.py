@@ -383,6 +383,26 @@ def main() -> None:
             "spawnPoint": None,
         })
 
+    # Work bubble: the user's two-frame hammer indicator (repo-root
+    # animations/"UI Animation.png": two ~31px icons side by side).
+    # WorldCanvas flips between the frames above any agent whose
+    # behaviorMode is "working".
+    sheet = Image.open(REPO_ROOT / "animations" / "UI Animation.png").convert("RGBA")
+    half = sheet.width // 2
+    ui_dir = WORLD_ASSETS / "ui"
+    ui_dir.mkdir(parents=True, exist_ok=True)
+    sheet.crop((0, 0, half, sheet.height)).save(ui_dir / "work-bubble-1.png")
+    sheet.crop((half, 0, sheet.width, sheet.height)).save(ui_dir / "work-bubble-2.png")
+
+    # Character sheets: the five named agents (repo-root Agents/), four
+    # action sheets each (idle/run/reading/phone) -- copied verbatim,
+    # names lowercased so the frontend can build URLs like
+    # characters/adam_run_32x32.png.
+    char_dir = WORLD_ASSETS / "characters"
+    char_dir.mkdir(parents=True, exist_ok=True)
+    for sheet in sorted((REPO_ROOT / "Agents").glob("*.png")):
+        shutil.copyfile(sheet, char_dir / sheet.name.lower())
+
     out = {"decor": decor_entries, "equipment": equipment_entries}
     out_path = WORLD_ASSETS / "room-decor.json"
     out_path.write_text(json.dumps(out, indent=2))

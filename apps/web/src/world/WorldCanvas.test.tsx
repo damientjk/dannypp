@@ -63,6 +63,8 @@ function agent(overrides: Partial<WorldAgent> = {}): WorldAgent {
     behaviorMode: "roaming",
     assignedRoomId: "auth-module",
     occupiedDeskId: null,
+    restAnim: null,
+    restUntil: 0,
     ...overrides,
   };
 }
@@ -83,6 +85,9 @@ describe("WorldCanvas", () => {
   });
 
   it("keeps roaming agents moving on their own (advanceBehavior picks a target)", async () => {
+    // Pin the dice above REST_CHANCE so the agent always chooses to walk
+    // (a real roll can start a multi-second read/phone pause instead).
+    const dice = vi.spyOn(Math, "random").mockReturnValue(0.9);
     const onFrame = vi.fn();
     const { unmount } = render(<WorldCanvas agents={[agent()]} onFrame={onFrame} />);
 
@@ -93,6 +98,7 @@ describe("WorldCanvas", () => {
     // should have been given a fresh roam path by advanceBehavior.
     expect(last[0].path.length).toBeGreaterThan(0);
 
+    dice.mockRestore();
     unmount();
   });
 

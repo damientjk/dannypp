@@ -5,10 +5,11 @@ import type { TiledMapRenderer } from "./engine/TiledMapRenderer";
 import { CharacterSprite } from "./engine/CharacterSprite";
 import { EquipmentSprite } from "./engine/EquipmentSprite";
 import { buildCharacterFrames } from "./engineCharacter";
+import type { CharacterFrames } from "./engineCharacter";
 import { loadWorldMap } from "./engineMap";
 import { loadRoomDecor } from "./roomDecor";
 import { advanceBehavior, settleAgent, tickAgent } from "./agentSim";
-import { colorForAgent } from "./agentAppearance";
+import { CHARACTER_NAMES, characterForIndex } from "./agentAppearance";
 import { FILE_ROOMS } from "./resources";
 import type { WorldAgent } from "./types";
 
@@ -51,12 +52,21 @@ export function WorldCanvas({
     let disposed = false;
     let app: Application | null = null;
     let renderer: TiledMapRenderer | null = null;
-    let characterTexture: Texture | null = null;
+    let characterSets: Map<string, CharacterFrames> | null = null;
     let lastTime: number | null = null;
     const equipmentSprites = new Map<string, EquipmentSprite>();
+    // Which character model each live sprite was built with -- a deleted
+    // agent shifts everyone after it down the rotation, and that agent's
+    // sprite must be rebuilt with its new model.
+    const spriteCharacters = new Map<string, string>();
+    let bubbleTextures: Texture[] = [];
+    const bubbleSprites = new Map<string, Sprite>();
 
     const tick = (time: number) => {
       if (disposed || !renderer) return;
+      // Narrowed alias: the forEach callback below is a new function scope,
+      // where TS can't carry the null check on the mutable `renderer`.
+      const liveRenderer = renderer;
       const last = lastTime ?? time;
       const deltaMs = time - last;
       lastTime = time;
@@ -76,26 +86,59 @@ export function WorldCanvas({
       }
 
       const seen = new Set<string>();
-      for (const agent of next) {
+      next.forEach((agent, index) => {
         seen.add(agent.agentId);
+        const characterName = characterForIndex(index);
         let sprite = spritesRef.current.get(agent.agentId);
+        if (sprite && spriteCharacters.get(agent.agentId) !== characterName) {
+          sprite.destroy();
+          spritesRef.current.delete(agent.agentId);
+          sprite = undefined;
+        }
         if (!sprite) {
-          sprite = new CharacterSprite(buildCharacterFrames(characterTexture!));
-          renderer.getCharacterContainer().addChild(sprite.container);
+          sprite = new CharacterSprite(characterSets!.get(characterName)!);
+          liveRenderer.getCharacterContainer().addChild(sprite.container);
           spritesRef.current.set(agent.agentId, sprite);
+          spriteCharacters.set(agent.agentId, characterName);
         }
         sprite.setPosition(agent.x + 16, agent.y + 32);
         const isMoving = agent.progress < 1;
-        const anim = agent.behaviorMode === "working" ? "type" : isMoving ? "walk" : "idle";
+        // Working agents stand at their spot (the bubble carries the "busy"
+        // signal); movement runs; a wandering pause plays its read/phone
+        // loop. Identity comes from which character the agent wears.
+        const anim = agent.behaviorMode === "working" ? "idle" : isMoving ? "run" : (agent.restAnim ?? "idle");
         sprite.setAnimation(anim, agent.facing);
-        // Stable per-agent colour, so several agents in one room stay
-        // tellable apart and match their swatch in the side panel.
-        sprite.setTint(colorForAgent(agent.agentId));
-      }
+
+        // Work bubble: the user's two-frame hammer indicator, flipped
+        // every 350ms above any working agent's head.
+        let bubble = bubbleSprites.get(agent.agentId);
+        if (agent.behaviorMode === "working" && bubbleTextures.length === 2) {
+          if (!bubble) {
+            bubble = new Sprite(bubbleTextures[0]);
+            bubble.anchor.set(0.5, 1);
+            // Above every depth-sorted character (their zIndex tracks y,
+            // which tops out at the canvas height).
+            bubble.zIndex = 100_000;
+            liveRenderer.getCharacterContainer().addChild(bubble);
+            bubbleSprites.set(agent.agentId, bubble);
+          }
+          bubble.texture = bubbleTextures[Math.floor(time / 350) % 2];
+          bubble.position.set(agent.x + 16, agent.y - 2);
+        } else if (bubble) {
+          bubble.destroy();
+          bubbleSprites.delete(agent.agentId);
+        }
+      });
       for (const [id, sprite] of spritesRef.current) {
         if (!seen.has(id)) {
           sprite.destroy();
           spritesRef.current.delete(id);
+          spriteCharacters.delete(id);
+          const bubble = bubbleSprites.get(id);
+          if (bubble) {
+            bubble.destroy();
+            bubbleSprites.delete(id);
+          }
         }
       }
 
@@ -104,15 +147,33 @@ export function WorldCanvas({
 
     (async () => {
       try {
-        const [loadedRenderer, loadedCharacterTexture, roomDecor] = await Promise.all([
+        const [loadedRenderer, roomDecor, ...loadedBubbles] = await Promise.all([
           loadWorldMap(),
-          Assets.load("/world-assets/characters/default.png"),
           loadRoomDecor(),
+          Assets.load("/world-assets/ui/work-bubble-1.png"),
+          Assets.load("/world-assets/ui/work-bubble-2.png"),
         ]);
         if (disposed) return;
 
         renderer = loadedRenderer;
-        characterTexture = loadedCharacterTexture;
+        bubbleTextures = loadedBubbles;
+
+        // The five named characters, four action sheets each (Agents/) --
+        // sliced into per-direction frame sets once, shared by every agent
+        // wearing that character.
+        const sets = new Map<string, CharacterFrames>();
+        await Promise.all(
+          CHARACTER_NAMES.map(async (name) => {
+            const [idle, run, reading, phone] = await Promise.all(
+              ["idle", "run", "reading", "phone"].map((action) =>
+                Assets.load(`/world-assets/characters/${name}_${action}_32x32.png`),
+              ),
+            );
+            sets.set(name, buildCharacterFrames({ idle, run, reading, phone }));
+          }),
+        );
+        if (disposed) return;
+        characterSets = sets;
 
         app = new Application();
         await app.init({
@@ -176,6 +237,7 @@ export function WorldCanvas({
       for (const sprite of spritesRef.current.values()) sprite.destroy();
       spritesRef.current.clear();
       for (const es of equipmentSprites.values()) es.destroy();
+      for (const bubble of bubbleSprites.values()) bubble.destroy();
       app?.destroy();
     };
   }, []);

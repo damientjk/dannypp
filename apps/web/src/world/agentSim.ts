@@ -1,13 +1,19 @@
 import type { Agent } from "../types";
 import type { TiledMapRenderer } from "./engine/TiledMapRenderer";
 import { findPath } from "./engine/pathfinding";
-import { JAIL_ROOM_ID, assignedRoomFor, isGatedTile } from "./resources";
+import { JAIL_ROOM_ID, WORK_FACING, assignedRoomFor, isGatedTile } from "./resources";
 import type { FileRoom } from "./resources";
 import type { Facing, WorldAgent } from "./types";
 
 const MOVE_SPEED_PX_PER_MS = 0.12;
 const ROAM_RADIUS_TILES = 4;
 const ROAM_PICK_ATTEMPTS = 20;
+// When a wandering agent finishes a walk, this is the chance it pauses to
+// read or check its phone instead of picking the next target, and how long
+// the pause runs.
+const REST_CHANCE = 0.25;
+const REST_MIN_MS = 2500;
+const REST_VAR_MS = 3500;
 
 export function spawnWorldAgents(agents: Agent[], renderer: TiledMapRenderer): WorldAgent[] {
   const spawnTile = renderer.getSpawnPoint("common") ?? { x: 0, y: 0 };
@@ -30,6 +36,8 @@ export function spawnWorldAgents(agents: Agent[], renderer: TiledMapRenderer): W
       behaviorMode: "roaming",
       assignedRoomId: assignedRoomFor(agent)?.id ?? null,
       occupiedDeskId: null,
+      restAnim: null,
+      restUntil: 0,
     };
   });
 }
@@ -110,6 +118,22 @@ export function advanceBehavior(agent: WorldAgent, renderer: TiledMapRenderer): 
   const wandering = agent.behaviorMode === "roaming" || agent.behaviorMode === "jailed";
   if (!wandering || agent.path.length > 0) return agent;
 
+  // Rest interludes: mid-pause agents stand still (WorldCanvas plays the
+  // read/phone loop); when the pause expires — or a walk just ended — roll
+  // once for a new pause before picking the next roam target.
+  const now = Date.now();
+  if (agent.restUntil > now) return agent;
+  if (agent.restAnim !== null) agent = { ...agent, restAnim: null };
+  if (Math.random() < REST_CHANCE) {
+    return {
+      ...agent,
+      restAnim: Math.random() < 0.5 ? "read" : "phone",
+      restUntil: now + REST_MIN_MS + Math.random() * REST_VAR_MS,
+      // The reading/phone art is drawn front-on only.
+      facing: "down",
+    };
+  }
+
   const adapter =
     agent.behaviorMode === "jailed" ? jailRoamAdapter(renderer) : openRoamAdapter(renderer);
   const startTile = renderer.pixelToTile(agent.x, agent.y);
@@ -141,6 +165,8 @@ export function beginHeadingToDesk(
     ...beginPath(agent, waypoints),
     behaviorMode: "heading-to-desk",
     occupiedDeskId: freeDeskId,
+    restAnim: null,
+    restUntil: 0,
   };
 }
 
@@ -179,6 +205,8 @@ export function jailAgent(agent: WorldAgent, renderer: TiledMapRenderer): WorldA
     pathIndex: 0,
     behaviorMode: "jailed",
     occupiedDeskId: null,
+    restAnim: null,
+    restUntil: 0,
   };
 }
 
@@ -239,7 +267,15 @@ export function settleAgent(agent: WorldAgent): WorldAgent {
   if (agent.path.length === 0) return agent; // already at rest, nothing to settle
 
   if (agent.behaviorMode === "heading-to-desk") {
-    return { ...agent, behaviorMode: "working", path: [], pathIndex: 0 };
+    return {
+      ...agent,
+      behaviorMode: "working",
+      path: [],
+      pathIndex: 0,
+      // Turn toward the work object (bookshelf, table end, bag, kit...)
+      // rather than keeping the arrival direction.
+      facing: WORK_FACING[agent.occupiedDeskId ?? ""] ?? agent.facing,
+    };
   }
   return { ...agent, path: [], pathIndex: 0 };
 }

@@ -1,5 +1,5 @@
 import { Texture } from "pixi.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Agent } from "../types";
 import { TiledMapRenderer } from "./engine/TiledMapRenderer";
 import type { TiledMap } from "./engine/TiledMapRenderer";
@@ -123,13 +123,20 @@ describe("advanceBehavior", () => {
   it("picks a new roam waypoint and starts walking when idle and roaming", () => {
     const renderer = testRenderer();
     let [agent] = spawnWorldAgents([AGENT], renderer);
-    // advanceBehavior randomly samples candidate tiles and can legitimately
-    // miss on any single call (it just returns the agent unchanged, ready to
-    // retry next frame — see its docstring). Retrying a few times mirrors
-    // that real per-frame retry loop and avoids a flaky single-shot assertion.
+    // Scripted dice: skip the rest roll (0.9 > REST_CHANCE), then pick
+    // dx=+4 (0.99) and dy=0 (0.5) -- candidate (5,2), a walkable corridor
+    // tile four steps right of the spawn. A single pinned value can't work
+    // here: dx and dy would always match, landing on the start tile or off
+    // this 3-row map.
+    const rolls = [0.9, 0.99, 0.5];
+    let roll = 0;
+    const dice = vi
+      .spyOn(Math, "random")
+      .mockImplementation(() => rolls[Math.min(roll++, rolls.length - 1)]);
     for (let attempt = 0; attempt < 5 && agent.path.length === 0; attempt++) {
       agent = advanceBehavior(agent, renderer);
     }
+    dice.mockRestore();
     expect(agent.path.length).toBeGreaterThan(0);
   });
 

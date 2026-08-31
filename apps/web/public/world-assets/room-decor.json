@@ -238,7 +238,7 @@
     {
       "image": "decor/billing/bench-press.png",
       "x": 192,
-      "y": 512
+      "y": 544
     },
     {
       "image": "decor/billing/machine-press.png",
@@ -331,6 +331,11 @@
       "y": 464.0
     },
     {
+      "image": "decor/deploy-config/amplifier.png",
+      "x": 992,
+      "y": 512
+    },
+    {
       "image": "decor/deploy-config/speaker.png",
       "x": 1024,
       "y": 448
@@ -362,13 +367,6 @@
     }
   ],
   "equipment": [
-    {
-      "image": "equipment/animated_amplifier_32x32.png",
-      "frames": 3,
-      "x": 992,
-      "y": 512,
-      "spawnPoint": "desk-deploy-config-2"
-    },
     {
       "image": "equipment/animated_wall_candle_32x32.png",
       "frames": 3,

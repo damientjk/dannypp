@@ -1,5 +1,6 @@
 import type { Agent } from "../types";
 import type { TiledMapRenderer } from "./engine/TiledMapRenderer";
+import type { Facing } from "./types";
 
 export interface FileRoom {
   id: string;
@@ -58,6 +59,30 @@ export const FILE_ROOMS: FileRoom[] = [
     deskIds: [],
   },
 ];
+
+/**
+ * Which way an agent faces once it arrives at its work spot -- the spots
+ * themselves live in room_layout.py's DESKS (single source of truth for
+ * positions; this map only sells the pose). Applied by settleAgent the
+ * moment heading-to-desk becomes working.
+ *
+ * - auth-module: both face up into the bookshelves ("searching for a book")
+ * - analytics: the two ends of the table-tennis table, facing each other
+ * - billing: facing the punching bag / running on the treadmill (up, into
+ *   its console)
+ * - deploy-config: keyboard player faces up at the keys; drummer stands
+ *   north of the kit facing down over it
+ */
+export const WORK_FACING: Record<string, Facing> = {
+  "desk-auth-module-1": "up",
+  "desk-auth-module-2": "up",
+  "desk-analytics-1": "down",
+  "desk-analytics-2": "up",
+  "desk-billing-1": "up",
+  "desk-billing-2": "up",
+  "desk-deploy-config-1": "up",
+  "desk-deploy-config-2": "down",
+};
 
 export function roomById(id: string): FileRoom {
   const room = FILE_ROOMS.find((candidate) => candidate.id === id);

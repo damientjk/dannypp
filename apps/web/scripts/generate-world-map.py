@@ -21,7 +21,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from room_layout import WIDTH, HEIGHT, TILE, ROOM_W, ROOM_H, GAP, HALLWAY_H, CAP_H, DOOR_COL, ROOMS, DESKS, room_y0
+from PIL import Image
+
+from room_layout import WIDTH, HEIGHT, TILE, ROOM_W, ROOM_H, GAP, HALLWAY_H, CAP_H, DOOR_COL, ROOMS, DECOR, DESKS, room_y0
 
 WORLD_ASSETS = Path(__file__).resolve().parents[1] / "public" / "world-assets"
 
@@ -156,6 +158,57 @@ def main() -> None:
                     continue
                 walls_fill[(x, cap_y)] = cap_gid
                 collision_fill[(x, cap_y)] = cap_gid
+
+    # Decor collision (fix round, 2026-09-01): furniture was paint only --
+    # the collision layer knew nothing about it, so agents phased straight
+    # through pool tables and sofas (user-reported). Every DECOR item now
+    # blocks the interior floor tiles its opaque pixels solidly cover,
+    # measured from the PROCESSED sprites generate-room-decor.py writes
+    # into public/world-assets/decor/ (crop/scale/flip already applied --
+    # run that script before this one). "Solidly" = the opaque bbox
+    # overlaps the tile by >= SOLID px on both axes, so a sprite merely
+    # brushing a neighbouring tile doesn't seal it. Two refinements keep
+    # rooms walkable (checked by BFS from the common spawn to every desk
+    # -- the naive full-bbox rule sealed four desks):
+    # - APRON: a sprite's bottom 16px don't block. Characters draw above
+    #   decor, so an agent on that band is drawn over the furniture's
+    #   feet/skirt and reads as standing in FRONT of it -- the normal
+    #   2.5D pass-in-front lane. This is also what frees the walking
+    #   loops around the centred table-tennis table and the drum kit.
+    # - Desk tiles are exempt -- standing "at" the furniture IS the
+    #   working pose (auth's book tables sit exactly on their desks,
+    #   analytics' centred table brushes desk 1).
+    # EQUIPMENT/AMBIENT are skipped: desk-mounted or wall-thin. Small
+    # floor clutter (the loose balls, the racket) ends up blocking
+    # nothing once the apron is trimmed -- acceptable, they're clutter.
+    # The jail's cell-door tile does get blocked by its bars -- correct
+    # for a jail; agents only ever teleport in and out.
+    SOLID = 12
+    APRON = 16
+    for room in ROOMS:
+        ox = room["x0"] + 1
+        oy = room_y0(room) + 1
+        desk_tiles = {(ox + c, oy + r) for c, r in DESKS.get(room["id"], [])}
+        for item in DECOR.get(room["id"], []):
+            # Gym mats and friends: flat floor art you stand ON, not
+            # furniture -- never collision.
+            if item["dest"].startswith("floor"):
+                continue
+            png = WORLD_ASSETS / "decor" / room["id"] / item["dest"]
+            bbox = Image.open(png).convert("RGBA").getchannel("A").getbbox()
+            if bbox is None:
+                continue
+            px = round(item["col"] * TILE) + bbox[0]
+            py = round(item["row"] * TILE) + bbox[1]
+            pw, ph = bbox[2] - bbox[0], bbox[3] - bbox[1] - APRON
+            for ty in range(ROOM_H - 2):
+                for tx in range(ROOM_W - 2):
+                    if (ox + tx, oy + ty) in desk_tiles:
+                        continue
+                    over_x = min(px + pw, (tx + 1) * TILE) - max(px, tx * TILE)
+                    over_y = min(py + ph, (ty + 1) * TILE) - max(py, ty * TILE)
+                    if over_x >= SOLID and over_y >= SOLID:
+                        collision_fill[(ox + tx, oy + ty)] = GID_BLOCKED
 
     # Gaps between same-row rooms: floored (hallway texture) but blocked --
     # cosmetic filler only. Agents only ever cross between columns via the

@@ -97,15 +97,26 @@ assert all(r["x0"] + ROOM_W <= WIDTH for r in ROOMS)
 # common room), and neither does database -- it's the jail cell now, and
 # nobody works in a jail (FILE_ROOMS.deskIds == [] for both).
 DESKS = {
-    "auth-module": [(3, 2), (5, 2)],
-    "analytics": [(3, 2), (6, 3)],
-    "billing": [(3, 3), (5, 3)],
-    # desk 0 is the keyboard player's spot: (1,2) stands the agent right
-    # below the keyboard decor at (0.5, 0.5) (the piano it replaced is gone
-    # -- user request). desk 1 (the animated amplifier) moved up to (6,1)
-    # so the amp sits in the backline slot between the two wall-leaning
-    # guitars, its base one stage-depth step in front of theirs.
-    "deploy-config": [(1, 2), (6, 1)],
+    # Work spots, two per room (the user's cap: two agents on a file at
+    # a time). Each is where an agent STANDS while working; the pose is
+    # sold by WORK_FACING in resources.ts:
+    # - auth-module: under bookshelf left-a / right-a, facing up into the
+    #   shelves ("searching for a book").
+    # - analytics: the two ends of the centred table-tennis table, facing
+    #   each other across the net. The top end is (3,1), not (4,1): the
+    #   table+wall enclose every top-end tile, and (3,1) is the only one
+    #   with a walkable neighbour ((2,1)) to arrive through.
+    # - billing: facing punching-bag-1, and standing on the treadmill's
+    #   lower half (its row-0 tile is wall-blocked).
+    # - deploy-config: desk 0 at the keyboard (below its decor at
+    #   (0.5, 0.5)); desk 1 the drummer at (4,1), north of the kit,
+    #   facing down over the cymbals -- its old (6,1) amp slot became
+    #   plain decor when this round removed the last EQUIPMENT binding
+    #   (see the amp's DECOR entry).
+    "auth-module": [(1, 1), (5, 1)],
+    "analytics": [(3, 1), (4, 4)],
+    "billing": [(1, 1), (7, 1)],
+    "deploy-config": [(1, 2), (4, 1)],
 }
 
 # Which desk index (0-based) in DESKS gets an animated equipment sprite, and
@@ -139,7 +150,12 @@ EQUIPMENT = {
     # the user swapped the animated wall-piano for their own static
     # Music/Piano.png (see DECOR); the desk keeps working like every other
     # unlisted desk.
-    ("deploy-config", 1): ("animated_amplifier_32x32.png", 3),
+    # ("deploy-config", 1) amplifier binding removed (work-spot round,
+    # 2026-09-01): desk 1 moved from the amp slot to the drummer's spot,
+    # and equipment draws at its desk tile -- the amp is now a static
+    # DECOR entry (frame 0 of its old spritesheet) at the same (6,1)
+    # backline position. EQUIPMENT is now empty; the dict and its
+    # plumbing stay for the day something desk-mounted returns.
 }
 
 # Static (non-animated) decor per room. Each entry: col, row
@@ -362,7 +378,10 @@ DECOR = {
              src=REPO_ROOT / "Gym Room" / "Punching bag.png"),
         dict(col=7, row=-1, dest="treadmill.png",
              src=REPO_ROOT / "Gym Room" / "Threadmill.png"),
-        dict(col=5, row=1, dest="bench-press.png",
+        # row=2, not 1 (work-spot round): at row 1 the bench, the
+        # machine-press, and the walls sealed the treadmill corner into a
+        # pocket the new desk-2 spot couldn't be reached through.
+        dict(col=5, row=2, dest="bench-press.png",
              src=REPO_ROOT / "Gym Room" / "Bench press (replace bicycles).png"),
         dict(col=7, row=3, dest="machine-press.png",
              src=REPO_ROOT / "Gym Room" / "Machine Press(replace bicycles).png"),
@@ -556,6 +575,12 @@ DECOR = {
         # round) in the upper-left, and the drums moved up under it.
         dict(col=5, row=-0.5, dest="guitar-electric.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_51.png"),
+        # The amplifier, ex-EQUIPMENT (see that dict's comment): frame 0
+        # of the animated sheet, cropped out as a still. Same (6,1) slot
+        # it animated in.
+        dict(col=6, row=1, dest="amplifier.png",
+             src="3_Animated_objects/32x32/spritesheets/animated_amplifier_32x32.png",
+             crop=(0, 0, 32, 32)),
         dict(col=7, row=-1, dest="speaker.png",
              src=REPO_ROOT / "Music" / "Music_and_Sport_Singles_32x32_43.png"),
         dict(col=8, row=-0.5, dest="guitar-electric-2.png",

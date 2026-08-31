@@ -1,15 +1,18 @@
 /**
- * Per-agent colour.
+ * Per-agent appearance.
  *
- * The world ships one character sprite sheet, so agents are told apart by a
- * multiply-tint rather than by different art. The palette is deliberately
- * light and saturated: a multiply tint darkens, so dark swatches turn every
- * agent into the same muddy silhouette.
+ * Agents are told apart on the map by which of the five named characters
+ * (repo-root Agents/) they wear; the colour palette below no longer tints
+ * the sprite — it survives as the roster swatch and security-log accent.
  *
- * Assignment is a pure function of the agent id, so a given agent keeps its
- * colour across reloads, re-logins and re-orderings of the roster — the
- * security log and the sprite can never disagree about who is who.
+ * Both assignments are pure functions of the agent id, so a given agent
+ * keeps its character and colour across reloads, re-logins and
+ * re-orderings of the roster — the log and the sprite can never disagree
+ * about who is who.
  */
+
+export const CHARACTER_NAMES = ["adam", "alex", "amelia", "ash", "bob"] as const;
+export type CharacterName = (typeof CHARACTER_NAMES)[number];
 
 const PALETTE = [
   0x6fb1e8, // blue
@@ -29,7 +32,15 @@ function hashToIndex(value: string, buckets: number): number {
   return Math.abs(hash) % buckets;
 }
 
-/** Tint for the PixiJS sprite. */
+/** Which of the five characters this agent wears: round-robin down the
+ *  roster (agent 1 = adam, 2 = alex, ...), cycling back to the first when
+ *  there are more than five -- per the user's spec. Position-based rather
+ *  than id-hashed so a roster of N <= 5 always shows N distinct models. */
+export function characterForIndex(index: number): CharacterName {
+  return CHARACTER_NAMES[Math.abs(index) % CHARACTER_NAMES.length];
+}
+
+/** Accent colour (roster swatch, log rows). */
 export function colorForAgent(agentId: string): number {
   return PALETTE[hashToIndex(agentId, PALETTE.length)];
 }

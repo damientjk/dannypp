@@ -279,17 +279,24 @@ DECOR = {
     # living-room is a bottom-row room, so row 0 is its capped DOOR-facing
     # wall (not the back wall) -- see room_y0()'s comment. Arcade machines
     # line that entrance wall at row=-1 (wall-covering, same convention as
-    # every other room's row=-1/row=0 items). The three machines are placed
-    # edge-to-edge (col 1/3/5, each 64px = 2 tiles wide) reading as one
-    # arcade row; tv-console sits at row=1/col=7, flush against the right
-    # wall. The sofa's three 32x64 (post-scale) segments sit at row=4,
-    # col 6/7/8 -- edge-to-edge like the arcades, flush against the right
-    # wall and the room's plain south wall (opposite the door), facing
-    # north toward the TV.
+    # every other room's row=-1/row=0 items). The door itself punches
+    # through that wall at DOOR_COL (room-relative), which is interior col
+    # 4 (DOOR_COL=5 minus the 1-tile wall ring) -- see door_tile() in
+    # generate-world-map.py. The three machines sit at col 0/2/5 (not
+    # 1/3/5 -- a prior version of this list put arcade-2 at col=3, whose
+    # 64px/2-tile span (cols 3-4) plugged that doorway) so none of their
+    # 64px/2-tile spans touch col 4: col=0 covers cols 0-1, col=2 covers
+    # cols 2-3 (ending exactly at the door), col=5 covers cols 5-6
+    # (starting exactly where the door ends) -- flush against each other
+    # and the door gap, not overlapping it. tv-console sits at row=1/col=7,
+    # flush against the right wall. The sofa's three 32x64 (post-scale)
+    # segments sit at row=4, col 6/7/8 -- edge-to-edge like the arcades,
+    # flush against the right wall and the room's plain south wall
+    # (opposite the door), facing north toward the TV.
     "living-room": [
-        dict(col=1, row=-1, dest="arcade-1.png",
+        dict(col=0, row=-1, dest="arcade-1.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_208.png"),
-        dict(col=3, row=-1, dest="arcade-2.png",
+        dict(col=2, row=-1, dest="arcade-2.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_209.png"),
         dict(col=5, row=-1, dest="arcade-3.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_208.png"),

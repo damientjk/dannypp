@@ -397,38 +397,39 @@ DECOR = {
         dict(col=8, row=4, dest="sofa-right.png",
              src=REPO_ROOT / "sofa" / "Basement_Singles_48x48_53.png", scale=2/3),
     ],
-    # 6_Music_and_Sport_Singles_32x32/ (same folder Task 8 searched) has no
-    # standalone stool/crate Singles file either -- it's the same
-    # never-split piano-stool row Task 8 already found and partly used
-    # (analytics/seat.png took the red-topped one at crop x144-177). The row
-    # has two other color variants at x16-49 (orange-trimmed legs) and
-    # x80-113 (plain grey legs), both confirmed via pixel bounding-box scan
-    # (34x26, identical shape to the already-shipped seat.png), so this room
-    # uses those two instead of reusing analytics' exact stool.
+    # Real speakers + both guitar types from 6_Music_and_Sport_Singles_32x32,
+    # replacing the old crate/plant filler (dropped per the user's mockup --
+    # piano and amplifier are EQUIPMENT-bound to desk-1/desk-2 and untouched
+    # by this task). Drums are the user's own 2-piece isolated crop
+    # (repo-root/drums/, 48px-tier source, scale=2/3) -- no standalone
+    # multi-piece drum kit exists anywhere in the pack without a fused
+    # character sprite baked in.
     #
-    # Plants reuse the Living_Room_Singles_32x32 folder like every other
-    # room (auth-module, analytics, database all found their plant(s)
-    # there): _15 is a distinct succulent-in-a-pot (not previously used,
-    # for variety) and _16 is the round leafy plant auth-module/analytics
-    # already used (reused per the brief's "if convenient"). Both are
-    # 32x64 (1x2 tiles), so col=1/col=7, row=4 is the same flush-to-back-
-    # wall flanking placement every other room already settled on. Plant-
-    # right was moved off the brief's draft (7,1) to (7,4): at row=1 it
-    # would sit directly beside crate-2 (6,1), whose 34px-wide crop bleeds
-    # 2px past its own tile into col 7 -- the same clipping the analytics
-    # task's comment flagged as worth avoiding for a placed object, not just
-    # empty space.
+    # All six items' real pixel footprints were checked against the 9x6
+    # interior and against DESKS["deploy-config"]'s two EQUIPMENT sprites
+    # (piano at desk-1 (2,4), 32x64; amplifier at desk-2 (6,3), 32x64) before
+    # shipping -- two placements had to move off their original draft:
+    # - Both guitars (32x80, 2.5 tiles tall) overflowed the floor by 16px at
+    #   row=4, so they sit at row=3 instead (flush under the row=2 speakers,
+    #   no gap, still clear of the floor).
+    # - drum-stand was drafted at col=6 (right next to drum-kit), but the
+    #   amplifier's sprite is 64px/2-tiles tall and occupies col=6 across
+    #   both row=3 and row=4, so anything at col=6/row=4 collides with its
+    #   lower half. Moved to col=3 (drum-kit's left side, between it and the
+    #   piano) instead -- same cluster, mirrored.
     "deploy-config": [
-        dict(col=2, row=2, dest="crate-1.png",
-             src="1_Interiors/32x32/Theme_Sorter_32x32/6_Music_and_sport_32x32.png",
-             crop=(16, 142, 50, 168)),
-        dict(col=6, row=1, dest="crate-2.png",
-             src="1_Interiors/32x32/Theme_Sorter_32x32/6_Music_and_sport_32x32.png",
-             crop=(80, 142, 114, 168)),
-        dict(col=1, row=4, dest="plant-left.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_15.png"),
-        dict(col=7, row=4, dest="plant-right.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_16.png"),
+        dict(col=1, row=2, dest="speaker-1.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_34.png"),
+        dict(col=7, row=2, dest="speaker-2.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_34.png"),
+        dict(col=1, row=3, dest="guitar-electric.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_51.png"),
+        dict(col=7, row=3, dest="guitar-acoustic.png",
+             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_45.png"),
+        dict(col=4, row=4, dest="drum-kit.png",
+             src=REPO_ROOT / "drums" / "Music_and_Sport_Singles_48x48_39.png", scale=2/3),
+        dict(col=3, row=4, dest="drum-stand.png",
+             src=REPO_ROOT / "drums" / "Music_and_Sport_Singles_48x48_40.png", scale=2/3),
     ],
 }
 

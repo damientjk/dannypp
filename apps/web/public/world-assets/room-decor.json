@@ -251,23 +251,33 @@
       "y": 416
     },
     {
-      "image": "decor/deploy-config/crate-1.png",
-      "x": 864,
+      "image": "decor/deploy-config/speaker-1.png",
+      "x": 832,
       "y": 544
     },
     {
-      "image": "decor/deploy-config/crate-2.png",
-      "x": 992,
-      "y": 512
+      "image": "decor/deploy-config/speaker-2.png",
+      "x": 1024,
+      "y": 544
     },
     {
-      "image": "decor/deploy-config/plant-left.png",
+      "image": "decor/deploy-config/guitar-electric.png",
       "x": 832,
+      "y": 576
+    },
+    {
+      "image": "decor/deploy-config/guitar-acoustic.png",
+      "x": 1024,
+      "y": 576
+    },
+    {
+      "image": "decor/deploy-config/drum-kit.png",
+      "x": 928,
       "y": 608
     },
     {
-      "image": "decor/deploy-config/plant-right.png",
-      "x": 1024,
+      "image": "decor/deploy-config/drum-stand.png",
+      "x": 896,
       "y": 608
     }
   ],

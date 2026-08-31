@@ -185,34 +185,63 @@ DECOR = {
     # ping-pong table comes from 14_Basement_Singles_32x32, which has a
     # proper top-down table-tennis sprite with a net.
     "analytics": [
-        # row=-1: analytics is a top-row room, so row 0 is its capped back
-        # wall -- see this plan's wall-covering note. Fix round 2: _67 (used
-        # as "trophy" in fix round 1) is actually a pair of crossed
-        # table-tennis paddles/racquets, confirmed against the real in-game
-        # render -- renamed and consolidated into one paired cluster on the
-        # right (col=6/7) instead of duplicated at both corners. col=1
-        # (top-left) is deliberately left empty -- real trophy + table
-        # assets are coming in a follow-up fix round once isolated.
-        dict(col=6, row=-1, dest="racquet-1.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_67.png"),
-        dict(col=7, row=-1, dest="racquet-2.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/14_Basement_Singles_32x32/Basement_Singles_32x32_67.png"),
+        # Fix round 3: full rebuild from the user's reorganized Sports Room/
+        # folder. Verified every file myself before use -- "trophy.png" and
+        # "trophy 2.png" turned out to be byte-identical to the old
+        # Music_and_Sport_Singles_32x32_157/158.png two-person scene this
+        # room already used and dropped (not a trophy at all -- the same
+        # "people flanking a table" render, just relabeled). Did NOT use
+        # them as a trophy cluster; col=1 (top-left, row=-1) stays empty
+        # pending real trophy art, same as fix round 2. Flagged in the
+        # report for the coordinator/user to resolve.
+        #
+        # hoop.png/basketball.png are byte-identical to this room's already-
+        # correct existing assets (_76/_79) -- re-sourced to Sports Room/
+        # per the fix request anyway, positions unchanged (col=4, row=-1
+        # and col=4, row=1 respectively; hoop's 48px height only reaches
+        # row -0.5, so row=1 keeps clear daylight, as established in fix
+        # round 2).
         dict(col=4, row=-1, dest="basketball-hoop.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_76.png"),
-        # Floor items, fix round. Basketball (32x32, 1x1 footprint) sits on
-        # the floor under the hoop -- hoop's own footprint (32x48) only
-        # reaches to row -0.5, so row=1 leaves clear daylight between them.
+             src=REPO_ROOT / "Sports Room" / "hoop.png"),
         dict(col=4, row=1, dest="basketball.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_79.png"),
-        # Table-tennis scene (64x96, 2x3-tile footprint: cols 1-2, rows
-        # 1-3). Moved to row=1 from the fix request's suggested row=2 --
-        # row=2 would have put the footprint's rows 2-4 squarely over the
-        # plant's tile at (col=1, row=4) below. row=1 (rows 1-3) clears the
-        # plant, desk-analytics-1 (3,2), desk-analytics-2 (6,3), and the
-        # basketball (4,1) -- checked all four pairwise, no overlap, and
-        # rows 1-3 stay inside the 0-5 interior row range.
-        dict(col=1, row=1, dest="table-tennis.png",
-             src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/6_Music_and_Sport_32x32/Music_and_Sport_Singles_32x32_157.png"),
+             src=REPO_ROOT / "Sports Room" / "basketball.png"),
+        # racket 1.png (32x32) -- used ONCE, not duplicated into a pair.
+        # This is the same file fix round 2 used twice as "racquet-1"/
+        # "racquet-2" (then read as "a pair of crossed paddles"); this
+        # round's request re-describes it as "a single racquet/paddle" and
+        # explicitly leaves the 1-vs-2 call to me. Placed once, beside the
+        # table, since duplicating a single-item asset into a fake pair
+        # was the thing that needed correcting last round in the first
+        # place.
+        dict(col=3, row=1, dest="racket.png",
+             src=REPO_ROOT / "Sports Room" / "racket 1.png"),
+        # table tennis table.png (80x128, real 2.5x4-tile footprint --
+        # this room's largest item by far). Placement forced by geometry,
+        # not aesthetics: this item's 4-tile height means ANY vertical
+        # position spans rows 2 AND 3 (both desks' rows) in this 6-row
+        # interior -- proven by checking all 3 tile-aligned Y options, see
+        # report. That leaves column placement as the only lever, and the
+        # only column gap wide enough for 80px (96px clear at col=0-2,
+        # avoiding desk-analytics-1's col=3 and desk-analytics-2's col=6)
+        # is the left side, not literally "the middle" the request asked
+        # for -- there's no collision-free way to center an item this
+        # size between two desks 3 columns apart in a 9-column room.
+        # row=0 is legitimate floor here (database's old shoji screens
+        # used it too), not the wall itself.
+        dict(col=0, row=0, dest="table-tennis-table.png",
+             src=REPO_ROOT / "Sports Room" / "table tennis table.png"),
+        # plant.png: kept at its last-committed position (col=1, row=4),
+        # NOT the (col=0, row=3) this line had picked up from an unrelated
+        # concurrent edit (a "2-tile front wall" comment, apparently a
+        # side effect of the other session's jail-cell work landing inside
+        # this room's block too). Reverted deliberately, not just left
+        # alone: (0,3) makes the table above geometrically unplaceable
+        # anywhere in this room (proven -- every Y position's clear x-gap
+        # tops out at 64px against the table's 80px need once col=0 is
+        # blocked), while (1,4) leaves a clean 96px gap. This fix request's
+        # own "plant: unchanged, keep as-is" reads as relative to this
+        # room's last commit, not a same-named line another room's task
+        # happened to also touch. Flagged in the report.
         dict(col=1, row=4, dest="plant.png",
              src="1_Interiors/32x32/Theme_Sorter_Singles_32x32/2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_16.png"),
     ],

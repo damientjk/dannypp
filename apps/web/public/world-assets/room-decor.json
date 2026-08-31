@@ -56,16 +56,6 @@
       "y": 0
     },
     {
-      "image": "decor/analytics/racquet-1.png",
-      "x": 608,
-      "y": 32
-    },
-    {
-      "image": "decor/analytics/racquet-2.png",
-      "x": 640,
-      "y": 32
-    },
-    {
       "image": "decor/analytics/basketball-hoop.png",
       "x": 544,
       "y": 32
@@ -76,9 +66,14 @@
       "y": 96
     },
     {
-      "image": "decor/analytics/table-tennis.png",
-      "x": 448,
+      "image": "decor/analytics/racket.png",
+      "x": 512,
       "y": 96
+    },
+    {
+      "image": "decor/analytics/table-tennis-table.png",
+      "x": 416,
+      "y": 64
     },
     {
       "image": "decor/analytics/plant.png",

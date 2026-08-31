@@ -212,17 +212,12 @@
     },
     {
       "image": "decor/living-room/arcade-1.png",
-      "x": 416,
+      "x": 448,
       "y": 448
     },
     {
       "image": "decor/living-room/arcade-2.png",
-      "x": 480,
-      "y": 448
-    },
-    {
-      "image": "decor/living-room/arcade-3.png",
-      "x": 576,
+      "x": 608,
       "y": 448
     },
     {
